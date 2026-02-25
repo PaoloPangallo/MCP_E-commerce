@@ -87,7 +87,7 @@
 
 ### 4.1 Trust Scoring Inserzioni
 - [ ] Segnali strutturati:
-  - Rating venditore
+  - Rating venditore (anche con controllo presenza immagini)
   - Numero transazioni
   - Storico prezzi (anomalie)
   - Età account
