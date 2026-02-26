@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.env
+
+# Virtual environment
+venv/
+.env/
+
+# PyCharm
+.idea/
+
+# OS
+.DS_Store
+
+# FAISS index
+*.index
