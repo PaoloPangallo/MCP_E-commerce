@@ -586,7 +586,7 @@ Schema:
 
 Definitions:
 - semantic_query: short cleaned version of the query useful for semantic retrieval.
-- product: product/category/model ONLY if explicitly stated; if vague (e.g. "qualcosa"), use null.
+- product: the main item/model explicitly mentioned (e.g. "iPhone 15", "PS5", "MacBook Air M3"). Use null only if no item/model is stated.
 - brands: brands explicitly mentioned.
 - constraints: hard filters that restrict search results.
 - preferences: soft wishes that influence ranking but should NOT exclude results.
@@ -616,7 +616,17 @@ Rules:
 - Put ONLY mandatory requirements in constraints.
 - Put optional wishes in preferences.
 - Do NOT invent brands or products.
+- If the user gives a MAX BUDGET (e.g. "massimo 1000 euro", "entro 500"), use ONLY "<=" (not both >= and <=).
+- If the user gives a MINIMUM budget (e.g. "almeno 300 euro"), use ONLY ">=".
+- Use "between" only when a range is explicitly given.
 - Output JSON only.
+
+Examples (must follow exactly):
+Query: "iphone 13 massimo 1000 euro"
+Output: {{"semantic_query":"iphone 13","product":"iPhone 13","brands":["Apple"],"constraints":[{{"type":"price","operator":"<=","value":1000}}],"preferences":[]}}
+
+Query: "tra 200 e 400 euro cuffie bose"
+Output: {{"semantic_query":"cuffie bose","product":"cuffie","brands":["Bose"],"constraints":[{{"type":"price","operator":"between","value":[200,400]}}],"preferences":[]}}
 
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()
@@ -641,36 +651,41 @@ Query: {json.dumps(query, ensure_ascii=False)}
         return None
 
     return validate_llm_result(raw, query)
-
 # ============================================================
 # MERGE
 # ============================================================
 
 def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    # Se LLM fallisce -> puro rule-based
     if not llm_result:
         return rule_result
 
+    # Se LLM riesce -> LLM è la fonte principale.
+    # Rule-based usato SOLO per "riempire buchi" in modo conservativo.
     final = empty_result(rule_result["original_query"])
 
+    # semantic_query: preferisci LLM, fallback su rule, fallback su originale
     final["semantic_query"] = (
         llm_result.get("semantic_query")
         or rule_result.get("semantic_query")
         or rule_result["original_query"]
     )
 
-    # product: preferisci LLM se valido; altrimenti rule-based
-    final["product"] = llm_result.get("product") or rule_result.get("product")
-    if final["product"] and is_vague_product(final["product"]):
-        final["product"] = None
+    # product: se LLM ha risposto, fidati ANCHE se è null.
+    # Questo evita che il rule-based inietti robaccia tipo "massimo euro".
+    final["product"] = llm_result.get("product")
 
-    # brands: unione
-    final["brands"] = dedupe_keep_order(llm_result.get("brands", []) + rule_result.get("brands", []))
+    # brands: preferisci LLM; se vuote, puoi unire col rule-based (utile quando LLM manca qualche brand)
+    llm_brands = llm_result.get("brands", []) or []
+    rule_brands = rule_result.get("brands", []) or []
+    final["brands"] = dedupe_keep_order(llm_brands + rule_brands)
 
-    # constraints: unione
-    final["constraints"] = dedupe_keep_order(llm_result.get("constraints", []) + rule_result.get("constraints", []))
+    # constraints: preferisci LLM; se vuote, fallback su rule-based
+    llm_constraints = llm_result.get("constraints", [])
+    final["constraints"] = llm_constraints if llm_constraints else (rule_result.get("constraints", []) or [])
 
-    # preferences: unione
-    final["preferences"] = dedupe_keep_order(llm_result.get("preferences", []) + rule_result.get("preferences", []))
+    # preferences: LLM
+    final["preferences"] = llm_result.get("preferences", []) or []
 
     return final
 
@@ -708,12 +723,18 @@ def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[s
 
 def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = True) -> Dict[str, Any]:
     rule_result = rule_based_parse(text)
-    llm_result = llm_parse(text) if use_llm else None
+
+    llm_result = None
+    if use_llm:
+        llm_result = llm_parse(text)
+
     final = merge_results(rule_result, llm_result)
 
     if include_meta:
         final["_meta"] = {
-            "llm_used": use_llm,
+            # "enabled" = hai provato ad usare l'LLM
+            "llm_enabled": use_llm,
+            # "success" = hai ottenuto JSON valido e normalizzato
             "llm_success": llm_result is not None,
             "confidence": compute_confidence(final, llm_result),
         }
