@@ -1,227 +1,340 @@
-# Scaletta Pratica: Progetto NLP Monitoraggio Prezzi & Inserzioni
+# 🧠 Progetto NLP: Monitoraggio Intelligente Prezzi & Inserzioni
 
-## 📋 Overview del Progetto
+## 📋 Overview
 
-**Obiettivo**: Sistema di monitoraggio intelligente prezzi e inserzioni online con notifiche personalizzate  
-**Approccio**: Agent NLP + MCP (Model Context Protocol) + Retrieval semantico  
-**Durata stimata**: 4 fasi progressive
+**Obiettivo**  
+Realizzare un sistema di monitoraggio intelligente di prodotti online che:
 
----
+- interpreta query in linguaggio naturale
+- recupera inserzioni da eBay tramite API ufficiali
+- monitora variazioni di prezzo
+- applica ranking semantico
+- calcola un trust score
+- invia notifiche spiegabili
 
-## 🎯 Fase 1: Setup Dati + Baseline (Fondamenta)
+**Approccio tecnico**
 
-### 1.1 Raccolta Dati
-- [ ] Identificare piattaforme target (eBay, Amazon, Subito, ecc.)
-- [ ] Implementare connettori API ufficiali (priorità)
-- [ ] Setup scraping etico (dove API non disponibile, rate limiting)
-- [ ] Creare database PostgreSQL per storage
-
-### 1.2 Storage Prezzi
-- [ ] Schema DB: inserzioni + storico prezzi + alert utente
-- [ ] Implementare tracking temporale prezzi
-- [ ] Sistema di versioning per modifiche inserzioni
-
-### 1.3 Sistema Base
-- [ ] Keyword matching semplice (regole + regex)
-- [ ] Notifiche base via email/push
-- [ ] Dashboard minimale per visualizzazione
-
-**Deliverable Fase 1**: Sistema funzionante con matching keyword + notifiche base
+- NLP deterministico (spaCy)
+- Retrieval ibrido (keyword + embeddings)
+- Trust scoring rule-based / ML leggero
+- Orchestrazione tool MCP-style (deterministica)
+- Valutazione scientifica con metriche IR
 
 ---
 
-## 🧠 Fase 2: NLP Query Parsing (Intelligenza)
+# 🏗 Architettura Generale
 
-### 2.1 Parsing Linguaggio Naturale
-- [ ] Implementare spaCy per analisi testo
-- [ ] Estrazione entità (NER): prodotti, brand, specifiche
-- [ ] Riconoscimento vincoli:
-  - Prezzo (max/min/range)
-  - Condizione (nuovo/usato/ricondizionato)
-  - Piattaforma specifica
-  - Località/spedizione
 
-### 2.2 Normalizzazione
-- [ ] Mapping sinonimi ("iPhone" = "Apple iPhone")
-- [ ] Standardizzazione unità misura
-- [ ] Gestione typo comuni
+User (React)
+↓
+FastAPI Backend
+↓
+spaCy (Parsing Query)
+↓
+eBay API (Browse)
+↓
+PostgreSQL (Storage + Price History)
+↓
+Retrieval Layer (Keyword / Semantic / Hybrid)
+↓
+Trust Scoring
+↓
+Event Detection
+↓
+Notification + Explainability
 
-### 2.3 Alternative Avanzate
-- [ ] Valutare LLM function calling per parsing complesso
-- [ ] Fine-tuning modello HuggingFace se necessario
-
-**Deliverable Fase 2**: Query utente → Parametri strutturati ricerca
-
----
-
-## 🔍 Fase 3: Semantic Retrieval (Precisione)
-
-### 3.1 Embeddings Semantici
-- [ ] Installare sentence-transformers
-- [ ] Scegliere modello (bge-small/e5-base)
-- [ ] Generare embeddings per descrizioni inserzioni
-- [ ] Caching embeddings per ottimizzazione
-
-### 3.2 Vector Search
-- [ ] Setup FAISS (locale per prototipo)
-- [ ] Configurare Qdrant (se servizio cloud)
-- [ ] Indicizzazione vettori
-- [ ] Query similarity search
-
-### 3.3 Ranking & Re-ranking
-- [ ] Implementare hybrid search (keyword + semantic)
-- [ ] Cross-encoder per re-ranking top-K risultati
-- [ ] Sperimentare con LLM rerank
-
-### 3.4 Metriche di Valutazione
-- [ ] Precision@K e Recall@K
-- [ ] MRR (Mean Reciprocal Rank)
-- [ ] nDCG per ranking quality
-- [ ] A/B test baseline vs semantic
-
-**Deliverable Fase 3**: Retrieval semantico funzionante con metriche IR
 
 ---
 
-## 🛡️ Fase 4: Trust Scoring + Agent MCP (Affidabilità)
+# 🎯 FASE 1 — Setup Dati + Baseline Retrieval
 
-### 4.1 Trust Scoring Inserzioni
-- [ ] Segnali strutturati:
-  - Rating venditore (anche con controllo presenza immagini)
-  - Numero transazioni
-  - Storico prezzi (anomalie)
-  - Età account
-- [ ] Analisi testuale:
-  - Sentiment RoBERTa
-  - Pattern linguistici sospetti
-  - Qualità descrizione
-- [ ] Combinazione score finale (weighted sum / ML model)
+## 1.1 Integrazione eBay API
 
-### 4.2 Orchestrazione Agent MCP
-- [ ] Definire tool layer MCP:
-  - `search_listings()` - ricerca inserzioni
-  - `get_price_history()` - storico prezzi
-  - `compute_trust()` - calcolo affidabilità
-  - `send_notification()` - invio alert
-- [ ] Implementare agent orchestrator
-- [ ] Logging decisioni per debugging
+- Registrazione eBay Developer Program
+- Implementazione OAuth client credentials
+- Endpoint principale:
+  - `/buy/browse/v1/item_summary/search`
+- Salvataggio risultati nel database
 
-### 4.3 Spiegabilità Notifiche
-- [ ] Report dettagliato per ogni notifica:
-  - Perché è stata triggerata
-  - Score di trust
-  - Confronto prezzi storico
-- [ ] Feedback loop utente (utile/non utile)
+## 1.2 Database PostgreSQL
 
-**Deliverable Fase 4**: Sistema completo con trust scoring e orchestrazione agente
+### Tabelle principali
 
----
+```sql
+users(
+    id SERIAL PRIMARY KEY,
+    email TEXT
+);
 
-## 📊 Valutazione Finale
+alerts(
+    id SERIAL PRIMARY KEY,
+    user_id INT,
+    query TEXT,
+    max_price FLOAT,
+    condition TEXT,
+    created_at TIMESTAMP
+);
 
-### User-Based Evaluation
-- [ ] Simulare 20+ utenti con preferenze diverse
-- [ ] Metriche:
-  - **Precision**: notifiche rilevanti / totale notifiche
-  - **Recall**: notifiche inviate / eventi rilevanti totali
-  - **User satisfaction**: survey qualitativa
+listings(
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    price FLOAT,
+    seller TEXT,
+    seller_score FLOAT,
+    condition TEXT,
+    timestamp TIMESTAMP
+);
 
-### Confronto Progressivo
-| Versione | Precision | Recall | Spiegazione |
-|----------|-----------|--------|-------------|
-| Baseline | ~40% | ~60% | Solo keyword |
-| + Embeddings | ~65% | ~75% | Semantic match |
-| + Trust | ~80% | ~70% | Filtro qualità |
-| + Agent MCP | ~85% | ~80% | Orchestrazione ottimale |
+price_history(
+    id SERIAL PRIMARY KEY,
+    listing_id TEXT,
+    price FLOAT,
+    timestamp TIMESTAMP
+);
+1.3 Baseline Retrieval
 
----
+Keyword matching
 
-## 🚀 Deliverable Finali
+Filtro prezzo
 
-1. **Demo Web Interattiva**
-   - Dashboard storico prezzi
-   - Configurazione alert personalizzati
-   - Visualizzazione trust score
+Ordinamento per score semplice
 
-2. **Architettura MCP**
-   - Tool layer documentato
-   - Agent orchestrator con logs
-   - API REST per integrazioni
+Metriche iniziali
 
-3. **Report Tecnico**
-   - Metriche user-based con grafici
-   - Confronto baseline → avanzato
-   - Limiti e direzioni future
-   - Codice open source (GitHub)
+Precision@5
 
----
+Recall@10
 
-## 🛠️ Stack Tecnologico Raccomandato
+Deliverable Fase 1
 
-### NLP & ML
-- **spaCy** + regex (parsing query)
-- **sentence-transformers** (embeddings)
-- **FAISS** / Qdrant (vector search)
-- **RoBERTa** / LLM (trust scoring)
+Backend funzionante
 
-### Backend & Infra
-- **FastAPI** (API server)
-- **PostgreSQL** (database)
-- **Celery** + APScheduler (monitoring asincrono)
-- **Playwright** (scraping se necessario)
+Salvataggio inserzioni
 
-### Frontend
-- **React** (dashboard)
-- **Chart.js** (grafici prezzi)
+Baseline misurabile
 
----
+🧠 FASE 2 — NLP Query Parsing (spaCy)
+2.1 Parsing Linguaggio Naturale
 
-## ⚠️ Rischi e Mitigazioni
+Estrazione:
 
-### Rischi Principali
-1. **Rate limiting / blocchi anti-bot**
-   → Usare API ufficiali + rotate IP + caching aggressivo
+Prodotto
 
-2. **Dati rumorosi e duplicati**
-   → Deduplica con embeddings + fuzzy matching
+Prezzo massimo/minimo
 
-3. **Drift temporale (descrizioni cambiano)**
-   → Re-embeddings periodici + monitoring qualità
+Condizione
 
-4. **Trust scoring senza ground truth**
-   → Combinare segnali multipli + feedback loop utente
+Piattaforma
 
-### Compliance
-- Rispettare TOS piattaforme
-- GDPR per dati utente
-- Trasparenza algoritmi trust
+Località (se presente)
 
----
+Esempio output:
 
-## 📅 Timeline Complessiva Stimata
+{
+  "product": "iphone 14",
+  "max_price": 600,
+  "condition": "usato",
+  "platform": "ebay"
+}
+2.2 Normalizzazione
 
-| Fase | Durata | Output |
-|------|--------|--------|
-| 1 - Setup + Baseline | 2-3 settimane | Sistema funzionante base |
-| 2 - NLP Parsing | 1-2 settimane | Query → Parametri strutturati |
-| 3 - Semantic Retrieval | 2-3 settimane | Retrieval + metriche IR |
-| 4 - Trust + Agent | 2-3 settimane | Sistema completo |
-| **Totale** | **7-11 settimane** | **Demo + Report finale** |
+Mapping sinonimi
 
----
+Standardizzazione unità
 
-## 🎓 Learning Outcomes
+Gestione typo comuni
 
-- Progettazione pipeline NLP end-to-end
-- Retrieval semantico (embeddings + vector DB)
-- Trust scoring con ML/LLM
-- Orchestrazione agenti MCP
-- Valutazione user-centric (non solo metriche tecniche)
+2.3 Valutazione NLP
 
----
+Dataset annotato manualmente (50+ query)
 
-## 📝 Note Finali
+Metriche:
 
-Questa scaletta è **modulare**: ogni fase può essere completata indipendentemente. Se hai vincoli di tempo, puoi fermarti a Fase 2-3 per un progetto già significativo. La Fase 4 (agent MCP) è il plus innovativo per distinguere il progetto.
+Precision extraction
 
-**Priorità**: Qualità > Quantità → Meglio un sistema semplice ma ben valutato che uno complesso ma fragile.
+Recall extraction
+
+F1-score
+
+Deliverable Fase 2
+Query → Oggetto strutturato valutabile
+
+🔍 FASE 3 — Semantic Retrieval
+3.1 Embeddings
+
+sentence-transformers (bge-small / e5-base)
+
+Embedding per titolo e descrizione
+
+3.2 FAISS Index
+
+Creazione indice locale
+
+Similarity search
+
+3.3 Hybrid Search
+final_score = α * keyword_score + β * semantic_score
+3.4 Metriche IR
+
+Precision@K
+
+Recall@K
+
+MRR
+
+nDCG@K
+
+Confronto:
+
+Versione	Descrizione
+Baseline	Keyword only
++ Semantic	Embeddings
+Hybrid	Keyword + Semantic
+
+Deliverable Fase 3
+Retrieval semantico valutato scientificamente.
+
+🛡 FASE 4 — Trust Scoring + MCP Orchestration
+4.1 Trust Scoring
+Segnali strutturati
+
+Seller rating
+
+Numero recensioni
+
+Stabilità prezzo
+
+Età inserzione
+
+Formula base
+trust_score =
+    w1 * seller_rating +
+    w2 * log(review_count) +
+    w3 * price_stability +
+    w4 * text_quality
+4.2 Orchestrazione MCP-Style
+
+Pipeline deterministica:
+
+def agent_pipeline(query):
+    structured = parse_query(query)
+    results = search_listings(structured)
+    ranked = hybrid_rank(results)
+    trusted = apply_trust(ranked)
+    events = detect_event(trusted)
+    notify(events)
+
+Tool layer:
+
+search_listings()
+
+get_price_history()
+
+compute_trust()
+
+send_notification()
+
+4.3 Explainability
+
+Ogni notifica include:
+
+Prezzo corrente vs soglia
+
+Storico prezzo
+
+Trust score
+
+Motivo del trigger
+
+📊 Valutazione Finale
+User-Based Evaluation
+
+Simulazione 20+ utenti
+
+Precision notifiche
+
+Recall eventi
+
+Feedback qualitativo
+
+Confronto Progressivo
+Versione	Precision	Recall
+Baseline	X	Y
++ Embeddings	↑	↑
++ Trust	↑	~
++ MCP	stabilizzazione	
+🌐 Frontend React
+
+Componenti:
+
+AlertForm
+
+PriceChart
+
+ListingCard
+
+TrustBadge
+
+Funzionalità:
+
+Creazione alert
+
+Dashboard storico prezzi
+
+Visualizzazione trust score
+
+Log notifiche
+
+⚠️ Rischi & Mitigazioni
+Rate limiting
+
+Solo API ufficiale eBay
+
+Backoff esponenziale
+
+Caching locale
+
+Dati rumorosi
+
+Deduplica
+
+Normalizzazione testo
+
+Trust senza ground truth
+
+Scoring ibrido
+
+Feedback utente
+
+📅 Timeline Stimata
+Fase	Durata
+Setup + Baseline	2 settimane
+NLP Parsing	1-2 settimane
+Semantic Retrieval	2 settimane
+Trust + MCP	2 settimane
+Totale	7-8 settimane
+🎓 Learning Outcomes
+
+Pipeline NLP end-to-end
+
+Retrieval semantico con embeddings
+
+Valutazione IR rigorosa
+
+Orchestrazione MCP-style
+
+Trust scoring explainable
+
+Sistema full-stack integrato
+
+📝 Priorità Strategica
+
+Retrieval + metriche IR
+
+Parsing valutato
+
+Trust scoring semplice
+
+MCP orchestration
+
+UI avanzata
