@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import time
 import logging
+from typing import Literal
+import os
 
 from app.db.database import SessionLocal
 from app.models.listing import Listing
@@ -12,6 +14,9 @@ from app.services.parser import parse_query_service
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# DB
+# ============================================================
 
 def get_db():
     db = SessionLocal()
@@ -21,19 +26,48 @@ def get_db():
         db.close()
 
 
+# ============================================================
+# REQUEST MODEL
+# ============================================================
+
 class SearchRequest(BaseModel):
     query: str
+    llm_engine: Literal["gemini", "ollama", "rule_based"] = "gemini"
 
+
+# ============================================================
+# HEALTH
+# ============================================================
 
 @router.get("/health")
 def health():
     return {"status": "ok"}
 
 
+# ============================================================
+# PARSE ENDPOINT
+# ============================================================
+
 @router.post("/parse")
 def parse(request: SearchRequest):
-    return parse_query_service(request.query, use_llm=True, include_meta=True)
 
+    if request.llm_engine == "rule_based":
+        use_llm = False
+    else:
+        # Override temporaneo del provider via env runtime
+        os.environ["LLM_PROVIDER"] = request.llm_engine
+        use_llm = True
+
+    return parse_query_service(
+        request.query,
+        use_llm=use_llm,
+        include_meta=True
+    )
+
+
+# ============================================================
+# BUILD EBAY QUERY
+# ============================================================
 
 import re
 
@@ -44,19 +78,18 @@ def build_ebay_query(parsed: dict, original_query: str) -> str:
 
     tokens = []
 
-    # 1) se c'è un product esplicito, è la cosa migliore per eBay
+    # 1️⃣ Se LLM ha identificato un prodotto → è la cosa migliore
     if product:
         tokens.append(product)
 
-    # 2) aggiungi UN brand solo se non è già dentro al product (evita duplicati tipo iPhone+iPhone)
+    # 2️⃣ Aggiungi brand solo se non già incluso
     if brands:
         b0 = str(brands[0]).strip()
-        if b0 and (product.lower().find(b0.lower()) == -1):
-            tokens.insert(0, b0)  # brand prima del modello
+        if b0 and product and b0.lower() not in product.lower():
+            tokens.insert(0, b0)
 
-    # 3) fallback: semantic_query ripulita in modo "non hardcoded" (tieni solo parole utili)
+    # 3️⃣ Fallback su semantic_query pulita
     if not tokens and semantic:
-        # tieni solo token alfanumerici lunghi almeno 2, e numeri (es. "15")
         toks = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]{2,}", semantic)
         tokens = toks
 
@@ -64,26 +97,50 @@ def build_ebay_query(parsed: dict, original_query: str) -> str:
     return q if q else original_query
 
 
+# ============================================================
+# SEARCH ENDPOINT
+# ============================================================
+
 @router.post("/search")
 def search(request: SearchRequest, db: Session = Depends(get_db)):
+
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
 
     t0 = time.time()
     timings = {}
 
-    # 1) Parse (NO LLM per non bloccare)
+    # ============================================================
+    # 1️⃣ PARSE
+    # ============================================================
+
     try:
         t = time.time()
-        parsed = parse_query_service(request.query, use_llm=True, include_meta=True)
-        timings["parse_rule_based_s"] = round(time.time() - t, 3)
+
+        if request.llm_engine == "rule_based":
+            use_llm = False
+        else:
+            os.environ["LLM_PROVIDER"] = request.llm_engine
+            use_llm = True
+
+        parsed = parse_query_service(
+            request.query,
+            use_llm=use_llm,
+            include_meta=True
+        )
+
+        timings[f"parse_{request.llm_engine}_s"] = round(time.time() - t, 3)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
 
     constraints = parsed.get("constraints", [])
     ebay_query = build_ebay_query(parsed, request.query)
 
-    # 2) eBay search (con timeout in ebay.py)
+    # ============================================================
+    # 2️⃣ EBAY SEARCH
+    # ============================================================
+
     try:
         t = time.time()
         items = search_items(query_text=ebay_query, constraints=constraints, limit=5)
@@ -91,10 +148,15 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore eBay search: {str(e)}")
 
-    # 3) Save DB
+    # ============================================================
+    # 3️⃣ SAVE DB
+    # ============================================================
+
     saved_items = []
+
     try:
         t = time.time()
+
         for item in items:
             ebay_id = item.get("ebay_id")
             if not ebay_id:
@@ -115,11 +177,13 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 url=item.get("url"),
                 image_url=item.get("image_url"),
             )
+
             db.add(listing)
             saved_items.append(item)
 
         db.commit()
         timings["db_commit_s"] = round(time.time() - t, 3)
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore DB: {str(e)}")

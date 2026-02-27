@@ -228,13 +228,7 @@ def search_items(
     constraints: List[Dict[str, Any]],
     limit: int = 10,
 ) -> List[Dict[str, Any]]:
-    """
-    Esegue una search su eBay Browse API.
 
-    Nota importante:
-    - query_text deve essere la query reale/originale da mandare a eBay
-    - NON la semantic_query ridotta del parser
-    """
     if not query_text or not query_text.strip():
         raise ValueError("query_text non può essere vuota")
 
@@ -263,6 +257,32 @@ def search_items(
         params=params,
         timeout=REQUEST_TIMEOUT,
     )
+
+    # ============================================================
+    # GESTIONE ERRORI INTELLIGENTE
+    # ============================================================
+
+    # 401 → token probabilmente scaduto → retry una volta
+    if response.status_code == 401:
+        _token_cache["access_token"] = None
+        token = _get_oauth_token()
+
+        headers["Authorization"] = f"Bearer {token}"
+
+        response = requests.get(
+            SEARCH_URL,
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    # Rate limit
+    if response.status_code == 429:
+        raise RuntimeError("eBay rate limit exceeded (429)")
+
+    # Server error
+    if 500 <= response.status_code < 600:
+        raise RuntimeError(f"eBay server error {response.status_code}")
 
     if response.status_code != 200:
         raise RuntimeError(f"Search error: {response.status_code} {response.text}")

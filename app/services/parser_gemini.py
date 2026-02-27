@@ -5,63 +5,27 @@ Parser NLP "neutro" e coerente con quanto deciso:
 - NESSUNA logica di business / intent (te la gestisci tu fuori)
 - Output stabile: semantic_query, product, brands, constraints, preferences, _meta
 - Parsing minimalista ma utile per retrieval: brand/product/price/condition
-- LLM come componente principale + fallback rule-based
+- LLM come componente principale (Gemini 2.5 Flash) + fallback rule-based
 - Validazione/normalizzazione robusta
-
-✅ LLM Provider switch (OLLAMA / GEMINI) via .env:
-  - LLM_PROVIDER=ollama | gemini
-  - GEMINI_API_KEY=...
 """
 
 import json
 import logging
-import os
 import re
-import subprocess
-import time
-import uuid
+import os
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import spacy
-
-# Gemini REST client
-import requests
-
-# ============================================================
-# LOAD .env (optional)
-# ============================================================
-try:
-    from dotenv import load_dotenv  # pip install python-dotenv
-
-    # tenta root progetto: .../app/services/parser.py -> parents[2] = root (di solito)
-    _ROOT = Path(__file__).resolve().parents[2]
-    load_dotenv(dotenv_path=_ROOT / ".env", override=False)
-    # fallback: cerca comunque .env nella cwd
-    load_dotenv(override=False)
-except Exception:
-    # se python-dotenv non è installato, userà solo le env del sistema
-    pass
+from google import genai
 
 # ============================================================
 # CONFIG
 # ============================================================
 
 SPACY_MODEL = "it_core_news_sm"
-
-# LLM provider: "ollama" | "gemini"
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()  # es. "ollama"
-
-# Ollama
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "30"))
-
-# Gemini
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "30"))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()  # <-- NON hardcodata: arriva da .env
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyC5BpduGhgHt0ceksGxnbffw-F3IVoXgn0")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -97,7 +61,7 @@ CONDITION_SYNONYMS = {
     "refurbished": {"ricondizionato", "rigenerato", "refurbished"},
 }
 
-# Termini “vuoti”/vaghi: filtro anti-rumore (MINIMO)
+# Termini “vuoti”/vaghi: filtro anti-rumore (MINIMO, non “mille termini”)
 VAGUE_PRODUCT_TERMS = {
     "qualcosa",
     "qualcosa tipo",
@@ -116,15 +80,15 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     "constraints": [],   # hard filters
     "preferences": [],   # soft wishes (ranking hints)
     "_meta": {
-        "llm_enabled": False,
+        "llm_used": False,
         "llm_success": False,
-        "llm_provider": None,
+        "llm_engine": "",
         "confidence": 0.0,
     },
 }
 
 # ============================================================
-# LOAD NLP
+# LOAD NLP & GEMINI
 # ============================================================
 
 def load_nlp(model_name: str = SPACY_MODEL):
@@ -138,6 +102,13 @@ def load_nlp(model_name: str = SPACY_MODEL):
 
 nlp = load_nlp()
 
+# Inizializza il client Gemini una volta per tutte
+try:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+except Exception as e:
+    logger.error(f"Impossibile inizializzare Gemini Client: {e}")
+    client = None
+
 # ============================================================
 # UTILS
 # ============================================================
@@ -145,6 +116,7 @@ nlp = load_nlp()
 def empty_result(original_query: str = "") -> Dict[str, Any]:
     result = deepcopy(DEFAULT_RESULT_TEMPLATE)
     result["original_query"] = original_query
+    # fallback: semantic_query = query originale (utile per embeddings/FAISS)
     result["semantic_query"] = original_query
     return result
 
@@ -175,6 +147,7 @@ def normalize_brand(value: str) -> str:
     lowered = raw.lower()
     if lowered in BRAND_WHITELIST:
         return BRAND_WHITELIST[lowered]
+    # fallback semplice
     return raw[0].upper() + raw[1:] if len(raw) > 1 else raw.upper()
 
 def normalize_float(value: Any) -> Optional[float]:
@@ -187,6 +160,9 @@ def normalize_float(value: Any) -> Optional[float]:
         s = value.strip().lower()
         s = s.replace("€", "").replace("euro", "").strip()
 
+        # "1.200,50" -> 1200.50
+        # "1.200" -> 1200
+        # "299,99" -> 299.99
         if "," in s and "." in s:
             s = s.replace(".", "").replace(",", ".")
         elif "," in s:
@@ -221,6 +197,7 @@ def is_vague_product(text: str) -> bool:
         return True
     if t in VAGUE_PRODUCT_TERMS:
         return True
+    # “qualcosa …” / “una cosa …” ecc
     if t.startswith("qualcosa"):
         return True
     return False
@@ -340,6 +317,7 @@ def extract_brands(doc, original_text: str) -> List[str]:
         if b:
             cleaned.append(b)
 
+    # Dedup case-insensitive
     return dedupe_keep_order(cleaned)
 
 # ============================================================
@@ -349,7 +327,7 @@ def extract_brands(doc, original_text: str) -> List[str]:
 def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]:
     """
     Fallback leggero e conservativo.
-    NB: l'LLM è la fonte principale per product.
+    NB: l'LLM è la fonte principale per product. Qui cerchiamo un backup sensato.
     """
     brand_norm = {b.lower() for b in brands}
     candidates: List[str] = []
@@ -414,8 +392,9 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
     result = empty_result(query)
     result["brands"] = brands
     result["product"] = product
-    result["semantic_query"] = query  # raw per embeddings; pulizia la fa LLM
+    result["semantic_query"] = query  # tieni sempre raw per embeddings; pulizia la fa LLM
 
+    # Hard constraints
     if min_price is not None and max_price is not None:
         result["constraints"].append({"type": "price", "operator": "between", "value": [min_price, max_price]})
     elif max_price is not None:
@@ -427,157 +406,6 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
         result["constraints"].append({"type": "condition", "value": condition})
 
     return result
-
-# ============================================================
-# LLM PROVIDERS
-# ============================================================
-
-def call_ollama(prompt: str) -> Optional[str]:
-    try:
-        proc = subprocess.run(
-            ["ollama", "run", OLLAMA_MODEL],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=OLLAMA_TIMEOUT,
-        )
-
-        if proc.returncode != 0:
-            logger.warning("Ollama non-zero exit code: %s", proc.returncode)
-            if proc.stderr:
-                logger.warning("Ollama stderr: %s", proc.stderr.strip())
-            return None
-
-        out = (proc.stdout or "").strip()
-        return out if out else None
-
-    except subprocess.TimeoutExpired:
-        logger.warning("Ollama timeout after %s seconds", OLLAMA_TIMEOUT)
-        return None
-    except FileNotFoundError:
-        logger.warning("Ollama non trovato nel PATH")
-        return None
-    except Exception as e:
-        logger.exception("Ollama error: %s", e)
-        return None
-
-def call_gemini(prompt: str) -> Optional[str]:
-    request_id = str(uuid.uuid4())[:8]
-    logger.info(f"[{request_id}] GEMINI call started")
-
-    if not GEMINI_API_KEY:
-        logger.error(f"[{request_id}] GEMINI_API_KEY missing")
-        return None
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
-    }
-
-    t0 = time.time()
-    response = call_llm(prompt)
-    logger.info(f"LLM total time: {round(time.time() - t0, 2)}s")
-
-    try:
-        logger.info(f"[{request_id}] Sending request to Gemini model={GEMINI_MODEL}")
-
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=GEMINI_TIMEOUT
-        )
-
-        elapsed = round(time.time() - t0, 2)
-        logger.info(f"[{request_id}] Gemini HTTP {response.status_code} in {elapsed}s")
-
-        if response.status_code == 429:
-            logger.warning(f"[{request_id}] Gemini rate limit (429)")
-            return None
-
-        if response.status_code != 200:
-            logger.error(f"[{request_id}] Gemini error body: {response.text[:300]}")
-            return None
-
-        data = response.json()
-
-        text = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text")
-        )
-
-        if not text:
-            logger.warning(f"[{request_id}] Gemini returned empty text")
-            return None
-
-        logger.info(f"[{request_id}] Gemini success, response length={len(text)} chars")
-
-        return text.strip()
-
-    except requests.Timeout:
-        logger.error(f"[{request_id}] Gemini TIMEOUT after {GEMINI_TIMEOUT}s")
-        return None
-
-    except Exception as e:
-        logger.exception(f"[{request_id}] Gemini unexpected error: {e}")
-        return None
-
-def call_llm(prompt: str) -> Tuple[Optional[str], str]:
-    """
-    Ritorna: (output, provider_usato)
-    - Usa LLM_PROVIDER come principale
-    - Se fallisce e LLM_FALLBACK_PROVIDER è impostato, prova fallback (es. ollama)
-    """
-    primary = LLM_PROVIDER
-    fallback = LLM_FALLBACK_PROVIDER
-
-    def _call(provider: str) -> Optional[str]:
-        if provider == "ollama":
-            return call_ollama(prompt)
-        if provider == "gemini":
-            return call_gemini(prompt)
-        logger.error("Unknown provider: %s", provider)
-        return None
-
-    out = _call(primary)
-    if out:
-        return out, primary
-
-    if fallback and fallback != primary:
-        out2 = _call(fallback)
-        if out2:
-            return out2, fallback
-
-    return None, primary
-
-# ============================================================
-# JSON EXTRACTION
-# ============================================================
-
-def extract_first_json_object(text: str) -> Optional[str]:
-    start = text.find("{")
-    if start == -1:
-        return None
-    depth = 0
-    for i in range(start, len(text)):
-        ch = text[i]
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    return None
 
 # ============================================================
 # VALIDATION / NORMALIZATION
@@ -643,6 +471,7 @@ def normalize_preference(p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, Any]:
     result = empty_result(original_query)
 
+    # semantic_query
     semantic_query = data.get("semantic_query")
     result["semantic_query"] = (
         semantic_query.strip()
@@ -650,6 +479,7 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
         else original_query
     )
 
+    # brands
     brands = data.get("brands", [])
     if isinstance(brands, list):
         normalized_brands: List[str] = []
@@ -658,6 +488,7 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
                 normalized_brands.append(normalize_brand(b))
         result["brands"] = dedupe_keep_order(normalized_brands)
 
+    # product
     product = data.get("product")
     if isinstance(product, str) and product.strip().lower() not in {"", "null", "none"}:
         cleaned = product.strip()
@@ -665,6 +496,7 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
     else:
         result["product"] = None
 
+    # constraints
     constraints = data.get("constraints", [])
     if isinstance(constraints, list):
         norm_constraints: List[Dict[str, Any]] = []
@@ -674,6 +506,7 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
                 norm_constraints.append(nc)
         result["constraints"] = dedupe_keep_order(norm_constraints)
 
+    # preferences
     preferences = data.get("preferences", [])
     if isinstance(preferences, list):
         norm_prefs: List[Dict[str, Any]] = []
@@ -685,36 +518,46 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
 
     return result
 
-
-
-def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Evita che l'LLM cambi numeri del modello (es 15 -> 13).
-    Se il numero nel product non compare nella query originale,
-    il product viene scartato.
-    """
-    import re
-
-    original_numbers = re.findall(r"\b\d+\b", original_query)
-    product = result.get("product")
-
-    if not product:
-        return result
-
-    product_numbers = re.findall(r"\b\d+\b", product)
-
-    if product_numbers and original_numbers:
-        if not any(n in original_numbers for n in product_numbers):
-            result["product"] = None
-            result["semantic_query"] = original_query
-
-    return result
-
 # ============================================================
-# LLM PARSE
+# GEMINI LLM CALL & PARSE
 # ============================================================
 
-def llm_parse(query: str) -> Tuple[Optional[Dict[str, Any]], str]:
+def call_gemini(prompt: str) -> Optional[str]:
+    """Effettua la chiamata nativa all'API di Gemini."""
+    if not client:
+        logger.error("Client Gemini non configurato correttamente.")
+        return None
+
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json",
+                "temperature": 0.1,  # Bassa temperatura per risposte deterministiche e formattate
+            }
+        )
+        return response.text
+    except Exception as e:
+        logger.error("Errore durante la chiamata a Gemini: %s", e)
+        return None
+
+def extract_first_json_object(text: str) -> Optional[str]:
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+def llm_parse(query: str) -> Optional[Dict[str, Any]]:
     prompt = f"""
 You are a strict semantic query parser for an e-commerce assistant.
 
@@ -779,94 +622,60 @@ Output: {{"semantic_query":"cuffie bose","product":"cuffie","brands":["Bose"],"c
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()
 
-    response, used_provider = call_llm(prompt)
+    response = call_gemini(prompt)
     if not response:
-        return None, used_provider
+        return None
 
     json_text = extract_first_json_object(response)
     if not json_text:
         logger.warning("No JSON object found in LLM output")
-        return None, used_provider
-
+        return None
 
     try:
         raw = json.loads(json_text)
     except json.JSONDecodeError:
         logger.warning("Invalid JSON from LLM: %s", response[:200])
-        return None, used_provider
+        return None
 
     if not isinstance(raw, dict):
         logger.warning("LLM output is not a JSON object")
-        return None, used_provider
+        return None
 
-    parsed = validate_llm_result(raw, query)
-    parsed = enforce_numeric_consistency(query, parsed)
-    return parsed
+    return validate_llm_result(raw, query)
 
 # ============================================================
-# MERGE (LLM-first)
+# MERGE
 # ============================================================
 
 def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-
-    # Se LLM fallisce → puro rule-based
+    # Se LLM fallisce -> puro rule-based
     if not llm_result:
         return rule_result
 
+    # Se LLM riesce -> LLM è la fonte principale.
+    # Rule-based usato SOLO per "riempire buchi" in modo conservativo.
     final = empty_result(rule_result["original_query"])
 
-    # ------------------------------------------------------------
-    # 1️⃣ semantic_query → LLM
-    # ------------------------------------------------------------
+    # semantic_query: preferisci LLM, fallback su rule, fallback su originale
     final["semantic_query"] = (
         llm_result.get("semantic_query")
         or rule_result.get("semantic_query")
         or rule_result["original_query"]
     )
 
-    # ------------------------------------------------------------
-    # 2️⃣ PRODUCT → LLM SOLO SE CONSISTENTE
-    # ------------------------------------------------------------
+    # product: se LLM ha risposto, fidati ANCHE se è null.
     final["product"] = llm_result.get("product")
 
-    # ------------------------------------------------------------
-    # 3️⃣ BRANDS → unione ma pulita
-    # ------------------------------------------------------------
+    # brands: preferisci LLM; se vuote, puoi unire col rule-based
     llm_brands = llm_result.get("brands", []) or []
     rule_brands = rule_result.get("brands", []) or []
-
     final["brands"] = dedupe_keep_order(llm_brands + rule_brands)
 
-    # ------------------------------------------------------------
-    # 4️⃣ CONSTRAINTS
-    #    PREZZO sempre rule-based (deterministico)
-    #    CONDITION → preferisci LLM, fallback rule-based
-    # ------------------------------------------------------------
-
-    rule_constraints = rule_result.get("constraints", [])
+    # constraints: preferisci LLM; se vuote, fallback su rule-based
     llm_constraints = llm_result.get("constraints", [])
+    final["constraints"] = llm_constraints if llm_constraints else (rule_result.get("constraints", []) or [])
 
-    # --- PRICE (sempre rule-based)
-    price_constraints = [c for c in rule_constraints if c.get("type") == "price"]
-
-    # --- CONDITION
-    llm_condition = next(
-        (c for c in llm_constraints if c.get("type") == "condition"),
-        None
-    )
-
-    if llm_condition:
-        condition_constraints = [llm_condition]
-    else:
-        condition_constraints = [
-            c for c in rule_constraints if c.get("type") == "condition"
-        ]
-
-    final["constraints"] = price_constraints + condition_constraints
-
-    # ------------------------------------------------------------
-    # 5️⃣ PREFERENCES → solo LLM
-    # ------------------------------------------------------------
+    # preferences: LLM
     final["preferences"] = llm_result.get("preferences", []) or []
 
     return final
@@ -876,17 +685,27 @@ def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, An
 # ============================================================
 
 def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> float:
+    """
+    Euristica semplice e onesta (non deve mai arrivare a 1.0).
+    Non deve guidare decisioni critiche, solo UX/log.
+    """
     score = 0.15
+
     if final_result.get("brands"):
         score += 0.15
+
     if final_result.get("constraints"):
         score += 0.20
+
     if final_result.get("product"):
         score += 0.15
+
     if final_result.get("preferences"):
         score += 0.05
+
     if llm_result is not None:
         score += 0.10
+
     return round(min(score, 0.95), 2)
 
 # ============================================================
@@ -897,11 +716,8 @@ def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = Tr
     rule_result = rule_based_parse(text)
 
     llm_result = None
-    used_provider: Optional[str] = None
-
     if use_llm:
         llm_result = llm_parse(text)
-        used_provider = LLM_PROVIDER if llm_result else None
 
     final = merge_results(rule_result, llm_result)
 
@@ -909,7 +725,7 @@ def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = Tr
         final["_meta"] = {
             "llm_enabled": use_llm,
             "llm_success": llm_result is not None,
-            "llm_provider": used_provider if use_llm else None,
+            "llm_engine": GEMINI_MODEL if llm_result else "rule-based",
             "confidence": compute_confidence(final, llm_result),
         }
     else:
