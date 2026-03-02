@@ -2,9 +2,8 @@
 
 import base64
 import os
-import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from dotenv import load_dotenv
@@ -16,7 +15,17 @@ EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
 EBAY_ENV = os.getenv("EBAY_ENV", "sandbox").strip().lower()
 EBAY_MARKETPLACE_ID = os.getenv("EBAY_MARKETPLACE_ID", "EBAY_IT").strip()
 
-REQUEST_TIMEOUT = 20
+REQUEST_TIMEOUT = int(os.getenv("EBAY_REQUEST_TIMEOUT", "20"))
+
+# Quanto espandere "approx" (intorno a/circa/sui)
+APPROX_PRICE_PCT = float(os.getenv("APPROX_PRICE_PCT", "0.2"))          # 0.2 => ±20%
+APPROX_PRICE_MIN_DELTA = float(os.getenv("APPROX_PRICE_MIN_DELTA", "10"))  # minimo ±10 euro
+
+# Autocorrezione eBay
+EBAY_AUTO_CORRECT = os.getenv("EBAY_AUTO_CORRECT", "true").strip().lower() == "true"
+
+# Aggiornamento brand vocab runtime (sconsigliato se vuoi zero rumore; se on, usa SOLO campo strutturato)
+EBAY_UPDATE_BRAND_VOCAB = os.getenv("EBAY_UPDATE_BRAND_VOCAB", "false").strip().lower() == "true"
 
 if EBAY_ENV == "production":
     OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
@@ -33,7 +42,6 @@ _token_cache: Dict[str, Any] = {
     "access_token": None,
     "expires_at": 0.0,
 }
-
 
 # ============================================================
 # OAUTH
@@ -90,7 +98,6 @@ def _get_oauth_token() -> str:
 
     return access_token
 
-
 # ============================================================
 # CONSTRAINTS -> EBAY FILTERS
 # ============================================================
@@ -103,10 +110,19 @@ def _normalize_numeric(value: Any) -> Optional[float]:
     except (TypeError, ValueError):
         return None
 
+def _expand_approx(value: float) -> Tuple[float, float]:
+    """
+    Converte approx (es. 100) in range (es. 80..120), configurabile via env.
+    """
+    delta = max(value * APPROX_PRICE_PCT, APPROX_PRICE_MIN_DELTA)
+    return round(value - delta, 2), round(value + delta, 2)
 
 def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
     """
     Converte constraints di prezzo nel formato eBay Browse API.
+
+    Supporta:
+    - <=, >=, between, approx
 
     Esempi:
     - price:[..600]
@@ -140,6 +156,13 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
                 min_price = min(left, right)
                 max_price = max(left, right)
 
+        elif op == "approx":
+            candidate = _normalize_numeric(val)
+            if candidate is not None:
+                lo, hi = _expand_approx(candidate)
+                min_price = lo
+                max_price = hi
+
     # Ignora il classico artefatto inutile ">= 0"
     if min_price == 0:
         min_price = None
@@ -154,7 +177,6 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
         return f"price:[{min_price}..]"
 
     return f"price:[{min_price}..{max_price}]"
-
 
 def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
     mapping = {
@@ -174,13 +196,14 @@ def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
 
     return None
 
-
 def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
     filters: List[str] = []
 
     price_filter = _build_price_filter(constraints)
     if price_filter:
         filters.append(price_filter)
+        # ✅ OBBLIGATORIO con price:[..] secondo eBay Browse API
+        filters.append("priceCurrency:EUR")
 
     condition_filter = _build_condition_filter(constraints)
     if condition_filter:
@@ -191,6 +214,28 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
 
     return ",".join(filters)
 
+# ============================================================
+# PREFERENCES -> EBAY PARAMS
+# ============================================================
+
+def _extract_sort(preferences: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    """
+    Mappa le preferences di sort (parser) al parametro sort eBay.
+    """
+    if not preferences:
+        return None
+
+    for p in preferences:
+        if p.get("type") != "sort":
+            continue
+        v = p.get("value")
+        if v == "price_asc":
+            return "price"
+        if v == "price_desc":
+            return "-price"
+        if v == "newest":
+            return "newlyListed"
+    return None
 
 # ============================================================
 # RESPONSE NORMALIZATION
@@ -214,8 +259,9 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "seller_rating": seller_rating,
         "url": item.get("itemWebUrl"),
         "image_url": image_info.get("imageUrl"),
+        # se disponibile (non sempre): brand strutturato
+        "brand": item.get("brand"),
     }
-
 
 # ============================================================
 # PUBLIC API
@@ -224,6 +270,7 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
 def search_items(
     query_text: str,
     constraints: List[Dict[str, Any]],
+    preferences: Optional[List[Dict[str, Any]]] = None,
     limit: int = 10,
 ) -> List[Dict[str, Any]]:
 
@@ -245,9 +292,17 @@ def search_items(
         "limit": limit,
     }
 
+    # eBay autocorrect (utile su typo keyword)
+    if EBAY_AUTO_CORRECT:
+        params["auto_correct"] = "KEYWORD"
+
     filter_string = _build_filter_string(constraints)
     if filter_string:
         params["filter"] = filter_string
+
+    sort_value = _extract_sort(preferences)
+    if sort_value:
+        params["sort"] = sort_value
 
     response = requests.get(
         SEARCH_URL,
@@ -260,11 +315,9 @@ def search_items(
     # GESTIONE ERRORI INTELLIGENTE
     # ============================================================
 
-    # 401 → token probabilmente scaduto → retry una volta
     if response.status_code == 401:
         _token_cache["access_token"] = None
         token = _get_oauth_token()
-
         headers["Authorization"] = f"Bearer {token}"
 
         response = requests.get(
@@ -274,11 +327,9 @@ def search_items(
             timeout=REQUEST_TIMEOUT,
         )
 
-    # Rate limit
     if response.status_code == 429:
         raise RuntimeError("eBay rate limit exceeded (429)")
 
-    # Server error
     if 500 <= response.status_code < 600:
         raise RuntimeError(f"eBay server error {response.status_code}")
 
@@ -287,18 +338,22 @@ def search_items(
 
     data = response.json()
     items = data.get("itemSummaries", [])
-    # === Aggiorna brand vocabulary dinamica ===
-    from app.services.parser import update_brand_vocab
 
-    extracted_brands = []
+    # === Opzionale: aggiorna brand vocab runtime SOLO da campo strutturato 'brand' ===
+    if EBAY_UPDATE_BRAND_VOCAB and items:
+        try:
+            from app.services.parser import update_brand_vocab  # import lazy (evita circular all'import time)
 
-    for item in items:
-        title = item.get("title", "")
-        words = re.findall(r"\b[A-Z][a-zA-Z]+\b", title)
-        for w in words:
-            if len(w) > 3:
-                extracted_brands.append(w)
+            brands = []
+            for it in items:
+                b = it.get("brand")
+                if isinstance(b, str) and b.strip():
+                    brands.append(b.strip())
 
-    update_brand_vocab(list(set(extracted_brands)))
+            if brands:
+                update_brand_vocab(list(set(brands)))
+        except Exception:
+            # mai rompere la search per questo
+            pass
 
     return [_normalize_item(item) for item in items]

@@ -3,8 +3,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import time
 import logging
-from typing import Literal
-import os
+from typing import Literal, Optional
+import re
 
 from app.db.database import SessionLocal
 from app.models.listing import Listing
@@ -51,50 +51,42 @@ def health():
 @router.post("/parse")
 def parse(request: SearchRequest):
 
-    if request.llm_engine == "rule_based":
-        use_llm = False
-    else:
-        # Override temporaneo del provider via env runtime
-        os.environ["LLM_PROVIDER"] = request.llm_engine
-        use_llm = True
-
     return parse_query_service(
         request.query,
-        use_llm=use_llm,
-        include_meta=True
+        llm_engine=request.llm_engine,
+        include_meta=True,
     )
 
 
 # ============================================================
-# BUILD EBAY QUERY
+# BUILD EBAY QUERY (robusta + <=100 chars)
 # ============================================================
 
-import re
-
 def build_ebay_query(parsed: dict, original_query: str) -> str:
+    semantic = (parsed.get("semantic_query") or "").strip()
     product = (parsed.get("product") or "").strip()
     brands = parsed.get("brands", []) or []
-    semantic = (parsed.get("semantic_query") or "").strip()
 
-    tokens = []
+    # Preferisci semantic_query (di solito è già "scarpe adidas", "garmin watch", ecc.)
+    if semantic:
+        q = semantic
+    else:
+        tokens = []
+        if brands:
+            tokens.extend([str(b).strip() for b in brands if str(b).strip()])
+        if product:
+            tokens.append(product)
+        q = " ".join(tokens).strip()
 
-    # 1️⃣ Se LLM ha identificato un prodotto → è la cosa migliore
-    if product:
-        tokens.append(product)
+    # Fallback finale
+    if not q:
+        q = original_query.strip()
 
-    # 2️⃣ Aggiungi brand solo se non già incluso
-    if brands:
-        b0 = str(brands[0]).strip()
-        if b0 and product and b0.lower() not in product.lower():
-            tokens.insert(0, b0)
+    # normalizza token (evita simboli strani)
+    q = " ".join(re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]{2,}", q))
 
-    # 3️⃣ Fallback su semantic_query pulita
-    if not tokens and semantic:
-        toks = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]{2,}", semantic)
-        tokens = toks
-
-    q = " ".join(tokens).strip()
-    return q if q else original_query
+    # eBay tronca >100 char → tronchiamo noi
+    return q[:100].strip() if q else original_query
 
 
 # ============================================================
@@ -111,22 +103,15 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     timings = {}
 
     # ============================================================
-    # 1️⃣ PARSE
+    # 1) PARSE
     # ============================================================
-
     try:
         t = time.time()
 
-        if request.llm_engine == "rule_based":
-            use_llm = False
-        else:
-            os.environ["LLM_PROVIDER"] = request.llm_engine
-            use_llm = True
-
         parsed = parse_query_service(
             request.query,
-            use_llm=use_llm,
-            include_meta=True
+            llm_engine=request.llm_engine,
+            include_meta=True,
         )
 
         timings[f"parse_{request.llm_engine}_s"] = round(time.time() - t, 3)
@@ -134,25 +119,34 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
 
-    constraints = parsed.get("constraints", [])
+    constraints = parsed.get("constraints", []) or []
+    preferences = parsed.get("preferences", []) or []
     ebay_query = build_ebay_query(parsed, request.query)
 
     # ============================================================
-    # 2️⃣ EBAY SEARCH
+    # 2) EBAY SEARCH
     # ============================================================
-
     try:
         t = time.time()
-        items = search_items(query_text=ebay_query, constraints=constraints, limit=5)
+
+        # 👇 PASSIAMO ANCHE preferences (per sort)
+        items = search_items(
+            query_text=ebay_query,
+            constraints=constraints,
+            preferences=preferences,
+            limit=5
+        )
+
         timings["ebay_search_s"] = round(time.time() - t, 3)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore eBay search: {str(e)}")
 
     # ============================================================
-    # 3️⃣ SAVE DB
+    # 3) SAVE DB (ma restituiamo SEMPRE gli items trovati)
     # ============================================================
-
-    saved_items = []
+    saved_count = 0
+    results_out = []
 
     try:
         t = time.time()
@@ -163,23 +157,27 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 continue
 
             exists = db.query(Listing).filter_by(ebay_id=ebay_id).first()
-            if exists:
-                continue
+            already = exists is not None
 
-            listing = Listing(
-                ebay_id=ebay_id,
-                title=item.get("title"),
-                price=item.get("price"),
-                currency=item.get("currency"),
-                condition=item.get("condition"),
-                seller_name=item.get("seller_name"),
-                seller_rating=item.get("seller_rating"),
-                url=item.get("url"),
-                image_url=item.get("image_url"),
-            )
+            if not already:
+                listing = Listing(
+                    ebay_id=ebay_id,
+                    title=item.get("title"),
+                    price=item.get("price"),
+                    currency=item.get("currency"),
+                    condition=item.get("condition"),
+                    seller_name=item.get("seller_name"),
+                    seller_rating=item.get("seller_rating"),
+                    url=item.get("url"),
+                    image_url=item.get("image_url"),
+                )
+                db.add(listing)
+                saved_count += 1
 
-            db.add(listing)
-            saved_items.append(item)
+            # restituiamo comunque l'item (con flag)
+            item_copy = dict(item)
+            item_copy["_already_in_db"] = already
+            results_out.append(item_copy)
 
         db.commit()
         timings["db_commit_s"] = round(time.time() - t, 3)
@@ -193,7 +191,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     return {
         "parsed_query": parsed,
         "ebay_query_used": ebay_query,
-        "results_count": len(saved_items),
-        "results": saved_items,
+        "results_count": len(results_out),      # ✅ quanti trovati davvero
+        "saved_new_count": saved_count,         # ✅ quanti nuovi salvati
+        "results": results_out,
         "_timings": timings,
     }
