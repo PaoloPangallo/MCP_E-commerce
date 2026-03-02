@@ -2,6 +2,7 @@
 
 import base64
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -156,9 +157,6 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
 
 
 def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
-    """
-    Converte condition -> conditionIds eBay Browse API.
-    """
     mapping = {
         "new": "1000",
         "refurbished": "2000",
@@ -172,7 +170,7 @@ def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
         val = str(c.get("value", "")).strip().lower()
         condition_id = mapping.get(val)
         if condition_id:
-            return f"conditions:{{{condition_id}}}"
+            return f"conditionIds:{{{condition_id}}}"
 
     return None
 
@@ -289,5 +287,18 @@ def search_items(
 
     data = response.json()
     items = data.get("itemSummaries", [])
+    # === Aggiorna brand vocabulary dinamica ===
+    from app.services.parser import update_brand_vocab
+
+    extracted_brands = []
+
+    for item in items:
+        title = item.get("title", "")
+        words = re.findall(r"\b[A-Z][a-zA-Z]+\b", title)
+        for w in words:
+            if len(w) > 3:
+                extracted_brands.append(w)
+
+    update_brand_vocab(list(set(extracted_brands)))
 
     return [_normalize_item(item) for item in items]

@@ -17,17 +17,16 @@ import json
 import logging
 import os
 import re
-import subprocess
 import time
 import uuid
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
-import spacy
+from typing import Any, Dict, List, Optional, Tuple, cast
+from rapidfuzz import process, fuzz
 
 # Gemini REST client
 import requests
+import spacy
 
 # ============================================================
 # LOAD .env (optional)
@@ -90,6 +89,46 @@ BRAND_WHITELIST = {
     "bose": "Bose",
     "jbl": "JBL",
 }
+# Brand vocabulary dinamica (popolata dal layer search)
+BRAND_VOCAB: List[str] = []
+
+
+# ============================================================
+# BRAND VOCAB LOAD (offline da brand_vocab.json)
+# ============================================================
+
+def load_brand_vocab() -> List[str]:
+    try:
+        root = Path(__file__).resolve().parents[2]  # MCP_ECOM root
+        file_path = root / "brand_vocab.json"
+
+        if not file_path.exists():
+            logger.warning("brand_vocab.json not found at %s", file_path)
+            return []
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            brands = json.load(f)
+
+        if not isinstance(brands, list):
+            logger.warning("brand_vocab.json invalid format")
+            return []
+
+        # normalizzazione pulita
+        clean = []
+        for b in brands:
+            if isinstance(b, str):
+                b = b.strip()
+                if b:
+                    clean.append(b)
+
+        logger.info("Loaded %d brands into BRAND_VOCAB", len(clean))
+        return sorted(set(clean))
+
+    except Exception as e:
+        logger.warning("Failed loading brand_vocab.json: %s", e)
+        return []
+
+BRAND_VOCAB: List[str] = load_brand_vocab()
 
 CONDITION_SYNONYMS = {
     "new": {"nuovo", "nuova", "sigillato", "mai usato"},
@@ -306,41 +345,65 @@ def extract_condition(text: str) -> Optional[str]:
 # BRAND EXTRACTION
 # ============================================================
 
+
+def fuzzy_brand_detection(text: str, threshold: int = 85) -> List[str]:
+    if not BRAND_VOCAB:
+        return []
+
+    words = re.findall(r"\b\w+\b", text.lower())
+    found = []
+
+    for word in words:
+        if len(word) < 4:
+            continue
+
+        match = process.extractOne(
+            word,
+            cast(List[str], BRAND_VOCAB),
+            scorer=fuzz.partial_ratio
+        )
+
+        if match:
+            brand, score, _ = match
+
+            # Evita match troppo diversi in lunghezza
+            if score >= threshold and abs(len(word) - len(brand)) <= 3:
+                found.append(brand)
+
+    return dedupe_keep_order(found)
+
+
+def update_brand_vocab(brands: List[str]):
+    global BRAND_VOCAB
+    for b in brands:
+        if isinstance(b, str) and b.strip():
+            if b not in BRAND_VOCAB:
+                BRAND_VOCAB.append(b)
 def extract_brands(doc, original_text: str) -> List[str]:
     found: List[str] = []
     text_norm = normalize_for_matching(original_text)
 
-    # 1) Canonicalizzazione da whitelist (substring word-boundary)
+    # 1️⃣ whitelist
     for raw, canonical in BRAND_WHITELIST.items():
         if re.search(rf"\b{re.escape(raw)}\b", text_norm):
             found.append(canonical)
 
-    # 2) Named entities ORG/PRODUCT
+    # 2️⃣ fuzzy matching su vocab reale
+    fuzzy_found = fuzzy_brand_detection(original_text)
+    found.extend(fuzzy_found)
+
+    # 3️⃣ NER solo se nel vocabolario ufficiale
     for ent in getattr(doc, "ents", []):
-        if ent.label_ in {"ORG", "PRODUCT"}:
-            candidate = ent.text.strip(" ,.-")
-            if candidate:
-                found.append(normalize_brand(candidate))
+        candidate = ent.text.strip(" ,.-")
 
-    # 3) Fallback: sequenze PROPN
-    current: List[str] = []
-    for token in doc:
-        if token.pos_ == "PROPN":
-            current.append(token.text)
-        else:
-            if current:
-                found.append(normalize_brand(" ".join(current)))
-                current = []
-    if current:
-        found.append(normalize_brand(" ".join(current)))
+        if not candidate:
+            continue
 
-    cleaned = []
-    for b in found:
-        b = (b or "").strip(" ,.-")
-        if b:
-            cleaned.append(b)
+        # 🔥 VALIDAZIONE FORTE
+        if candidate in BRAND_VOCAB:
+            found.append(candidate)
 
-    return dedupe_keep_order(cleaned)
+    return dedupe_keep_order(found)
 
 # ============================================================
 # PRODUCT EXTRACTION (fallback conservativo)
@@ -434,33 +497,29 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 
 def call_ollama(prompt: str) -> Optional[str]:
     try:
-        proc = subprocess.run(
-            ["ollama", "run", OLLAMA_MODEL],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=OLLAMA_TIMEOUT,
-        )
+        url = "http://localhost:11434/api/generate"
 
-        if proc.returncode != 0:
-            logger.warning("Ollama non-zero exit code: %s", proc.returncode)
-            if proc.stderr:
-                logger.warning("Ollama stderr: %s", proc.stderr.strip())
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0,
+                "num_predict": 300
+            }
+        }
+
+        response = requests.post(url, json=payload, timeout=OLLAMA_TIMEOUT)
+
+        if response.status_code != 200:
+            logger.warning("Ollama HTTP %s", response.status_code)
             return None
 
-        out = (proc.stdout or "").strip()
-        return out if out else None
+        data = response.json()
+        return data.get("response", "").strip() or None
 
-    except subprocess.TimeoutExpired:
-        logger.warning("Ollama timeout after %s seconds", OLLAMA_TIMEOUT)
-        return None
-    except FileNotFoundError:
-        logger.warning("Ollama non trovato nel PATH")
-        return None
     except Exception as e:
-        logger.exception("Ollama error: %s", e)
+        logger.exception("Ollama REST error: %s", e)
         return None
 
 def call_gemini(prompt: str) -> Optional[str]:
@@ -471,7 +530,10 @@ def call_gemini(prompt: str) -> Optional[str]:
         logger.error(f"[{request_id}] GEMINI_API_KEY missing")
         return None
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    )
 
     payload = {
         "contents": [
@@ -483,12 +545,8 @@ def call_gemini(prompt: str) -> Optional[str]:
         ]
     }
 
-    t0 = time.time()
-    response = call_llm(prompt)
-    logger.info(f"LLM total time: {round(time.time() - t0, 2)}s")
-
     try:
-        logger.info(f"[{request_id}] Sending request to Gemini model={GEMINI_MODEL}")
+        t0 = time.time()
 
         response = requests.post(
             url,
@@ -520,8 +578,7 @@ def call_gemini(prompt: str) -> Optional[str]:
             logger.warning(f"[{request_id}] Gemini returned empty text")
             return None
 
-        logger.info(f"[{request_id}] Gemini success, response length={len(text)} chars")
-
+        logger.info(f"[{request_id}] Gemini success ({len(text)} chars)")
         return text.strip()
 
     except requests.Timeout:
@@ -801,7 +858,7 @@ Query: {json.dumps(query, ensure_ascii=False)}
 
     parsed = validate_llm_result(raw, query)
     parsed = enforce_numeric_consistency(query, parsed)
-    return parsed
+    return parsed, used_provider
 
 # ============================================================
 # MERGE (LLM-first)
@@ -811,6 +868,21 @@ def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, An
 
     # Se LLM fallisce → puro rule-based
     if not llm_result:
+        # costruiamo semantic_query pulita
+        semantic_parts = []
+
+        if rule_result.get("brands"):
+            semantic_parts.extend(rule_result["brands"])
+
+        if rule_result.get("product"):
+            semantic_parts.append(rule_result["product"])
+
+        rule_result["semantic_query"] = (
+            " ".join(semantic_parts)
+            if semantic_parts
+            else rule_result["original_query"]
+        )
+
         return rule_result
 
     final = empty_result(rule_result["original_query"])
@@ -893,15 +965,50 @@ def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[s
 # MAIN SERVICE
 # ============================================================
 
+def correct_brands_in_text(text: str) -> str:
+    if not BRAND_VOCAB:
+        return text
+
+    words = text.split()
+    corrected = []
+
+    for w in words:
+        if len(w) < 4:
+            corrected.append(w)
+            continue
+
+        match = process.extractOne(
+            w,
+            cast(List[str], BRAND_VOCAB),
+            scorer=fuzz.partial_ratio
+        )
+
+        if match:
+            brand, score, _ = match
+            if score >= 88 and abs(len(w) - len(brand)) <= 3:
+                corrected.append(brand)
+                continue
+
+        corrected.append(w)
+
+    return " ".join(corrected)
+
 def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = True) -> Dict[str, Any]:
+
+
+    text = normalize_text(text)
+
+    # 🔥 spell correction prima di tutto
+    text = correct_brands_in_text(text)
+
     rule_result = rule_based_parse(text)
 
     llm_result = None
     used_provider: Optional[str] = None
 
     if use_llm:
-        llm_result = llm_parse(text)
-        used_provider = LLM_PROVIDER if llm_result else None
+        parsed_llm, used_provider = llm_parse(text)
+        llm_result = parsed_llm
 
     final = merge_results(rule_result, llm_result)
 
