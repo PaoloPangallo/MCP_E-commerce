@@ -194,27 +194,20 @@ def clean_semantic_query(text: str) -> str:
     if not text:
         return text
 
-    # 1️⃣ rimuovi espressioni prezzo linguistiche
     text = re.sub(
         r"\b(intorno\s+ai|intorno\s+a|intorno\s+alle|circa|sui|sulle|verso|"
-        r"fino\s+a|massimo|max|meno\s+di|oltre|almeno|sopra(?:\s+i)?|più\s+di)\b",
-        "",
+        r"fino\s+a|massimo|max|meno\s+di|oltre|almeno|minimo|min|"
+        r"sotto|sopra|più\s+di|tra|da)\b",
+        " ",
         text,
         flags=re.IGNORECASE,
     )
 
-    # 2️⃣ rimuovi valuta
-    text = re.sub(r"\b(euro|eur|€)\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(euro|eur|€)\b", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b\d+\b", " ", text)
+    text = re.sub(r"\b(i|gli|le|il|lo|la|un|una|ai|alle|al)\b", " ", text, flags=re.IGNORECASE)
 
-    # 3️⃣ rimuovi numeri isolati
-    text = re.sub(r"\b\d+\b", "", text)
-
-    # 4️⃣ rimuovi preposizioni residue isolate
-    text = re.sub(r"\b(ai|a|i|alle|al|alla|agli)\b", "", text, flags=re.IGNORECASE)
-
-    # 5️⃣ normalizza spazi
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 # ============================================================
@@ -339,31 +332,32 @@ def filter_valid_brands(brands: List[str]) -> List[str]:
 # ============================================================
 
 NUM_PATTERN = r"(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)"
+OPT_ART = r"(?:\s+(?:i|gli|le))?"
 
 PRICE_RANGE_PATTERNS = [
     re.compile(
-        rf"\b(?:tra|da)\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|a)\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE,
-    ),
-]
-
-APPROX_PRICE_PATTERNS = [
-    re.compile(
-        rf"\b(?:circa|intorno\s+a|intorno\s+ai|intorno\s+alle|sui|sulle|verso)\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        rf"\b(?:tra|da){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|a){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
         re.IGNORECASE,
     ),
 ]
 
 MAX_PRICE_PATTERNS = [
     re.compile(
-        rf"\b(?:sotto|meno\s+di|massimo|max|fino\s+a|entro|non\s+oltre)\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        rf"\b(?:sotto|meno\s+di|massimo|max|fino\s+a|entro|non\s+oltre){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
         re.IGNORECASE,
     ),
 ]
 
 MIN_PRICE_PATTERNS = [
     re.compile(
-        rf"\b(?:almeno|minimo|min|sopra(?:\s+i)?|oltre|più\s+di)\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        rf"\b(?:almeno|minimo|min|sopra|oltre|più\s+di){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        re.IGNORECASE,
+    ),
+]
+
+APPROX_PRICE_PATTERNS = [
+    re.compile(
+        rf"\b(?:circa|intorno\s+a|intorno\s+ai|intorno\s+alle|sui|sulle|verso){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
         re.IGNORECASE,
     ),
 ]
@@ -374,43 +368,61 @@ EXPLICIT_PRICE_PATTERN = re.compile(
 )
 
 def extract_price_constraint(text: str) -> Optional[Dict[str, Any]]:
-    """Ritorna un vincolo prezzo con operator: between | <= | >= | approx."""
     normalized = normalize_for_matching(text)
 
+    min_price = None
+    max_price = None
+
+    # RANGE ESPLICITO
     for pattern in PRICE_RANGE_PATTERNS:
         m = pattern.search(normalized)
         if m:
             p1 = normalize_float(m.group(1))
             p2 = normalize_float(m.group(2))
             if p1 is not None and p2 is not None:
-                return {"type": "price", "operator": "between", "value": [min(p1, p2), max(p1, p2)]}
+                return {
+                    "type": "price",
+                    "operator": "between",
+                    "value": [min(p1, p2), max(p1, p2)],
+                }
 
-    for pattern in APPROX_PRICE_PATTERNS:
-        m = pattern.search(normalized)
-        if m:
-            p = normalize_float(m.group(1))
-            if p is not None:
-                return {"type": "price", "operator": "approx", "value": p}
-
-    for pattern in MAX_PRICE_PATTERNS:
-        m = pattern.search(normalized)
-        if m:
-            p = normalize_float(m.group(1))
-            if p is not None:
-                return {"type": "price", "operator": "<=", "value": p}
-
+    # MIN
     for pattern in MIN_PRICE_PATTERNS:
         m = pattern.search(normalized)
         if m:
-            p = normalize_float(m.group(1))
-            if p is not None:
-                return {"type": "price", "operator": ">=", "value": p}
+            val = normalize_float(m.group(1))
+            if val is not None:
+                min_price = val
 
-    explicit_prices = [normalize_float(m.group(1)) for m in EXPLICIT_PRICE_PATTERN.finditer(normalized)]
-    explicit_prices = [p for p in explicit_prices if p is not None]
-    if len(explicit_prices) == 1:
-        # se l’utente dice solo “100 euro” è ambiguo: trattiamo come approx.
-        return {"type": "price", "operator": "approx", "value": explicit_prices[0]}
+    # MAX
+    for pattern in MAX_PRICE_PATTERNS:
+        m = pattern.search(normalized)
+        if m:
+            val = normalize_float(m.group(1))
+            if val is not None:
+                max_price = val
+
+    # Se entrambi trovati → between
+    if min_price is not None and max_price is not None:
+        return {
+            "type": "price",
+            "operator": "between",
+            "value": [min(min_price, max_price), max(min_price, max_price)],
+        }
+
+    if min_price is not None:
+        return {
+            "type": "price",
+            "operator": ">=",
+            "value": min_price,
+        }
+
+    if max_price is not None:
+        return {
+            "type": "price",
+            "operator": "<=",
+            "value": max_price,
+        }
 
     return None
 
@@ -885,32 +897,55 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
 
 def llm_parse(query: str, provider: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     prompt = f"""
-You are a strict semantic query parser for an e-commerce assistant.
+    You are a strict semantic query parser for an Italian e-commerce assistant.
 
-Return ONLY valid minified JSON.
-No markdown.
-No explanations.
-No code fences.
+    Your task:
+    Extract structured data from a user query.
 
-Schema:
-{{
-  "semantic_query": "",
-  "product": null,
-  "brands": [],
-  "constraints": [],
-  "preferences": []
-}}
+    Return ONLY valid minified JSON.
+    No markdown.
+    No explanations.
+    No code fences.
 
-Allowed price operators:
-"<=" | ">=" | "between" | "approx"
+    Schema:
+    {{
+      "semantic_query": "",
+      "product": null,
+      "brands": [],
+      "constraints": [],
+      "preferences": []
+    }}
 
-Rules:
-- Do NOT invent brands.
-- Use "approx" when the user says circa/intorno/sui or gives a single price.
-- Output JSON only.
+    Allowed price operators:
+    "<=" | ">=" | "between" | "approx"
 
-Query: {json.dumps(query, ensure_ascii=False)}
-""".strip()
+    Important rules:
+
+    1. Do NOT invent brands.
+    2. Extract only brands explicitly mentioned.
+    3. If the user includes mathematical expressions (e.g. "radice di 60",
+       "square root of 60", "60/2", "2*30"), evaluate them numerically.
+    4. If a single numeric price appears, use operator:
+       - "<=" for max/massimo/sotto/fino a
+       - ">=" for minimo/almeno/sopra
+       - "approx" for circa/intorno/sui
+    5. semantic_query must contain ONLY meaningful search keywords.
+       Remove price operators, numbers, mathematical expressions and filler words.
+    6. If unsure about a field, set it to null or empty list.
+    7. Output JSON only.
+
+    Examples:
+
+    Input: "cintura lacoste massimo 60 euro"
+    Output:
+    {{"semantic_query":"cintura Lacoste","product":"cintura","brands":["Lacoste"],"constraints":[{{"type":"price","operator":"<=","value":60}}],"preferences":[]}}
+
+    Input: "cintura lacoste max radice di 60 euro"
+    Output:
+    {{"semantic_query":"cintura Lacoste","product":"cintura","brands":["Lacoste"],"constraints":[{{"type":"price","operator":"<=","value":7.75}}],"preferences":[]}}
+
+    Query: {json.dumps(query, ensure_ascii=False)}
+    """.strip()
 
     response, used_provider = call_llm(prompt, provider=provider)
 

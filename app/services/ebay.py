@@ -123,12 +123,8 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
 
     Supporta:
     - <=, >=, between, approx
-
-    Esempi:
-    - price:[..600]
-    - price:[300..]
-    - price:[300..600]
     """
+
     min_price: Optional[float] = None
     max_price: Optional[float] = None
 
@@ -163,8 +159,8 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
                 min_price = lo
                 max_price = hi
 
-    # Ignora il classico artefatto inutile ">= 0"
-    if min_price == 0:
+    # 🔥 Ignora filtri inutili tipo >= 0 o >= 1
+    if min_price is not None and min_price <= 1:
         min_price = None
 
     if min_price is None and max_price is None:
@@ -301,8 +297,18 @@ def search_items(
         params["filter"] = filter_string
 
     sort_value = _extract_sort(preferences)
+
+    # 🔥 Se non c'è sort esplicito ma c'è >= prezzo → forza sort per stabilità
+    if not sort_value:
+        for c in constraints:
+            if c.get("type") == "price" and c.get("operator") == ">=":
+                sort_value = "price"
+                break
+
     if sort_value:
         params["sort"] = sort_value
+
+    print("EBAY QUERY:", params)
 
     response = requests.get(
         SEARCH_URL,
