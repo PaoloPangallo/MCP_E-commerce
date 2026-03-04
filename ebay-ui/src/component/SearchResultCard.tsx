@@ -1,4 +1,4 @@
-import { Paper, Typography, Box, Chip, Rating, Button } from "@mui/material";
+import { Paper, Typography, Box, Chip, Rating, Button, CircularProgress } from "@mui/material";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import { useState } from "react";
 import SellerFeedbackList from "./SellerFeedbackList";
@@ -10,13 +10,15 @@ export default function SearchResultCard({ item }: { item: any }) {
   const [loading, setLoading] = useState(false);
 
   const trustPercent =
-    item?.trust_score !== undefined
+    item?.trust_score !== undefined && item?.trust_score !== null
       ? Math.round(item.trust_score * 100)
       : null;
 
   const loadFeedback = async () => {
 
-    // se già caricati, solo toggle
+    if (!item?.seller_name) return;
+
+    // toggle se già caricati
     if (feedbacks.length > 0) {
       setOpen(!open);
       return;
@@ -27,8 +29,12 @@ export default function SearchResultCard({ item }: { item: any }) {
       setLoading(true);
 
       const res = await fetch(
-        `http://localhost:8000/seller/${item.seller_name}/feedback`
+        `http://127.0.0.1:8000/seller/${item.seller_name}/feedback`
       );
+
+      if (!res.ok) {
+        throw new Error("Errore API feedback");
+      }
 
       const data = await res.json();
 
@@ -36,7 +42,9 @@ export default function SearchResultCard({ item }: { item: any }) {
       setOpen(true);
 
     } catch (err) {
-      console.error("Errore feedback venditore");
+
+      console.error("Errore caricamento feedback:", err);
+
     } finally {
       setLoading(false);
     }
@@ -45,7 +53,6 @@ export default function SearchResultCard({ item }: { item: any }) {
   return (
     <Paper
       elevation={0}
-      onClick={() => item.url && window.open(item.url, "_blank")}
       sx={{
         p: 3,
         mb: 2,
@@ -61,6 +68,7 @@ export default function SearchResultCard({ item }: { item: any }) {
           boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         },
       }}
+      onClick={() => item.url && window.open(item.url, "_blank")}
     >
 
       {/* IMAGE */}
@@ -118,22 +126,11 @@ export default function SearchResultCard({ item }: { item: any }) {
         {/* SELLER */}
         <Box display="flex" alignItems="center" gap={1} mb={1}>
 
-          <Typography
-            sx={{
-              color: "#666",
-              fontSize: 14,
-            }}
-          >
+          <Typography sx={{ color: "#666", fontSize: 14 }}>
             Venditore:
           </Typography>
 
-          <Typography
-            sx={{
-              fontWeight: 500,
-              fontSize: 14,
-              color: "#0d0d0d",
-            }}
-          >
+          <Typography sx={{ fontWeight: 500, fontSize: 14 }}>
             {item.seller_name || "N/A"}
           </Typography>
 
@@ -142,15 +139,9 @@ export default function SearchResultCard({ item }: { item: any }) {
             precision={0.1}
             size="small"
             readOnly
-            sx={{ color: "#0d0d0d" }}
           />
 
-          <Typography
-            variant="caption"
-            sx={{
-              color: "#666",
-            }}
-          >
+          <Typography variant="caption" sx={{ color: "#666" }}>
             ({item.seller_rating ?? "N/A"}%)
           </Typography>
 
@@ -175,7 +166,7 @@ export default function SearchResultCard({ item }: { item: any }) {
             />
           )}
 
-          {item._rerank_score && (
+          {item._rerank_score !== undefined && (
             <Typography
               variant="caption"
               sx={{
@@ -195,6 +186,7 @@ export default function SearchResultCard({ item }: { item: any }) {
           <Button
             size="small"
             variant="outlined"
+            disabled={loading}
             onClick={(e) => {
               e.stopPropagation();
               loadFeedback();
@@ -210,13 +202,27 @@ export default function SearchResultCard({ item }: { item: any }) {
               },
             }}
           >
-            {open ? "Nascondi feedback" : "Mostra feedback venditore"}
+            {loading ? (
+              <CircularProgress size={16} />
+            ) : open ? (
+              "Nascondi feedback"
+            ) : (
+              "Mostra feedback venditore"
+            )}
           </Button>
         </Box>
 
         {/* FEEDBACK LIST */}
         {open && (
-          <Box mt={2} sx={{ p: 2, bgcolor: "#f4f4f4", borderRadius: "8px" }}>
+          <Box
+            mt={2}
+            sx={{
+              p: 2,
+              bgcolor: "#f4f4f4",
+              borderRadius: "8px"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <SellerFeedbackList feedbacks={feedbacks} loading={loading} />
           </Box>
         )}

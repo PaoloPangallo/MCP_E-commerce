@@ -8,12 +8,41 @@ interface MessageBubbleProps {
   isTyping?: boolean;
 }
 
+// -----------------------------
+// Typing indicator
+// -----------------------------
+
+function TypingIndicator() {
+  return (
+    <Box display="flex" gap={0.75} alignItems="center" height={24}>
+      {[0, 0.2, 0.4].map((delay, i) => (
+        <Box
+          key={i}
+          sx={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            bgcolor: "#a3a3a3",
+            animation: "bubble 1.4s infinite ease-in-out",
+            animationDelay: `${delay}s`,
+            "@keyframes bubble": {
+              "0%, 80%, 100%": { transform: "scale(0)" },
+              "40%": { transform: "scale(1)" },
+            },
+          }}
+        />
+      ))}
+    </Box>
+  );
+}
+
 export default function MessageBubble({
   role,
   children,
   timestamp,
   isTyping = false,
 }: MessageBubbleProps) {
+
   const isUser = role === "user";
 
   return (
@@ -24,18 +53,17 @@ export default function MessageBubble({
         justifyContent: isUser ? "flex-end" : "flex-start",
         gap: 2,
         px: 2,
-        mb: 4,
+        mb: 3,
       }}
     >
       {/* Assistant Avatar */}
       {!isUser && (
         <Avatar
-          variant="circular"
           sx={{
             width: 30,
             height: 30,
             bgcolor: "#fff",
-            border: "1px solid #d1d1d1",
+            border: "1px solid #e5e5e5",
             color: "#000",
             flexShrink: 0,
           }}
@@ -44,70 +72,39 @@ export default function MessageBubble({
         </Avatar>
       )}
 
-      {/* Message Content */}
+      {/* Message block */}
       <Box
         sx={{
-          maxWidth: isUser ? "70%" : "calc(100% - 46px)", // account for avatar width and gap
+          maxWidth: isUser ? "70%" : "calc(100% - 46px)",
           display: "flex",
           flexDirection: "column",
           alignItems: isUser ? "flex-end" : "flex-start",
         }}
       >
-        {/* Message Bubble */}
+        {/* Bubble */}
         <Box
           sx={{
-            p: isUser ? 2 : 0,
+            px: isUser ? 2 : 0,
             py: isUser ? 1.5 : 0.5,
             bgcolor: isUser ? "#f4f4f4" : "transparent",
-            color: "#0d0d0d",
+            color: "#202123",
             borderRadius: isUser ? "24px" : 0,
-            position: "relative",
           }}
         >
-          {/* Typing Indicator */}
           {isTyping ? (
-            <Box display="flex" gap={0.75} alignItems="center" height={24}>
-              <Box
-                sx={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  bgcolor: "#a3a3a3",
-                  animation: "bounce 1.4s infinite ease-in-out",
-                  animationDelay: "0s",
-                  "@keyframes bounce": {
-                    "0%, 80%, 100%": { transform: "scale(0)" },
-                    "40%": { transform: "scale(1)" },
-                  },
-                }}
-              />
-              <Box
-                sx={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  bgcolor: "#a3a3a3",
-                  animation: "bounce 1.4s infinite ease-in-out",
-                  animationDelay: "0.2s",
-                }}
-              />
-              <Box
-                sx={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  bgcolor: "#a3a3a3",
-                  animation: "bounce 1.4s infinite ease-in-out",
-                  animationDelay: "0.4s",
-                }}
-              />
-            </Box>
+            <TypingIndicator />
           ) : (
             <Box
               sx={{
                 fontSize: 16,
                 lineHeight: 1.6,
-                "& p": { m: 0, mb: 1.5, "&:last-child": { mb: 0 } },
+
+                "& p": {
+                  m: 0,
+                  mb: 1.5,
+                  "&:last-child": { mb: 0 },
+                },
+
                 "& pre": {
                   bgcolor: "#f4f4f4",
                   p: 2,
@@ -116,8 +113,9 @@ export default function MessageBubble({
                   fontSize: 14,
                   my: 1.5,
                 },
+
                 "& code": {
-                  bgcolor: isUser ? "rgba(0,0,0,0.05)" : "#f4f4f4",
+                  bgcolor: "rgba(0,0,0,0.05)",
                   px: 0.75,
                   py: 0.25,
                   borderRadius: 1,

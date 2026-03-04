@@ -3,28 +3,41 @@ from datetime import datetime
 from math import exp
 
 
+# ============================================================
+# FEEDBACK RATIO
+# ============================================================
+
 def _feedback_ratio(feedbacks: List[Dict]) -> float:
-    """
-    Basic positive/negative ratio.
-    """
+
     total = len(feedbacks)
 
     if total == 0:
         return 0.5
 
-    pos = sum(1 for f in feedbacks if f.get("rating") == "Positive")
-    neg = sum(1 for f in feedbacks if f.get("rating") == "Negative")
+    score = 0
 
-    score = (pos - neg) / total
+    for f in feedbacks:
 
-    # normalize -1..1 → 0..1
-    return (score + 1) / 2
+        r = f.get("rating")
 
+        if r == "Positive":
+            score += 1
+
+        elif r == "Neutral":
+            score += 0.5
+
+        elif r == "Negative":
+            score += 0
+
+    return score / total
+
+
+# ============================================================
+# RECENCY SCORE
+# ============================================================
 
 def _recency_score(feedbacks: List[Dict]) -> float:
-    """
-    Weight recent reviews more.
-    """
+
     if not feedbacks:
         return 0.5
 
@@ -34,20 +47,29 @@ def _recency_score(feedbacks: List[Dict]) -> float:
     values = []
 
     for f in feedbacks:
-        date = f.get("date")
+
+        date = f.get("time")
 
         if not date:
             continue
 
         try:
+
             if isinstance(date, str):
-                date = datetime.fromisoformat(date)
+                date = datetime.fromisoformat(date.replace("Z", ""))
 
             age_days = (now - date).days
 
-            weight = exp(-age_days / 365)  # decay over 1 year
+            weight = exp(-age_days / 365)
 
-            val = 1 if f.get("rating") == "Positive" else 0
+            r = f.get("rating")
+
+            if r == "Positive":
+                val = 1
+            elif r == "Neutral":
+                val = 0.5
+            else:
+                val = 0
 
             weights.append(weight)
             values.append(val * weight)
@@ -61,6 +83,22 @@ def _recency_score(feedbacks: List[Dict]) -> float:
     return sum(values) / sum(weights)
 
 
+# ============================================================
+# CONFIDENCE SCORE
+# ============================================================
+
+def _confidence(feedbacks: List[Dict]) -> float:
+
+    n = len(feedbacks)
+
+    # logistic confidence curve
+    return 1 - exp(-n / 50)
+
+
+# ============================================================
+# TRUST SCORE
+# ============================================================
+
 def compute_trust_score(
     feedbacks: List[Dict],
     sentiment_score: float | None = None
@@ -70,16 +108,19 @@ def compute_trust_score(
         return 0.5
 
     ratio = _feedback_ratio(feedbacks)
+
     recency = _recency_score(feedbacks)
 
-    # default sentiment neutral
+    confidence = _confidence(feedbacks)
+
     if sentiment_score is None:
         sentiment_score = ratio
 
     trust_score = (
-        0.5 * ratio +
-        0.3 * sentiment_score +
-        0.2 * recency
+        0.45 * ratio +
+        0.25 * sentiment_score +
+        0.20 * recency +
+        0.10 * confidence
     )
 
     return round(trust_score, 3)

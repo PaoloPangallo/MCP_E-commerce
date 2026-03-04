@@ -1,34 +1,53 @@
 import { Paper, Typography, Box, Chip, Rating } from "@mui/material";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 
-export default function SearchResultCard({ item }: { item: any }) {
-  const trustPercent =
-    item.trust_score !== undefined
-      ? Math.round(item.trust_score * 100)
-      : null;
+interface SearchItem {
+  title?: string;
+  price?: number;
+  currency?: string;
+  url?: string;
+  image_url?: string;
+  seller_name?: string;
+  seller_rating?: number;
+  trust_score?: number;
+  _already_in_db?: boolean;
+}
 
-  const trustColor =
-    trustPercent === null
-      ? "#ececf1"
-      : trustPercent >= 80
-      ? "#d4f4dd"
-      : trustPercent >= 60
-      ? "#fff3cd"
-      : "#f8d7da";
+function getTrustInfo(score?: number) {
+  if (score === undefined || score === null) {
+    return {
+      percent: null,
+      bg: "#ececf1",
+      text: "#6e6e80",
+    };
+  }
 
-  const trustTextColor =
-    trustPercent === null
-      ? "#6e6e80"
-      : trustPercent >= 80
-      ? "#0d8c6b"
-      : trustPercent >= 60
-      ? "#856404"
-      : "#842029";
+  const percent = Math.round(score * 100);
+
+  if (percent >= 80) {
+    return { percent, bg: "#d4f4dd", text: "#0d8c6b" };
+  }
+
+  if (percent >= 60) {
+    return { percent, bg: "#fff3cd", text: "#856404" };
+  }
+
+  return { percent, bg: "#f8d7da", text: "#842029" };
+}
+
+export default function SearchResultCard({ item }: { item: SearchItem }) {
+  const trust = getTrustInfo(item.trust_score);
+
+  const openItem = () => {
+    if (item.url) {
+      window.open(item.url, "_blank");
+    }
+  };
 
   return (
     <Paper
       elevation={0}
-      onClick={() => item.url && window.open(item.url, "_blank")}
+      onClick={openItem}
       sx={{
         p: 3,
         mb: 2,
@@ -37,7 +56,7 @@ export default function SearchResultCard({ item }: { item: any }) {
         display: "flex",
         gap: 3,
         transition: "all 0.2s",
-        cursor: "pointer",
+        cursor: item.url ? "pointer" : "default",
         bgcolor: "#fff",
         "&:hover": {
           borderColor: "#10a37f",
@@ -59,7 +78,7 @@ export default function SearchResultCard({ item }: { item: any }) {
       >
         <img
           src={item.image_url || "https://via.placeholder.com/120"}
-          alt={item.title}
+          alt={item.title || "product"}
           style={{
             width: "100%",
             height: "100%",
@@ -70,7 +89,8 @@ export default function SearchResultCard({ item }: { item: any }) {
 
       {/* Content */}
       <Box flex={1}>
-        {/* Already in DB */}
+
+        {/* Already seen */}
         {item._already_in_db && (
           <Chip
             label="Già visto"
@@ -85,7 +105,6 @@ export default function SearchResultCard({ item }: { item: any }) {
 
         {/* Title */}
         <Typography
-          variant="h6"
           sx={{
             fontWeight: 600,
             fontSize: 18,
@@ -94,7 +113,7 @@ export default function SearchResultCard({ item }: { item: any }) {
             lineHeight: 1.4,
           }}
         >
-          {item.title}
+          {item.title || "Prodotto"}
         </Typography>
 
         {/* Price */}
@@ -106,11 +125,11 @@ export default function SearchResultCard({ item }: { item: any }) {
             mb: 2,
           }}
         >
-          {item.price} {item.currency}
+          {item.price ?? "—"} {item.currency ?? ""}
         </Typography>
 
-        {/* Seller Info */}
-        <Box display="flex" alignItems="center" gap={1} mb={1}>
+        {/* Seller */}
+        <Box display="flex" alignItems="center" gap={1} mb={1} flexWrap="wrap">
           <Typography
             variant="body2"
             sx={{
@@ -152,18 +171,17 @@ export default function SearchResultCard({ item }: { item: any }) {
         </Box>
 
         {/* Trust Score */}
-        {trustPercent !== null && (
+        {trust.percent !== null && (
           <Box display="flex" alignItems="center" gap={1}>
             <Chip
               icon={<VerifiedUserIcon sx={{ fontSize: 16 }} />}
-              label={`Trust Score: ${trustPercent}%`}
+              label={`Trust Score: ${trust.percent}%`}
               size="small"
               sx={{
-                bgcolor: trustColor,
-                color: trustTextColor,
+                bgcolor: trust.bg,
+                color: trust.text,
                 fontWeight: 600,
                 fontSize: 12,
-                border: "none",
               }}
             />
           </Box>

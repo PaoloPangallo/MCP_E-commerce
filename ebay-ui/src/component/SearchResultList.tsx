@@ -1,26 +1,27 @@
 import { Box, Typography, Divider, Chip } from "@mui/material";
 import SearchResultCard from "./SearchResultCard";
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 
 interface SearchItem {
-  ebay_id?: string;
-  title?: string;
-  price?: number;
-  currency?: string;
-  image_url?: string;
-  url?: string;
-  seller_name?: string;
-  seller_rating?: number;
-  trust_score?: number;
-  _rerank_score?: number;
+  ebay_id?: string
+  title?: string
+  price?: number
+  currency?: string
+  image_url?: string
+  url?: string
+  seller_name?: string
+  seller_rating?: number
+  trust_score?: number
+  _rerank_score?: number
 }
 
 export default function SearchResultList({
   results = [],
 }: {
-  results?: SearchItem[];
+  results?: SearchItem[]
 }) {
-  if (results.length === 0) {
+
+  if (!results || results.length === 0) {
     return (
       <Box
         sx={{
@@ -37,6 +38,7 @@ export default function SearchResultList({
         >
           Nessun risultato trovato
         </Typography>
+
         <Typography
           variant="caption"
           sx={{
@@ -45,10 +47,10 @@ export default function SearchResultList({
             color: "#8e8ea0",
           }}
         >
-          Prova a modificare i criteri di ricerca
+          Prova a modificare la ricerca
         </Typography>
       </Box>
-    );
+    )
   }
 
   return (
@@ -59,7 +61,8 @@ export default function SearchResultList({
         flexDirection: "column",
       }}
     >
-      {/* Header con conteggio risultati */}
+
+      {/* Header */}
       <Box
         sx={{
           display: "flex",
@@ -68,6 +71,7 @@ export default function SearchResultList({
           mb: 3,
         }}
       >
+
         <Typography
           sx={{
             fontSize: 14,
@@ -75,68 +79,70 @@ export default function SearchResultList({
             fontWeight: 500,
           }}
         >
-          {results.length} {results.length === 1 ? "risultato trovato" : "risultati trovati"}
+          {results.length} {results.length === 1 ? "risultato" : "risultati"} · ordinati per AI relevance
         </Typography>
 
-        {results.length > 0 && results[0]._rerank_score && (
-          <Typography
-            sx={{
-              fontSize: 13,
-              color: "#8e8ea0",
-            }}
-          >
-            Ordinati per rilevanza AI
-          </Typography>
-        )}
       </Box>
 
-      {/* Lista risultati */}
-      {results.map((item, index) => (
-        <Box key={item.ebay_id || index} sx={{ position: "relative" }}>
-          {/* Badge "Miglior Match" per il primo risultato */}
-          {index === 0 && item._rerank_score && item._rerank_score > 0.7 && (
-            <Box
-              sx={{
-                position: "absolute",
-                top: -12,
-                left: 16,
-                zIndex: 1,
-              }}
-            >
-              <Chip
-                icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
-                label="Miglior Match"
-                size="small"
+
+      {/* Lista */}
+      {results.map((item, index) => {
+
+        const key = item.ebay_id ?? `${index}-${item.title}`
+
+        return (
+          <Box key={key} sx={{ position: "relative" }}>
+
+            {/* AI Best Match */}
+            {index === 0 && item._rerank_score && item._rerank_score > 0.7 && (
+              <Box
                 sx={{
-                  bgcolor: "#ffd700",
-                  color: "#856404",
-                  fontWeight: 700,
-                  fontSize: 11,
-                  height: 24,
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                  "& .MuiChip-icon": {
+                  position: "absolute",
+                  top: -12,
+                  left: 16,
+                  zIndex: 1,
+                }}
+              >
+                <Chip
+                  icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
+                  label="AI Best Match"
+                  size="small"
+                  sx={{
+                    bgcolor: "#ffd700",
                     color: "#856404",
-                  },
+                    fontWeight: 700,
+                    fontSize: 11,
+                    height: 24,
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    "& .MuiChip-icon": {
+                      color: "#856404",
+                    },
+                  }}
+                />
+              </Box>
+            )}
+
+            <SearchResultCard
+              item={item}
+              best={index === 0}
+            />
+
+            {/* Divider ogni 3 */}
+            {index < results.length - 1 && (index + 1) % 3 === 0 && (
+              <Divider
+                sx={{
+                  my: 3,
+                  borderColor: "#ececf1",
                 }}
               />
-            </Box>
-          )}
+            )}
 
-          <SearchResultCard item={item} best={index === 0} />
+          </Box>
+        )
 
-          {/* Divider ogni 3 elementi */}
-          {index < results.length - 1 && (index + 1) % 3 === 0 && (
-            <Divider
-              sx={{
-                my: 3,
-                borderColor: "#ececf1",
-              }}
-            />
-          )}
-        </Box>
-      ))}
+      })}
 
-      {/* Footer con statistiche */}
+      {/* Footer */}
       {results.length > 5 && (
         <Box
           sx={{
@@ -152,10 +158,11 @@ export default function SearchResultList({
               color: "#8e8ea0",
             }}
           >
-            Fine dei risultati · {results.length} articoli visualizzati
+            Fine risultati · {results.length} articoli analizzati
           </Typography>
         </Box>
       )}
+
     </Box>
-  );
+  )
 }

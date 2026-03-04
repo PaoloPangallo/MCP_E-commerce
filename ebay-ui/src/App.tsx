@@ -12,26 +12,64 @@ interface Message {
   content: string;
 }
 
+interface SearchBlock {
+  query: string;
+  results: any[];
+  analysis: string | null;
+}
+
 export default function App() {
 
-  const [messages, setMessages] = useState<Message[]>(([
+  const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
       content: "Ciao! Dimmi cosa vuoi cercare su eBay.",
     },
-  ]));
+  ]);
 
-  const [results, setResults] = useState<any[]>([]);
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [searches, setSearches] = useState<SearchBlock[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const [cache, setCache] = useState<Record<string, any>>({});
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, results]);
+  }, [messages, searches]);
+
+  // -----------------------------
+  // Save search history
+  // -----------------------------
+
+  const saveSearch = (query: string, resultsCount: number = 0) => {
+
+    const history = JSON.parse(
+      localStorage.getItem("search_history") || "[]"
+    );
+
+    const updated = [
+      { query, results: resultsCount },
+      ...history.filter((h: any) => h.query !== query)
+    ];
+
+    const newHistory = updated.slice(0, 20);
+
+    localStorage.setItem(
+      "search_history",
+      JSON.stringify(newHistory)
+    );
+
+    window.dispatchEvent(new Event("search_history_updated"));
+  };
+
+  // -----------------------------
+  // Handle search
+  // -----------------------------
 
   const handleSend = async (text: string) => {
+
+    if (!text || !text.trim()) return;
 
     const userMessage: Message = {
       role: "user",
@@ -40,9 +78,35 @@ export default function App() {
 
     setMessages((prev) => [...prev, userMessage]);
 
-    // reset UI
-    setResults([]);
-    setAnalysis(null);
+    // -----------------------------
+    // CACHE HIT
+    // -----------------------------
+
+    if (cache[text]) {
+
+      const cached = cache[text];
+
+      saveSearch(text, cached.results.length);
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: `Ho trovato ${cached.results.length} risultati per "${text}" (cache).`,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      setSearches((prev) => [
+        ...prev,
+        {
+          query: text,
+          results: cached.results,
+          analysis: cached.analysis
+        }
+      ]);
+
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -54,7 +118,7 @@ export default function App() {
         },
         body: JSON.stringify({
           query: text,
-          llm_engine: "gemini",
+          llm_engine: "ollama",
         }),
       });
 
@@ -64,15 +128,35 @@ export default function App() {
 
       const data = await res.json();
 
-      setResults(data.results || []);
-      setAnalysis(data.analysis || null);
+      const newResults = data.results || [];
+      const newAnalysis = data.analysis || null;
+
+      // save in cache
+      setCache((prev) => ({
+        ...prev,
+        [text]: {
+          results: newResults,
+          analysis: newAnalysis
+        }
+      }));
+
+      // update history
+      saveSearch(text, newResults.length);
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: `Ho trovato ${data.results_count || 0} risultati.`,
+        content: `Ho trovato ${data.results_count || newResults.length} risultati per "${text}".`,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      const newSearch: SearchBlock = {
+        query: text,
+        results: newResults,
+        analysis: newAnalysis
+      };
+
+      setSearches((prev) => [...prev, newSearch]);
 
     } catch (err) {
 
@@ -91,9 +175,9 @@ export default function App() {
   };
 
   return (
-    <ChatLayout>
 
-      {/* Chat area */}
+    <ChatLayout onSearch={handleSend}>
+
       <Box
         sx={{
           flex: 1,
@@ -104,16 +188,13 @@ export default function App() {
           width: "100%",
           px: 4,
           py: 4,
+          position: "relative"
         }}
       >
 
-        <Box
-          sx={{
-            width: "100%",
-            maxWidth: 1000,
-          }}
-        >
+        <Box sx={{ width: "100%", maxWidth: 1000 }}>
 
+          {/* Chat messages */}
           {messages.map((msg, i) => (
             <Box key={i} mb={2}>
               <MessageBubble role={msg.role}>
@@ -122,31 +203,42 @@ export default function App() {
             </Box>
           ))}
 
-          {loading && (
-            <Box display="flex" justifyContent="center" mt={3}>
-              <CircularProgress size={28} />
-            </Box>
-          )}
+          {/* Search blocks */}
+          {searches.map((search, i) => (
 
-          {/* AI reasoning */}
-          {analysis && (
-            <AIAnalysisCard text={analysis} />
-          )}
+            <Box key={i} mt={3}>
 
-          {/* Search Results */}
-          {!loading && results.length > 0 && (
-            <Box mt={3}>
-              <SearchResultList results={results} />
+              {search.analysis && (
+                <AIAnalysisCard text={search.analysis} />
+              )}
+
+              {search.results.length > 0 && (
+                <SearchResultList results={search.results} />
+              )}
+
             </Box>
-          )}
+
+          ))}
 
           <div ref={bottomRef} />
 
         </Box>
 
+        {loading && (
+          <Box
+            sx={{
+              position: "fixed",
+              top: 20,
+              right: 20,
+              zIndex: 1000
+            }}
+          >
+            <CircularProgress size={24} />
+          </Box>
+        )}
+
       </Box>
 
-      {/* Input */}
       <ChatInput onSend={handleSend} disabled={loading} />
 
     </ChatLayout>

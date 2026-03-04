@@ -1,211 +1,279 @@
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider } from "@mui/material";
-import AddIcon from '@mui/icons-material/Add';
+import { useEffect, useState } from "react";
+import {
+  Box,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Typography,
+  IconButton,
+  Divider
+} from "@mui/material";
+
+import AddIcon from "@mui/icons-material/Add";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import DeleteIcon from "@mui/icons-material/Delete";
+import StarIcon from "@mui/icons-material/Star";
+
+interface HistoryItem {
+  query: string;
+  results: number;
+}
 
 export default function ChatLayout({
   children,
+  onSearch
 }: {
   children: React.ReactNode;
+  onSearch: (q: string) => void;
 }) {
+
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [pinned, setPinned] = useState<string[]>([]);
+
+  // -------------------------
+  // LOAD DATA
+  // -------------------------
+
+  useEffect(() => {
+
+    const loadHistory = () => {
+      const h = JSON.parse(
+        localStorage.getItem("search_history") || "[]"
+      );
+
+      setHistory(h);
+    };
+
+    const loadPinned = () => {
+      const p = JSON.parse(
+        localStorage.getItem("pinned_searches") || "[]"
+      );
+
+      setPinned(p);
+    };
+
+    loadHistory();
+    loadPinned();
+
+    window.addEventListener(
+      "search_history_updated",
+      loadHistory
+    );
+
+    return () => {
+      window.removeEventListener(
+        "search_history_updated",
+        loadHistory
+      );
+    };
+
+  }, []);
+
+  // -------------------------
+  // CLEAR HISTORY
+  // -------------------------
+
+  const clearHistory = () => {
+
+    localStorage.removeItem("search_history");
+
+    setHistory([]);
+
+  };
+
+  // -------------------------
+  // PIN SEARCH
+  // -------------------------
+
+  const pinSearch = (query: string) => {
+
+    const updated = [query, ...pinned.filter(p => p !== query)];
+
+    const trimmed = updated.slice(0, 10);
+
+    localStorage.setItem(
+      "pinned_searches",
+      JSON.stringify(trimmed)
+    );
+
+    setPinned(trimmed);
+
+  };
+
+  // -------------------------
+  // UI
+  // -------------------------
+
   return (
     <Box display="flex" height="100vh" bgcolor="#fff">
 
-      {/* Sidebar */}
       <Drawer
         variant="permanent"
         sx={{
           width: 260,
           "& .MuiDrawer-paper": {
             width: 260,
-            boxSizing: "border-box",
             bgcolor: "#f9f9f9",
-            borderRight: "none",
-          },
+            borderRight: "1px solid #ececec"
+          }
         }}
       >
-        {/* New Chat Button */}
+
+        {/* NEW CHAT */}
         <Box p={2}>
           <ListItemButton
-            sx={{
-              borderRadius: 2,
-              bgcolor: "transparent",
-              "&:hover": {
-                bgcolor: "#ececf1",
-              },
-              py: 1,
-              px: 1.5,
-            }}
+            onClick={() => window.location.reload()}
+            sx={{ borderRadius: 2 }}
           >
-            <Box
-              sx={{
-                bgcolor: "#fff",
-                border: "1px solid #e5e5e5",
-                borderRadius: "50%",
-                width: 28,
-                height: 28,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                mr: 1.5,
-              }}
-            >
-              <AddIcon sx={{ fontSize: 18 }} />
-            </Box>
-            <ListItemText
-              primary="Nuova chat"
-              primaryTypographyProps={{
-                fontSize: 14,
-                fontWeight: 500,
-                color: "#0d0d0d",
-              }}
-            />
+            <AddIcon sx={{ mr: 1 }} />
+            <ListItemText primary="Nuova chat" />
           </ListItemButton>
         </Box>
 
-        {/* Chat History */}
-        <Box flex={1} sx={{ overflowY: "auto" }}>
-          <List sx={{ px: 1 }}>
+        <Divider />
+
+        {/* PINNED */}
+        {pinned.length > 0 && (
+
+          <>
             <Typography
               variant="caption"
               sx={{
                 px: 2,
-                py: 1,
-                color: "#6e6e80",
-                fontWeight: 600,
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
+                pt: 2,
+                color: "#8e8ea0",
+                fontWeight: 600
               }}
             >
-              Oggi
+              Salvati
             </Typography>
 
-            {[1, 2, 3].map((i) => (
-              <ListItem key={i} disablePadding sx={{ mb: 0.5 }}>
+            <List>
+
+              {pinned.map((q, i) => (
+
+                <ListItem key={i} disablePadding>
+
+                  <ListItemButton
+                    onClick={() => onSearch(q)}
+                  >
+
+                    <StarIcon
+                      sx={{ fontSize: 16, mr: 1 }}
+                    />
+
+                    <ListItemText
+                      primary={q}
+                      primaryTypographyProps={{
+                        fontSize: 13
+                      }}
+                    />
+
+                  </ListItemButton>
+
+                </ListItem>
+
+              ))}
+
+            </List>
+
+            <Divider />
+
+          </>
+
+        )}
+
+        {/* HISTORY */}
+        <Box flex={1} overflow="auto">
+
+          <Typography
+            variant="caption"
+            sx={{
+              px: 2,
+              pt: 2,
+              color: "#8e8ea0",
+              fontWeight: 600
+            }}
+          >
+            Oggi
+          </Typography>
+
+          <List>
+
+            {history.map((item, i) => (
+
+              <ListItem key={i} disablePadding>
+
                 <ListItemButton
-                  sx={{
-                    borderRadius: 2,
-                    py: 1,
-                    px: 2,
-                    "&:hover": {
-                      bgcolor: "#ececf1",
-                    },
-                  }}
+                  onClick={() => onSearch(item.query)}
                 >
+
                   <ListItemText
-                    primary={`Chat ${i}`}
+                    primary={item.query}
+                    secondary={`${item.results ?? 0} risultati`}
                     primaryTypographyProps={{
-                      fontSize: 14,
-                      noWrap: true,
-                      sx: { color: "#0d0d0d" },
+                      fontSize: 13
+                    }}
+                    secondaryTypographyProps={{
+                      fontSize: 11
                     }}
                   />
-                </ListItemButton>
-              </ListItem>
-            ))}
 
-            <Divider sx={{ my: 2 }} />
-
-            <Typography
-              variant="caption"
-              sx={{
-                px: 2,
-                py: 1,
-                color: "#6e6e80",
-                fontWeight: 600,
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Ieri
-            </Typography>
-
-            {[4, 5].map((i) => (
-              <ListItem key={i} disablePadding sx={{ mb: 0.5 }}>
-                <ListItemButton
-                  sx={{
-                    borderRadius: 2,
-                    py: 1,
-                    px: 2,
-                    "&:hover": {
-                      bgcolor: "#ececf1",
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={`Chat ${i}`}
-                    primaryTypographyProps={{
-                      fontSize: 14,
-                      noWrap: true,
-                      sx: { color: "#0d0d0d" },
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pinSearch(item.query);
                     }}
-                  />
+                  >
+                    <MoreHorizIcon fontSize="small" />
+                  </IconButton>
+
                 </ListItemButton>
+
               </ListItem>
+
             ))}
+
           </List>
+
         </Box>
 
-        {/* User Section */}
-        <Box
-          p={2}
-          sx={{
-            bgcolor: "transparent",
-          }}
-        >
+        {/* CLEAR HISTORY */}
+        <Box p={2} borderTop="1px solid #ececec">
+
           <ListItemButton
-            sx={{
-              borderRadius: 2,
-              py: 1,
-              px: 1.5,
-              "&:hover": {
-                bgcolor: "#ececf1",
-              },
-            }}
+            onClick={clearHistory}
+            sx={{ borderRadius: 2 }}
           >
-            <Box
-              sx={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                bgcolor: "#f4f4f4",
-                border: "1px solid #e5e5e5",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#0d0d0d",
-                fontWeight: 600,
-                fontSize: 14,
-                mr: 1.5,
-              }}
-            >
-              U
-            </Box>
+
+            <DeleteIcon sx={{ mr: 1 }} />
+
             <ListItemText
-              primary="Utente"
-              primaryTypographyProps={{
-                fontSize: 14,
-                fontWeight: 500,
-                color: "#0d0d0d",
-              }}
+              primary="Cancella cronologia"
             />
+
           </ListItemButton>
+
         </Box>
+
       </Drawer>
 
-      {/* Main Area */}
+      {/* MAIN */}
       <Box
+        component="main"
         sx={{
-          flex: 1,
+          flexGrow: 1,
           display: "flex",
           flexDirection: "column",
-          ml: "260px",
-          width: "calc(100% - 260px)",
-          height: "100vh",
+          height: "100vh"
         }}
       >
         {children}
       </Box>
+
     </Box>
   );
 }

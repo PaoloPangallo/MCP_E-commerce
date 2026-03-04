@@ -1,24 +1,29 @@
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, CircularProgress } from "@mui/material";
 import FeedbackCard from "./FeedbackCard";
 
+type Feedback = {
+  user?: string;
+  rating?: string;
+  comment?: string;
+  time?: string;
+};
+
 export default function SellerFeedbackList({
-  feedbacks,
+  feedbacks = [],
   loading = false,
 }: {
-  feedbacks: any[];
+  feedbacks?: Feedback[];
   loading?: boolean;
 }) {
+
   if (loading) {
     return (
-      <Typography
-        sx={{
-          mt: 1,
-          color: "#666",
-          fontSize: 13,
-        }}
-      >
-        Caricamento feedback...
-      </Typography>
+      <Box display="flex" alignItems="center" gap={1} mt={1}>
+        <CircularProgress size={16} />
+        <Typography sx={{ color: "#666", fontSize: 13 }}>
+          Caricamento feedback...
+        </Typography>
+      </Box>
     );
   }
 
@@ -37,9 +42,19 @@ export default function SellerFeedbackList({
   }
 
   return (
-    <Box mt={1}>
+    <Box
+      mt={1}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.5,
+      }}
+    >
       {feedbacks.map((f, i) => (
-        <FeedbackCard key={i} feedback={f} />
+        <FeedbackCard
+          key={`${f.user}-${f.time}-${i}`}
+          feedback={f}
+        />
       ))}
     </Box>
   );

@@ -99,13 +99,12 @@ def build_ebay_query(parsed: dict, original_query: str) -> str:
 # ============================================================
 
 @router.post("/search")
-
 def search(request: SearchRequest, db: Session = Depends(get_db)):
+
     print("SEARCH STARTED")
 
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
-
 
     t0 = time.time()
     timings = {}
@@ -113,6 +112,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     # ============================================================
     # 1) PARSE
     # ============================================================
+
     try:
         t = time.time()
 
@@ -129,9 +129,12 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
     constraints = parsed.get("constraints", []) or []
     preferences = parsed.get("preferences", []) or []
+
     ebay_query = build_ebay_query(parsed, request.query)
 
-    # RAG retrieval
+    # ============================================================
+    # 1.5) RAG retrieval
+    # ============================================================
 
     try:
         rag_docs = retrieve_context(request.query, k=10)
@@ -141,6 +144,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     # ============================================================
     # 2) EBAY SEARCH
     # ============================================================
+
     try:
         t = time.time()
 
@@ -157,13 +161,39 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Errore eBay search: {str(e)}")
 
     # ============================================================
+    # 2.5) REMOVE DUPLICATE EBAY ITEMS
+    # ============================================================
+
+    seen_ids = set()
+    filtered_items = []
+
+    for item in items:
+        ebay_id = item.get("ebay_id")
+
+        if not ebay_id:
+            continue
+
+        if ebay_id in seen_ids:
+            continue
+
+        seen_ids.add(ebay_id)
+        filtered_items.append(item)
+
+    items = filtered_items
+
+    # ============================================================
     # 3) SAVE DB + TRUST SCORE
     # ============================================================
+
     from app.services.feedback import get_seller_feedback
     from app.services.trust import compute_trust_score
 
     saved_count = 0
     results_out = []
+
+    # cache per seller
+    seller_feedback_cache = {}
+    seller_trust_cache = {}
 
     try:
         t = time.time()
@@ -171,13 +201,12 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         for item in items:
 
             ebay_id = item.get("ebay_id")
-            if not ebay_id:
-                continue
 
             exists = db.query(Listing).filter_by(ebay_id=ebay_id).first()
             already = exists is not None
 
             if not already:
+
                 listing = Listing(
                     ebay_id=ebay_id,
                     title=item.get("title"),
@@ -189,12 +218,13 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                     url=item.get("url"),
                     image_url=item.get("image_url"),
                 )
+
                 db.add(listing)
                 saved_count += 1
 
-            # -------------------------
+            # ----------------------------------------------------
             # TRUST SCORE
-            # -------------------------
+            # ----------------------------------------------------
 
             seller_name = item.get("seller_name")
             trust_score = None
@@ -204,29 +234,47 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 if d.get("seller") == seller_name
             ]
 
-            for d in rag_docs:
-                if d.get("seller") == seller_name:
-                    rag_context.append(d)
-
             if seller_name:
+
                 try:
-                    feedbacks = get_seller_feedback(seller_name, limit=10)
 
-                    sentiment_score = compute_sentiment_score(feedbacks)
+                    if seller_name in seller_trust_cache:
 
-                    trust_score = compute_trust_score(
-                        feedbacks,
-                        sentiment_score=sentiment_score
-                    )
+                        trust_score = seller_trust_cache[seller_name]
+
+                    else:
+
+                        if seller_name not in seller_feedback_cache:
+
+                            feedbacks = get_seller_feedback(
+                                seller_name,
+                                limit=10
+                            )
+
+                            seller_feedback_cache[seller_name] = feedbacks
+
+                        else:
+
+                            feedbacks = seller_feedback_cache[seller_name]
+
+                        sentiment_score = compute_sentiment_score(feedbacks)
+
+                        trust_score = compute_trust_score(
+                            feedbacks,
+                            sentiment_score=sentiment_score
+                        )
+
+                        seller_trust_cache[seller_name] = trust_score
 
                 except Exception:
                     trust_score = None
 
-            # -------------------------
+            # ----------------------------------------------------
             # OUTPUT ITEM
-            # -------------------------
+            # ----------------------------------------------------
 
             item_copy = dict(item)
+
             item_copy["_already_in_db"] = already
             item_copy["trust_score"] = trust_score
             item_copy["rag_feedback"] = rag_context
@@ -234,13 +282,23 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             results_out.append(item_copy)
 
         db.commit()
+
         timings["db_commit_s"] = round(time.time() - t, 3)
 
     except Exception as e:
+
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Errore DB: {str(e)}")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore DB: {str(e)}"
+        )
 
     timings["total_s"] = round(time.time() - t0, 3)
+
+    # ============================================================
+    # 4) RERANK + ANALYSIS
+    # ============================================================
 
     results_out = rerank_products(request.query, results_out)
 
@@ -251,6 +309,10 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     )
 
     analysis = explain_results(request.query, results_out)
+
+    # ============================================================
+    # RESPONSE
+    # ============================================================
 
     return {
         "parsed_query": parsed,
