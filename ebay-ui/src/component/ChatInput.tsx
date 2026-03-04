@@ -1,6 +1,6 @@
 import { Box, TextField, IconButton, Paper } from "@mui/material";
 import { useState } from "react";
-import SendIcon from "@mui/icons-material/Send";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 
 export default function ChatInput({
   onSend,
@@ -27,27 +27,21 @@ export default function ChatInput({
   return (
     <Box
       sx={{
-        p: 4,
-        bgcolor: "#fff",
-        borderTop: "1px solid #ececf1",
+        p: 2,
+        bgcolor: "transparent",
       }}
     >
-      <Box sx={{ maxWidth: 768, mx: "auto" }}>
+      <Box sx={{ maxWidth: 800, mx: "auto" }}>
         <Paper
           elevation={0}
           sx={{
             display: "flex",
             alignItems: "flex-end",
-            border: "1px solid #d1d1d1",
-            borderRadius: 3,
-            bgcolor: "#fff",
+            borderRadius: "26px",
+            bgcolor: "#f4f4f4",
             transition: "all 0.2s",
             "&:focus-within": {
-              borderColor: "#10a37f",
-              boxShadow: "0 0 0 2px rgba(16, 163, 127, 0.1)",
-            },
-            "&:hover": {
-              borderColor: disabled ? "#d1d1d1" : "#b4b4b4",
+              bgcolor: "#f4f4f4",
             },
           }}
         >
@@ -67,6 +61,8 @@ export default function ChatInput({
                 px: 3,
                 py: 2,
                 fontSize: 16,
+                lineHeight: 1.5,
+                color: "#0d0d0d",
                 "& textarea::placeholder": {
                   color: "#8e8ea0",
                   opacity: 1,
@@ -79,35 +75,35 @@ export default function ChatInput({
             onClick={handleSend}
             disabled={disabled || !value.trim()}
             sx={{
-              mb: 1.5,
-              mr: 1.5,
-              bgcolor: value.trim() && !disabled ? "#10a37f" : "#ececf1",
-              color: value.trim() && !disabled ? "#fff" : "#8e8ea0",
+              mb: 1,
+              mr: 1,
+              bgcolor: value.trim() && !disabled ? "#000" : "#e5e5e5",
+              color: value.trim() && !disabled ? "#fff" : "#a3a3a3",
               width: 32,
               height: 32,
               "&:hover": {
-                bgcolor: value.trim() && !disabled ? "#0d8c6b" : "#ececf1",
+                bgcolor: value.trim() && !disabled ? "#333" : "#e5e5e5",
               },
               "&:disabled": {
-                bgcolor: "#ececf1",
-                color: "#8e8ea0",
+                bgcolor: "#e5e5e5",
+                color: "#f4f4f4", // to match transparent-looking icon
               },
               transition: "all 0.2s",
             }}
           >
-            <SendIcon sx={{ fontSize: 18 }} />
+            <ArrowUpwardIcon sx={{ fontSize: 20 }} />
           </IconButton>
         </Paper>
 
         <Box
           sx={{
-            mt: 2,
+            mt: 1.5,
             textAlign: "center",
             fontSize: 12,
-            color: "#8e8ea0",
+            color: "#666",
           }}
         >
-          AI può commettere errori. Verifica le informazioni importanti.
+          L'intelligenza artificiale può commettere errori. Verifica le informazioni importanti.
         </Box>
       </Box>
     </Box>

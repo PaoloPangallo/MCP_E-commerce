@@ -12,6 +12,9 @@ from app.services.ebay import search_items
 from app.services.nlp_sentiment import compute_sentiment_score
 from app.services.parser import parse_query_service
 from app.services.feedback import get_seller_feedback
+from app.services.rag import retrieve_context, build_context
+from app.services.rag.explainer import explain_results
+from app.services.rag.reranker import rerank_products
 from app.services.trust import compute_trust_score
 from app.services.nlp_sentiment import compute_sentiment_score
 
@@ -127,6 +130,14 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     preferences = parsed.get("preferences", []) or []
     ebay_query = build_ebay_query(parsed, request.query)
 
+    # RAG retrieval
+    rag_docs = []
+
+    try:
+        rag_docs = retrieve_context(request.query, k=5)
+    except Exception:
+        rag_docs = []
+
     # ============================================================
     # 2) EBAY SEARCH
     # ============================================================
@@ -159,6 +170,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
         for item in items:
 
+
+
             ebay_id = item.get("ebay_id")
             if not ebay_id:
                 continue
@@ -181,12 +194,20 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 db.add(listing)
                 saved_count += 1
 
+
+
             # -------------------------
             # TRUST SCORE
             # -------------------------
 
             seller_name = item.get("seller_name")
             trust_score = None
+
+            rag_context = []
+
+            for d in rag_docs:
+                if d.get("seller") == seller_name:
+                    rag_context.append(d)
 
             if seller_name:
                 try:
@@ -209,6 +230,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             item_copy = dict(item)
             item_copy["_already_in_db"] = already
             item_copy["trust_score"] = trust_score
+            item_copy["rag_feedback"] = rag_context
 
             results_out.append(item_copy)
 
@@ -221,11 +243,22 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
     timings["total_s"] = round(time.time() - t0, 3)
 
+    rag_context_text = build_context(
+        request.query,
+        results_out,
+        rag_docs
+    )
+
+    results_out = rerank_products(request.query, results_out)
+    analysis = explain_results(request.query, results_out)
+
     return {
         "parsed_query": parsed,
         "ebay_query_used": ebay_query,
         "results_count": len(results_out),
         "saved_new_count": saved_count,
+        "analysis": analysis,
         "results": results_out,
+        "rag_context": rag_context_text,
         "_timings": timings,
     }

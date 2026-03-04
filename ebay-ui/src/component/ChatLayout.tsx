@@ -1,7 +1,5 @@
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, IconButton, Divider } from "@mui/material";
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 export default function ChatLayout({
   children,
@@ -20,7 +18,7 @@ export default function ChatLayout({
             width: 260,
             boxSizing: "border-box",
             bgcolor: "#f9f9f9",
-            borderRight: "1px solid #e5e5e5",
+            borderRight: "none",
           },
         }}
       >
@@ -29,20 +27,35 @@ export default function ChatLayout({
           <ListItemButton
             sx={{
               borderRadius: 2,
-              border: "1px solid #d1d1d1",
-              bgcolor: "#fff",
+              bgcolor: "transparent",
               "&:hover": {
-                bgcolor: "#f5f5f5",
+                bgcolor: "#ececf1",
               },
-              py: 1.5,
+              py: 1,
+              px: 1.5,
             }}
           >
-            <AddIcon sx={{ mr: 1, fontSize: 20 }} />
+            <Box
+              sx={{
+                bgcolor: "#fff",
+                border: "1px solid #e5e5e5",
+                borderRadius: "50%",
+                width: 28,
+                height: 28,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                mr: 1.5,
+              }}
+            >
+              <AddIcon sx={{ fontSize: 18 }} />
+            </Box>
             <ListItemText
               primary="Nuova chat"
               primaryTypographyProps={{
                 fontSize: 14,
                 fontWeight: 500,
+                color: "#0d0d0d",
               }}
             />
           </ListItemButton>
@@ -71,20 +84,19 @@ export default function ChatLayout({
                 <ListItemButton
                   sx={{
                     borderRadius: 2,
-                    py: 1.5,
+                    py: 1,
                     px: 2,
                     "&:hover": {
                       bgcolor: "#ececf1",
                     },
                   }}
                 >
-                  <ChatBubbleOutlineIcon sx={{ fontSize: 16, mr: 1.5, color: "#6e6e80" }} />
                   <ListItemText
                     primary={`Chat ${i}`}
                     primaryTypographyProps={{
                       fontSize: 14,
                       noWrap: true,
-                      sx: { color: "#202123" },
+                      sx: { color: "#0d0d0d" },
                     }}
                   />
                 </ListItemButton>
@@ -113,20 +125,19 @@ export default function ChatLayout({
                 <ListItemButton
                   sx={{
                     borderRadius: 2,
-                    py: 1.5,
+                    py: 1,
                     px: 2,
                     "&:hover": {
                       bgcolor: "#ececf1",
                     },
                   }}
                 >
-                  <ChatBubbleOutlineIcon sx={{ fontSize: 16, mr: 1.5, color: "#6e6e80" }} />
                   <ListItemText
                     primary={`Chat ${i}`}
                     primaryTypographyProps={{
                       fontSize: 14,
                       noWrap: true,
-                      sx: { color: "#202123" },
+                      sx: { color: "#0d0d0d" },
                     }}
                   />
                 </ListItemButton>
@@ -138,9 +149,8 @@ export default function ChatLayout({
         {/* User Section */}
         <Box
           p={2}
-          borderTop="1px solid #e5e5e5"
           sx={{
-            bgcolor: "#f9f9f9",
+            bgcolor: "transparent",
           }}
         >
           <ListItemButton
@@ -158,11 +168,12 @@ export default function ChatLayout({
                 width: 32,
                 height: 32,
                 borderRadius: "50%",
-                bgcolor: "#19c37d",
+                bgcolor: "#f4f4f4",
+                border: "1px solid #e5e5e5",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#fff",
+                color: "#0d0d0d",
                 fontWeight: 600,
                 fontSize: 14,
                 mr: 1.5,
@@ -175,17 +186,24 @@ export default function ChatLayout({
               primaryTypographyProps={{
                 fontSize: 14,
                 fontWeight: 500,
+                color: "#0d0d0d",
               }}
             />
-            <IconButton size="small">
-              <MoreVertIcon sx={{ fontSize: 18 }} />
-            </IconButton>
           </ListItemButton>
         </Box>
       </Drawer>
 
       {/* Main Area */}
-      <Box flex={1} display="flex" flexDirection="column">
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          ml: "260px",
+          width: "calc(100% - 260px)",
+          height: "100vh",
+        }}
+      >
         {children}
       </Box>
     </Box>

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Box, CircularProgress } from "@mui/material";
 
 import ChatLayout from "./component/ChatLayout";
 import ChatInput from "./component/ChatInput";
 import MessageBubble from "./component/MessageBubble";
 import SearchResultList from "./component/SearchResultList";
+import AIAnalysisCard from "./component/AIAnalysisCard";
 
 interface Message {
   role: "user" | "assistant";
@@ -13,15 +14,22 @@ interface Message {
 
 export default function App() {
 
-const [messages, setMessages] = useState<Message[]>([
-  {
-    role: "assistant",
-    content: "Ciao! Dimmi cosa vuoi cercare su eBay.",
-  },
-]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      content: "Ciao! Dimmi cosa vuoi cercare su eBay.",
+    },
+  ]);
 
   const [results, setResults] = useState<any[]>([]);
+  const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, results]);
 
   const handleSend = async (text: string) => {
 
@@ -31,6 +39,11 @@ const [messages, setMessages] = useState<Message[]>([
     };
 
     setMessages((prev) => [...prev, userMessage]);
+
+    // reset UI
+    setResults([]);
+    setAnalysis(null);
+
     setLoading(true);
 
     try {
@@ -48,7 +61,8 @@ const [messages, setMessages] = useState<Message[]>([
 
       const data = await res.json();
 
-      setResults(data.results || []);
+      setResults(data.results);
+      setAnalysis(data.analysis);
 
       const assistantMessage: Message = {
         role: "assistant",
@@ -74,39 +88,55 @@ const [messages, setMessages] = useState<Message[]>([
   return (
     <ChatLayout>
 
-      {/* Chat messages */}
+      {/* Chat area */}
       <Box
         sx={{
           flex: 1,
           overflowY: "auto",
-          p: 3,
-          maxWidth: 900,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
           width: "100%",
-          mx: "auto",
+          px: 2,
+          py: 4,
         }}
       >
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 800,
+          }}
+        >
+          {messages.map((msg, i) => (
+            <Box key={i} mb={2}>
+              <MessageBubble role={msg.role}>
+                {msg.content}
+              </MessageBubble>
+            </Box>
+          ))}
 
-        {messages.map((msg, i) => (
-          <Box key={i} mb={2}>
-            <MessageBubble role={msg.role}>
-              {msg.content}
-            </MessageBubble>
-          </Box>
-        ))}
+          {loading && (
+            <Box display="flex" mt={3} ml="62px">
+              <CircularProgress size={24} sx={{ color: "#a3a3a3" }} />
+            </Box>
+          )}
 
-        {loading && (
-          <Box display="flex" justifyContent="center" mt={3}>
-            <CircularProgress size={28} />
-          </Box>
-        )}
+          {/* AI reasoning */}
+          {analysis && (
+            <Box ml="62px" mr="16px" mb={2} width="calc(100% - 78px)">
+              <AIAnalysisCard text={analysis} />
+            </Box>
+          )}
 
-        {/* Search Results */}
-        {!loading && results.length > 0 && (
-          <Box mt={3}>
-            <SearchResultList results={results} />
-          </Box>
-        )}
+          {/* Search Results */}
+          {!loading && results.length > 0 && (
+            <Box mt={3} ml="62px" mr="16px" width="calc(100% - 78px)">
+              <SearchResultList results={results} />
+            </Box>
+          )}
 
+          <div ref={bottomRef} />
+        </Box>
       </Box>
 
       {/* Input */}
