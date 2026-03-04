@@ -46,3 +46,6 @@ tqdm==4.66.2
 pandas==2.2.0
 rapidfuzz~=3.14.3
 beautifulsoup4~=4.14.3
+
+
+sentence-transformers

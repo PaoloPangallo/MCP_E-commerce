@@ -9,7 +9,11 @@ import re
 from app.db.database import SessionLocal
 from app.models.listing import Listing
 from app.services.ebay import search_items
+from app.services.nlp_sentiment import compute_sentiment_score
 from app.services.parser import parse_query_service
+from app.services.feedback import get_seller_feedback
+from app.services.trust import compute_trust_score
+from app.services.nlp_sentiment import compute_sentiment_score
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -129,7 +133,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     try:
         t = time.time()
 
-        # 👇 PASSIAMO ANCHE preferences (per sort)
         items = search_items(
             query_text=ebay_query,
             constraints=constraints,
@@ -143,8 +146,11 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Errore eBay search: {str(e)}")
 
     # ============================================================
-    # 3) SAVE DB (ma restituiamo SEMPRE gli items trovati)
+    # 3) SAVE DB + TRUST SCORE
     # ============================================================
+    from app.services.feedback import get_seller_feedback
+    from app.services.trust import compute_trust_score
+
     saved_count = 0
     results_out = []
 
@@ -152,6 +158,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         t = time.time()
 
         for item in items:
+
             ebay_id = item.get("ebay_id")
             if not ebay_id:
                 continue
@@ -174,9 +181,35 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 db.add(listing)
                 saved_count += 1
 
-            # restituiamo comunque l'item (con flag)
+            # -------------------------
+            # TRUST SCORE
+            # -------------------------
+
+            seller_name = item.get("seller_name")
+            trust_score = None
+
+            if seller_name:
+                try:
+                    feedbacks = get_seller_feedback(seller_name, limit=10)
+
+                    sentiment_score = compute_sentiment_score(feedbacks)
+
+                    trust_score = compute_trust_score(
+                        feedbacks,
+                        sentiment_score=sentiment_score
+                    )
+
+                except Exception:
+                    trust_score = None
+
+            # -------------------------
+            # OUTPUT ITEM
+            # -------------------------
+
             item_copy = dict(item)
             item_copy["_already_in_db"] = already
+            item_copy["trust_score"] = trust_score
+
             results_out.append(item_copy)
 
         db.commit()
@@ -191,8 +224,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     return {
         "parsed_query": parsed,
         "ebay_query_used": ebay_query,
-        "results_count": len(results_out),      # ✅ quanti trovati davvero
-        "saved_new_count": saved_count,         # ✅ quanti nuovi salvati
+        "results_count": len(results_out),
+        "saved_new_count": saved_count,
         "results": results_out,
         "_timings": timings,
     }
