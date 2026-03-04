@@ -267,64 +267,36 @@ def search_items(
     query_text: str,
     constraints: List[Dict[str, Any]],
     preferences: Optional[List[Dict[str, Any]]] = None,
-    limit: int = 10,
+    limit: int = 30,
 ) -> List[Dict[str, Any]]:
 
-    if not query_text or not query_text.strip():
-        raise ValueError("query_text non può essere vuota")
-
-    if limit <= 0:
-        limit = 10
-
     token = _get_oauth_token()
+    print("SEARCH URL:", SEARCH_URL)
 
     headers = {
         "Authorization": f"Bearer {token}",
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
 
-    params: Dict[str, Any] = {
-        "q": query_text.strip(),
-        "limit": limit,
-    }
+    items = []
+    offset = 0
+    page_size = 20
 
-    # eBay autocorrect (utile su typo keyword)
-    if EBAY_AUTO_CORRECT:
-        params["auto_correct"] = "KEYWORD"
+    while len(items) < limit:
 
-    filter_string = _build_filter_string(constraints)
-    if filter_string:
-        params["filter"] = filter_string
+        params = {
+            "q": query_text.strip(),
+            "limit": page_size,
+            "offset": offset
+        }
 
-    sort_value = _extract_sort(preferences)
+        filter_string = _build_filter_string(constraints)
+        if filter_string:
+            params["filter"] = filter_string
 
-    # 🔥 Se non c'è sort esplicito ma c'è >= prezzo → forza sort per stabilità
-    if not sort_value:
-        for c in constraints:
-            if c.get("type") == "price" and c.get("operator") == ">=":
-                sort_value = "price"
-                break
-
-    if sort_value:
-        params["sort"] = sort_value
-
-    print("EBAY QUERY:", params)
-
-    response = requests.get(
-        SEARCH_URL,
-        headers=headers,
-        params=params,
-        timeout=REQUEST_TIMEOUT,
-    )
-
-    # ============================================================
-    # GESTIONE ERRORI INTELLIGENTE
-    # ============================================================
-
-    if response.status_code == 401:
-        _token_cache["access_token"] = None
-        token = _get_oauth_token()
-        headers["Authorization"] = f"Bearer {token}"
+        sort_value = _extract_sort(preferences)
+        if sort_value:
+            params["sort"] = sort_value
 
         response = requests.get(
             SEARCH_URL,
@@ -333,33 +305,24 @@ def search_items(
             timeout=REQUEST_TIMEOUT,
         )
 
-    if response.status_code == 429:
-        raise RuntimeError("eBay rate limit exceeded (429)")
+        if response.status_code != 200:
+            raise RuntimeError(f"Search error: {response.status_code} {response.text}")
 
-    if 500 <= response.status_code < 600:
-        raise RuntimeError(f"eBay server error {response.status_code}")
+        data = response.json()
 
-    if response.status_code != 200:
-        raise RuntimeError(f"Search error: {response.status_code} {response.text}")
+        print("EBAY ITEMS:", len(data.get("itemSummaries", [])))
+        print("EBAY TOTAL:", data.get("total"))
+        print("EBAY LIMIT:", params.get("limit"))
+        print(data)
+        page_items = data.get("itemSummaries", [])
 
-    data = response.json()
-    items = data.get("itemSummaries", [])
+        if not page_items:
+            break
 
-    # === Opzionale: aggiorna brand vocab runtime SOLO da campo strutturato 'brand' ===
-    if EBAY_UPDATE_BRAND_VOCAB and items:
-        try:
-            from app.services.parser import update_brand_vocab  # import lazy (evita circular all'import time)
+        items.extend(page_items)
 
-            brands = []
-            for it in items:
-                b = it.get("brand")
-                if isinstance(b, str) and b.strip():
-                    brands.append(b.strip())
+        offset += page_size
 
-            if brands:
-                update_brand_vocab(list(set(brands)))
-        except Exception:
-            # mai rompere la search per questo
-            pass
+    items = items[:limit]
 
     return [_normalize_item(item) for item in items]

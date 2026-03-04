@@ -1,69 +1,25 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
-import spacy
-import re
+from fastapi.middleware.cors import CORSMiddleware
 
-# =========================
-# Setup
-# =========================
+from app.api.routes import router
+from app.api.seller import seller_router
+from app.db.database import Base, engine
+from app.models import listing
 
-app = FastAPI(title="MCP E-Commerce NLP Backend")
+app = FastAPI()
 
-# Carica modello spaCy italiano
-nlp = spacy.load("it_core_news_sm")
+# 🔥 CORS SUPER PERMISSIVO (debug)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# DB
+Base.metadata.create_all(bind=engine)
 
-# =========================
-# Request Model
-# =========================
-
-class QueryRequest(BaseModel):
-    query: str
-
-
-# =========================
-# Utility Parsing
-# =========================
-
-def extract_max_price(text: str):
-    match = re.search(r"sotto\s+(\d+)", text.lower())
-    if match:
-        return float(match.group(1))
-    return None
-
-
-def extract_condition(doc):
-    for token in doc:
-        if token.text.lower() in ["usato", "nuovo", "ricondizionato"]:
-            return token.text.lower()
-    return None
-
-
-def extract_product(doc):
-    # Semplice: prendi sostantivi principali
-    nouns = [token.text for token in doc if token.pos_ == "NOUN"]
-    return " ".join(nouns) if nouns else None
-
-
-# =========================
-# Endpoints
-# =========================
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-
-@app.post("/parse")
-def parse_query(request: QueryRequest):
-    text = request.query
-    doc = nlp(text)
-
-    structured_query = {
-        "original_query": text,
-        "product": extract_product(doc),
-        "max_price": extract_max_price(text),
-        "condition": extract_condition(doc),
-    }
-
-    return structured_query
+# routers
+app.include_router(router)
+app.include_router(seller_router)

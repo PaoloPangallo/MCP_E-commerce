@@ -24,16 +24,22 @@ def rerank_products(query: str, items: List[Dict]) -> List[Dict]:
 
     ranked = []
 
+    q_vec = embed(query)
+
     for item in items:
 
         title = item.get("title", "")
+
+        try:
+            t_vec = embed(title)
+            similarity = cosine_similarity(q_vec, t_vec)
+        except Exception:
+            similarity = 0
+
         price = item.get("price") or 0
         trust = item.get("trust_score") or 0
         rating = item.get("seller_rating") or 0
 
-        similarity = compute_similarity(query, title)
-
-        # normalizzazione prezzo
         price_penalty = price / 1000 if price else 0
 
         score = (

@@ -14,12 +14,12 @@ interface Message {
 
 export default function App() {
 
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<Message[]>(([
     {
       role: "assistant",
       content: "Ciao! Dimmi cosa vuoi cercare su eBay.",
     },
-  ]);
+  ]));
 
   const [results, setResults] = useState<any[]>([]);
   const [analysis, setAnalysis] = useState<string | null>(null);
@@ -43,12 +43,11 @@ export default function App() {
     // reset UI
     setResults([]);
     setAnalysis(null);
-
     setLoading(true);
 
     try {
 
-      const res = await fetch("http://localhost:8000/search", {
+      const res = await fetch("http://127.0.0.1:8000/search", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -59,19 +58,25 @@ export default function App() {
         }),
       });
 
+      if (!res.ok) {
+        throw new Error("Backend error");
+      }
+
       const data = await res.json();
 
-      setResults(data.results);
-      setAnalysis(data.analysis);
+      setResults(data.results || []);
+      setAnalysis(data.analysis || null);
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: `Ho trovato ${data.results_count} risultati.`,
+        content: `Ho trovato ${data.results_count || 0} risultati.`,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
 
     } catch (err) {
+
+      console.error("Search error:", err);
 
       const errorMessage: Message = {
         role: "assistant",
@@ -97,16 +102,18 @@ export default function App() {
           justifyContent: "center",
           alignItems: "flex-start",
           width: "100%",
-          px: 2,
+          px: 4,
           py: 4,
         }}
       >
+
         <Box
           sx={{
             width: "100%",
-            maxWidth: 800,
+            maxWidth: 1000,
           }}
         >
+
           {messages.map((msg, i) => (
             <Box key={i} mb={2}>
               <MessageBubble role={msg.role}>
@@ -116,27 +123,27 @@ export default function App() {
           ))}
 
           {loading && (
-            <Box display="flex" mt={3} ml="62px">
-              <CircularProgress size={24} sx={{ color: "#a3a3a3" }} />
+            <Box display="flex" justifyContent="center" mt={3}>
+              <CircularProgress size={28} />
             </Box>
           )}
 
           {/* AI reasoning */}
           {analysis && (
-            <Box ml="62px" mr="16px" mb={2} width="calc(100% - 78px)">
-              <AIAnalysisCard text={analysis} />
-            </Box>
+            <AIAnalysisCard text={analysis} />
           )}
 
           {/* Search Results */}
           {!loading && results.length > 0 && (
-            <Box mt={3} ml="62px" mr="16px" width="calc(100% - 78px)">
+            <Box mt={3}>
               <SearchResultList results={results} />
             </Box>
           )}
 
           <div ref={bottomRef} />
+
         </Box>
+
       </Box>
 
       {/* Input */}

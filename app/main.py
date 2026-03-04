@@ -1,26 +1,25 @@
 from fastapi import FastAPI
-from app.api.routes import router
-from app.api.seller import seller_router
-from app.db.database import engine
-from app.models import listing  # importante per registrare il modello
-from app.db.database import Base
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import router
+from app.api.seller import seller_router
+from app.db.database import Base, engine
+from app.models import listing
 
+app = FastAPI()
 
-Base.metadata.create_all(bind=engine)
-app = FastAPI(
-    title="MCP E-Commerce Backend",
-    version="0.1.0"
-)
-
-
+# 🔥 CORS SUPER PERMISSIVO (debug)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],)
+    allow_headers=["*"],
+)
 
+# DB
+Base.metadata.create_all(bind=engine)
+
+# routers
 app.include_router(router)
 app.include_router(seller_router)

@@ -5,13 +5,14 @@ import numpy as np
 _model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
-def embed(text: str) -> np.ndarray:
-    """
-    Converte una stringa in embedding vector.
-    """
+from functools import lru_cache
+
+@lru_cache(maxsize=10000)
+def embed(text: str):
+
     if not text:
         return None
 
-    vec = _model.encode(text)
+    vec = _model.encode(text, normalize_embeddings=True)
 
     return np.array(vec).astype("float32")

@@ -1,25 +1,24 @@
+import logging
+import re
+import time
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-import time
-import logging
-from typing import Literal, Optional
-import re
 
 from app.db.database import SessionLocal
 from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.nlp_sentiment import compute_sentiment_score
 from app.services.parser import parse_query_service
-from app.services.feedback import get_seller_feedback
 from app.services.rag import retrieve_context, build_context
 from app.services.rag.explainer import explain_results
 from app.services.rag.reranker import rerank_products
-from app.services.trust import compute_trust_score
-from app.services.nlp_sentiment import compute_sentiment_score
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 # ============================================================
 # DB
@@ -57,7 +56,6 @@ def health():
 
 @router.post("/parse")
 def parse(request: SearchRequest):
-
     return parse_query_service(
         request.query,
         llm_engine=request.llm_engine,
@@ -101,10 +99,13 @@ def build_ebay_query(parsed: dict, original_query: str) -> str:
 # ============================================================
 
 @router.post("/search")
+
 def search(request: SearchRequest, db: Session = Depends(get_db)):
+    print("SEARCH STARTED")
 
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
+
 
     t0 = time.time()
     timings = {}
@@ -131,10 +132,9 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     ebay_query = build_ebay_query(parsed, request.query)
 
     # RAG retrieval
-    rag_docs = []
 
     try:
-        rag_docs = retrieve_context(request.query, k=5)
+        rag_docs = retrieve_context(request.query, k=10)
     except Exception:
         rag_docs = []
 
@@ -148,7 +148,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             query_text=ebay_query,
             constraints=constraints,
             preferences=preferences,
-            limit=5
+            limit=20
         )
 
         timings["ebay_search_s"] = round(time.time() - t, 3)
@@ -169,8 +169,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         t = time.time()
 
         for item in items:
-
-
 
             ebay_id = item.get("ebay_id")
             if not ebay_id:
@@ -194,8 +192,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 db.add(listing)
                 saved_count += 1
 
-
-
             # -------------------------
             # TRUST SCORE
             # -------------------------
@@ -203,7 +199,10 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             seller_name = item.get("seller_name")
             trust_score = None
 
-            rag_context = []
+            rag_context = [
+                d for d in rag_docs
+                if d.get("seller") == seller_name
+            ]
 
             for d in rag_docs:
                 if d.get("seller") == seller_name:
@@ -243,13 +242,14 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
     timings["total_s"] = round(time.time() - t0, 3)
 
+    results_out = rerank_products(request.query, results_out)
+
     rag_context_text = build_context(
         request.query,
         results_out,
         rag_docs
     )
 
-    results_out = rerank_products(request.query, results_out)
     analysis = explain_results(request.query, results_out)
 
     return {

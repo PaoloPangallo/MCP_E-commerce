@@ -12,7 +12,7 @@ seller_router = APIRouter()
 def get_feedback_route(seller_name: str):
 
     try:
-        feedbacks = get_seller_feedback(seller_name, limit=10)
+        feedbacks = get_seller_feedback(seller_name, limit=100)
 
         sentiment_score = compute_sentiment_score(feedbacks)
 

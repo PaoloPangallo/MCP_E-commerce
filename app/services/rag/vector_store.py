@@ -4,29 +4,45 @@ from typing import List, Dict
 
 from app.services.rag.embedding import embed
 
-# dimensione embedding MiniLM
 DIM = 384
 
-# indice FAISS
-_index = faiss.IndexFlatL2(DIM)
+# cosine similarity → inner product
+_index = faiss.IndexFlatIP(DIM)
 
-# document store
 _documents: List[Dict] = []
 
 
-def add_documents(texts: List[str], metadata: List[Dict]):
-    """
-    Aggiunge documenti al vector store.
-    """
+def _normalize(v: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(v)
+    if norm == 0:
+        return v
+    return v / norm
 
+
+def add_documents(texts: List[str], metadata: List[Dict]):
+
+    if not texts or not metadata:
+        return
 
     vectors = []
+    metas = []
 
-    for text in texts:
+    for text, meta in zip(texts, metadata):
+
         vec = embed(text)
 
-        if vec is not None:
-            vectors.append(vec)
+        if vec is None:
+            continue
+
+        vec = np.asarray(vec, dtype=np.float32)
+
+        if vec.shape[0] != DIM:
+            continue
+
+        vec = _normalize(vec)
+
+        vectors.append(vec)
+        metas.append(meta)
 
     if not vectors:
         return
@@ -35,25 +51,40 @@ def add_documents(texts: List[str], metadata: List[Dict]):
 
     _index.add(vectors)
 
-    _documents.extend(metadata)
+    _documents.extend(metas)
 
 
 def search(query: str, k: int = 5):
 
+    if len(_documents) == 0:
+        return []
 
     q = embed(query)
 
     if q is None:
         return []
 
+    q = np.asarray(q, dtype=np.float32)
+
+    if q.shape[0] != DIM:
+        return []
+
+    q = _normalize(q)
     q = np.expand_dims(q, axis=0)
 
-    distances, ids = _index.search(q, k)
+    scores, ids = _index.search(q, k)
 
     results = []
 
-    for i in ids[0]:
-        if i < len(_documents):
-            results.append(_documents[i])
+    for score, idx in zip(scores[0], ids[0]):
+
+        if idx < 0 or idx >= len(_documents):
+            continue
+
+        doc = dict(_documents[idx])
+
+        doc["_similarity"] = float(score)
+
+        results.append(doc)
 
     return results

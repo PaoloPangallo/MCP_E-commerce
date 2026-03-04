@@ -2,22 +2,33 @@ from typing import List, Dict
 
 
 def build_context(query: str, products: List[Dict], docs: List[Dict]) -> str:
-    """
-    Costruisce il contesto da passare all'LLM.
-    """
+    lines = []
 
-    context = f"User query:\n{query}\n\n"
+    lines.append(f"User query: {query}")
+    lines.append("")
 
     if products:
-        context += "Products found:\n"
+        lines.append("Top products:")
 
         for p in products[:5]:
-            context += f"- {p.get('title')} ({p.get('price')} {p.get('currency')}) seller: {p.get('seller_name')}\n"
+            title = p.get("title")
+            price = p.get("price")
+            currency = p.get("currency")
+            seller = p.get("seller_name")
+            trust = p.get("trust_score")
+
+            lines.append(
+                f"- {title} | {price} {currency} | seller: {seller} | trust: {trust}"
+            )
 
     if docs:
-        context += "\nRelevant seller feedback:\n"
+        lines.append("")
+        lines.append("Relevant seller feedback:")
 
         for d in docs[:5]:
-            context += f"- {d.get('text')}\n"
+            seller = d.get("seller")
+            text = d.get("text")
 
-    return context
+            lines.append(f"- ({seller}) {text}")
+
+    return "\n".join(lines)
