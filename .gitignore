@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 *.db
 .env
+.vscode/
 
 # Virtual environment
 venv/
