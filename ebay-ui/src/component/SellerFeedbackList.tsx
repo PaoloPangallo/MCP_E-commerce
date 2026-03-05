@@ -1,16 +1,24 @@
-import { Box, Typography, CircularProgress, Chip } from "@mui/material";
-import FeedbackCard from "./FeedbackCard";
+import { useState } from "react"
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  Chip,
+  Button
+} from "@mui/material"
+
+import FeedbackCard from "./FeedbackCard"
+import type { Feedback } from "./FeedbackCard"
 
 
 // --------------------------------------------------
-// TYPES
+// PROPS TYPE
 // --------------------------------------------------
 
-export interface Feedback {
-  user?: string
-  rating?: number | string
-  comment?: string
-  time?: string
+interface Props {
+  feedbacks?: Feedback[]
+  loading?: boolean
+  initialLimit?: number
 }
 
 
@@ -21,12 +29,10 @@ export interface Feedback {
 export default function SellerFeedbackList({
   feedbacks = [],
   loading = false,
-  limit = 10,
-}: {
-  feedbacks?: Feedback[]
-  loading?: boolean
-  limit?: number
-}) {
+  initialLimit = 10
+}: Props) {
+
+  const [visibleCount, setVisibleCount] = useState<number>(initialLimit)
 
   // --------------------------------------------------
   // LOADING STATE
@@ -34,18 +40,13 @@ export default function SellerFeedbackList({
 
   if (loading) {
     return (
-      <Box
-        display="flex"
-        alignItems="center"
-        gap={1}
-        mt={1}
-      >
+      <Box display="flex" alignItems="center" gap={1} mt={1}>
         <CircularProgress size={16} />
 
         <Typography
           sx={{
             color: "#666",
-            fontSize: 13,
+            fontSize: 13
           }}
         >
           Caricamento feedback venditore...
@@ -54,34 +55,29 @@ export default function SellerFeedbackList({
     )
   }
 
-
   // --------------------------------------------------
   // EMPTY STATE
   // --------------------------------------------------
 
   if (!feedbacks || feedbacks.length === 0) {
-
     return (
       <Typography
         sx={{
           mt: 1,
           color: "#666",
-          fontSize: 13,
+          fontSize: 13
         }}
       >
         Nessun feedback disponibile
       </Typography>
     )
-
   }
-
 
   // --------------------------------------------------
   // LIMIT FEEDBACKS
   // --------------------------------------------------
 
-  const visibleFeedbacks = feedbacks.slice(0, limit)
-
+  const visibleFeedbacks: Feedback[] = feedbacks.slice(0, visibleCount)
 
   // --------------------------------------------------
   // UI
@@ -94,7 +90,7 @@ export default function SellerFeedbackList({
       sx={{
         display: "flex",
         flexDirection: "column",
-        gap: 1.5,
+        gap: 1.5
       }}
     >
 
@@ -105,7 +101,7 @@ export default function SellerFeedbackList({
           sx={{
             fontSize: 13,
             fontWeight: 600,
-            color: "#444",
+            color: "#444"
           }}
         >
           Feedback venditore
@@ -116,7 +112,7 @@ export default function SellerFeedbackList({
           size="small"
           sx={{
             fontSize: 11,
-            bgcolor: "#f4f4f4",
+            bgcolor: "#f4f4f4"
           }}
         />
 
@@ -124,38 +120,51 @@ export default function SellerFeedbackList({
 
 
       {/* LIST */}
-      {visibleFeedbacks.map((f, i) => {
+      {visibleFeedbacks.map((f: Feedback, i: number) => {
 
         const key =
           `${f.user ?? "user"}-${f.time ?? "time"}-${i}`
 
         return (
-
           <FeedbackCard
             key={key}
             feedback={f}
           />
-
         )
 
       })}
 
 
-      {/* MORE */}
-      {feedbacks.length > limit && (
+      {/* LOAD MORE BUTTON */}
+      {visibleCount < feedbacks.length && (
 
-        <Typography
-          sx={{
-            fontSize: 12,
-            color: "#888",
-            textAlign: "center",
-            mt: 1
-          }}
-        >
-          Mostrati {limit} di {feedbacks.length} feedback
-        </Typography>
+        <Box mt={2} textAlign="center">
+
+          <Button
+            size="small"
+            onClick={() =>
+              setVisibleCount(prev => prev + initialLimit)
+            }
+          >
+            Mostra altri feedback
+          </Button>
+
+        </Box>
 
       )}
+
+
+      {/* FOOTER INFO */}
+      <Typography
+        sx={{
+          fontSize: 12,
+          color: "#888",
+          textAlign: "center",
+          mt: 1
+        }}
+      >
+        Mostrati {Math.min(visibleCount, feedbacks.length)} di {feedbacks.length} feedback
+      </Typography>
 
     </Box>
 

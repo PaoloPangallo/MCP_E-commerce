@@ -1,6 +1,6 @@
 import { Paper, Typography, Box, Rating, Avatar, Chip } from "@mui/material";
 
-type Feedback = {
+export type Feedback = {
   user?: string;
   rating?: "positive" | "neutral" | "negative" | string;
   comment?: string;

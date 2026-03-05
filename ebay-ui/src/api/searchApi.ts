@@ -1,3 +1,36 @@
+import { apiFetch } from "./apiClient"
+
+
+// ============================================================
+// FEEDBACK TYPES
+// ============================================================
+
+export type Feedback = {
+  user: string
+  rating: number
+  comment: string
+  time: string
+}
+
+export interface SellerFeedbackResponse {
+  seller: string
+  feedbacks: Feedback[]
+}
+
+
+// ============================================================
+// SEARCH TYPES
+// ============================================================
+
+export interface ParsedQuery {
+  semantic_query?: string
+  product?: string | null
+  brands?: string[]
+  constraints?: any[]
+  preferences?: any[]
+  compatibilities?: Record<string, string>
+}
+
 export interface SearchItem {
   ebay_id: string
   title: string
@@ -13,9 +46,10 @@ export interface SearchItem {
   ranking_score?: number
   explanations?: string[]
 
+  rag_feedback?: any[]
+
   _already_in_db?: boolean
 }
-
 
 export interface IRMetrics {
   "precision@5": number
@@ -26,7 +60,7 @@ export interface IRMetrics {
 
 export interface SearchResponse {
 
-  parsed_query?: any
+  parsed_query?: ParsedQuery
 
   ebay_query_used?: string
 
@@ -45,25 +79,37 @@ export interface SearchResponse {
   _timings?: Record<string, number>
 }
 
-export async function searchProducts(query: string): Promise<SearchResponse> {
 
-  const response = await fetch("http://localhost:8020/search", {
+// ============================================================
+// API CALLS
+// ============================================================
+
+export async function fetchSellerFeedback(
+  seller: string,
+  page = 1,
+  limit = 10
+): Promise<SellerFeedbackResponse> {
+
+  const safeSeller = encodeURIComponent(seller)
+
+  return apiFetch(
+    `/seller/${safeSeller}/feedback?page=${page}&limit=${limit}`
+  )
+}
+
+
+export async function searchProducts(
+  query: string
+): Promise<SearchResponse> {
+
+  return apiFetch("/search", {
+
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+
     body: JSON.stringify({
       query,
       llm_engine: "ollama",
-    }),
-  });
+    })
 
-  if (!response.ok) {
-
-    const text = await response.text()
-
-    throw new Error(`Search API error: ${text}`)
-  }
-
-  return await response.json()
+  })
 }

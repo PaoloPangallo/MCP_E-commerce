@@ -95,7 +95,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
       const seller = encodeURIComponent(item.seller_name)
 
       const res = await fetch(
-        `http://127.0.0.1:8020/seller/${seller}/feedback`
+        `http://127.0.0.1:8030/seller/${seller}/feedback`
       )
 
       if (!res.ok) {

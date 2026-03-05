@@ -149,7 +149,7 @@ export default function App() {
 
     try {
 
-      const res = await fetch("http://127.0.0.1:8020/search", {
+      const res = await fetch("http://127.0.0.1:8030/search", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

@@ -50,3 +50,7 @@ beautifulsoup4~=4.14.3
 
 
 faiss-cpu
+
+passlib~=1.7.3
+
+jose

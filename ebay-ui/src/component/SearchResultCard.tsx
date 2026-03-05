@@ -45,7 +45,7 @@ export default function SearchResultCard({ item }: { item: any }) {
       setLoading(true);
 
       const res = await fetch(
-        `http://127.0.0.1:8020/seller/${item.seller_name}/feedback`
+        `http://127.0.0.1:8030/seller/${item.seller_name}/feedback`
       );
 
       if (!res.ok) {

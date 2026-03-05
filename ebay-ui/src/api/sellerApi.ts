@@ -82,13 +82,15 @@ export interface SearchResponse {
 // ============================================================
 
 export async function fetchSellerFeedback(
-  seller: string
+  seller: string,
+  page = 1,
+  limit = 10
 ): Promise<SellerFeedbackResponse> {
 
   const safeSeller = encodeURIComponent(seller)
 
   const response = await fetch(
-    `http://127.0.0.1:8020/seller/${safeSeller}/feedback`
+    `http://127.0.0.1:8030/seller/${safeSeller}/feedback?page=${page}&limit=${limit}`
   )
 
   if (!response.ok) {
@@ -104,7 +106,7 @@ export async function fetchSellerFeedback(
 
 export async function searchProducts(query: string): Promise<SearchResponse> {
 
-  const response = await fetch("http://localhost:8020/search", {
+  const response = await fetch("http://localhost:8030/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

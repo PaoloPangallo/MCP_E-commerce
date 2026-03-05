@@ -230,6 +230,7 @@ export default function AIAnalysisCard({
             </Typography>
 
             <Typography
+              component="div"
               sx={{
                 fontSize: 13,
                 color: "#666",

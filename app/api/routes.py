@@ -1,13 +1,14 @@
 import logging
 import os
 import time
-from typing import Literal
+from typing import Literal, Optional, Dict, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.db.database import SessionLocal
+from app.auth.dependencies import get_optional_user
+from app.db.database import get_db
 from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.metrics.ir_metrics import precision_at_k, recall_at_k, ndcg_at_k
@@ -22,18 +23,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 print("SEARCH ROUTER FILE:", os.path.abspath(__file__))
-
-
-# ============================================================
-# DB
-# ============================================================
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # ============================================================
@@ -80,35 +69,47 @@ def parse(request: SearchRequest):
 # ============================================================
 
 @router.post("/search")
-def search(request: SearchRequest, db: Session = Depends(get_db)):
+def search(
+    request: SearchRequest,
+    db: Session = Depends(get_db),
+    user=Depends(get_optional_user),
+):
 
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
 
+    if user:
+        logger.info("Personalized search for user_id=%s", getattr(user, "id", None))
+    else:
+        logger.info("Anonymous search")
+
+    import traceback
+
     t0 = time.time()
-    timings = {}
+    timings: Dict[str, float] = {}
 
     # ============================================================
     # 1) PARSE
     # ============================================================
-
-    use_llm = request.llm_engine != "rule_based"
 
     try:
         t = time.time()
 
         parsed = parse_query_service(
             request.query,
-            use_llm=use_llm,
+            use_llm=(request.llm_engine != "rule_based"),
             include_meta=True,
         )
+
+        if isinstance(parsed, str):
+            parsed = {"semantic_query": parsed}
 
         timings[f"parse_{request.llm_engine}_s"] = round(time.time() - t, 3)
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
 
-    # debug output
     ebay_query_used = parsed.get("semantic_query") or request.query
 
     # ============================================================
@@ -127,11 +128,12 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     try:
         t = time.time()
 
-        # ✅ NEW: ebay.py ora vuole TUTTA la parsed_query
         items = search_items(
             parsed_query=parsed,
             limit=20
         )
+
+        items = items or []
 
         # indicizza prodotti nel RAG
         try:
@@ -142,6 +144,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         timings["ebay_search_s"] = round(time.time() - t, 3)
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore eBay search: {str(e)}")
 
     # ============================================================
@@ -149,7 +152,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     # ============================================================
 
     seen_ids = set()
-    filtered_items = []
+    deduped: List[Dict[str, Any]] = []
 
     for item in items:
         ebay_id = item.get("ebay_id")
@@ -157,24 +160,25 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             continue
         if ebay_id in seen_ids:
             continue
-        seen_ids.add(ebay_id)
-        filtered_items.append(item)
 
-    items = filtered_items
+        seen_ids.add(ebay_id)
+        deduped.append(item)
+
+    items = deduped
 
     # ============================================================
-    # 3) SAVE DB + TRUST SCORE (+ ingest feedback into RAG)
+    # 3) SAVE DB + TRUST SCORE
     # ============================================================
 
     from app.services.feedback import get_seller_feedback
     from app.services.trust import compute_trust_score
-    from app.services.rag.ingest import ingest_seller_feedback  # ✅ NEW
+    from app.services.rag.ingest import ingest_seller_feedback
 
     saved_count = 0
-    results_out = []
+    results_out: List[Dict[str, Any]] = []
 
-    seller_feedback_cache = {}
-    seller_trust_cache = {}
+    seller_feedback_cache: Dict[str, Any] = {}
+    seller_trust_cache: Dict[str, float] = {}
 
     try:
         t_db = time.time()
@@ -189,6 +193,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             already = exists is not None
 
             if not already:
+
                 listing = Listing(
                     ebay_id=ebay_id,
                     title=item.get("title"),
@@ -200,34 +205,36 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                     url=item.get("url"),
                     image_url=item.get("image_url"),
                 )
+
                 db.add(listing)
                 saved_count += 1
 
-            # ---------------- TRUST SCORE ----------------
-
             seller_name = item.get("seller_name")
-            trust_score = None
+            trust_score: Optional[float] = None
 
-            # usa il RAG pre-query, filtrato sul seller
             rag_context = [
                 d for d in rag_docs
                 if d.get("seller") == seller_name
             ][:3]
 
             if seller_name:
+
                 try:
+
                     if seller_name in seller_trust_cache:
                         trust_score = seller_trust_cache[seller_name]
+
                     else:
-                        # ---------- feedback fetch (cached) ----------
+
                         if seller_name not in seller_feedback_cache:
+
                             feedbacks = get_seller_feedback(
                                 seller_name,
                                 limit=10
                             )
+
                             seller_feedback_cache[seller_name] = feedbacks
 
-                            # ✅ ingest feedback in RAG (persistente)
                             try:
                                 ingest_seller_feedback(
                                     seller_name=seller_name,
@@ -236,6 +243,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                                 )
                             except Exception:
                                 pass
+
                         else:
                             feedbacks = seller_feedback_cache[seller_name]
 
@@ -251,9 +259,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                 except Exception:
                     trust_score = None
 
-            # ---------------- OUTPUT ----------------
-
             item_copy = dict(item)
+
             item_copy["_already_in_db"] = already
             item_copy["trust_score"] = trust_score
             item_copy["rag_feedback"] = rag_context
@@ -265,18 +272,21 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
     except Exception as e:
         db.rollback()
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore DB: {str(e)}")
-
-    timings["total_s"] = round(time.time() - t0, 3)
 
     # ============================================================
     # 4) RERANK
     # ============================================================
 
-    results_out = rerank_products(request.query, results_out)
+    try:
+        if results_out:
+            results_out = rerank_products(request.query, results_out)
+    except Exception:
+        pass
 
     # ============================================================
-    # 5) ADD RANKING SCORE
+    # 5) FINAL RANKING SCORE
     # ============================================================
 
     for item in results_out:
@@ -285,20 +295,21 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
         trust = item.get("trust_score") or 0
         price = item.get("price") or 0
 
-        price_score = 0
+        price_score = 0.0
+
         if price:
-            price_score = max(0, 1 - price / 1000)
+            price_score = max(0.0, 1.0 - float(price) / 1000.0)
 
         ranking_score = (
-            0.6 * relevance +
-            0.3 * trust +
-            0.1 * price_score
+            0.5 * float(relevance) +
+            0.25 * float(trust) +
+            0.15 * float(price_score)
         )
 
-        item["ranking_score"] = round(float(ranking_score), 3)
+        item["ranking_score"] = round(ranking_score, 3)
 
     # ============================================================
-    # 6) EXPLAINABLE RANKING
+    # 6) EXPLANATIONS
     # ============================================================
 
     for item in results_out:
@@ -315,13 +326,14 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             explanations.append("High relevance match")
 
         price = item.get("price")
+
         if price and price < 200:
             explanations.append("Competitive price")
 
         item["explanations"] = explanations
 
     # ============================================================
-    # 7) RAG CONTEXT + AI ANALYSIS
+    # 7) RAG CONTEXT + ANALYSIS
     # ============================================================
 
     try:
@@ -338,24 +350,26 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     analysis = explain_results(request.query, results_out)
 
     # ============================================================
-    # 8) IR METRICS (proxy labels)
+    # 8) IR METRICS
     # ============================================================
 
-    relevance_labels = [
-        item.get("ranking_score", 0)
+    binary_relevance = [
+        1 if (item.get("ranking_score", 0) >= 0.75) else 0
         for item in results_out
     ]
 
     metrics = {
-        "precision@5": precision_at_k(relevance_labels, 5),
-        "precision@10": precision_at_k(relevance_labels, 10),
+        "precision@5": precision_at_k(binary_relevance, 5),
+        "precision@10": precision_at_k(binary_relevance, 10),
         "recall@10": recall_at_k(
-            relevance_labels,
-            total_relevant=sum(relevance_labels),
+            binary_relevance,
+            total_relevant=sum(binary_relevance),
             k=10
         ),
-        "ndcg@10": ndcg_at_k(relevance_labels, 10),
+        "ndcg@10": ndcg_at_k(binary_relevance, 10),
     }
+
+    timings["total_s"] = round(time.time() - t0, 3)
 
     return {
         "parsed_query": parsed,
