@@ -1,5 +1,16 @@
-import { Paper, Typography, Box, Chip, Rating, Button, CircularProgress } from "@mui/material";
+import {
+  Paper,
+  Typography,
+  Box,
+  Chip,
+  Rating,
+  Button,
+  CircularProgress
+} from "@mui/material";
+
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+
 import { useState } from "react";
 import SellerFeedbackList from "./SellerFeedbackList";
 
@@ -14,11 +25,15 @@ export default function SearchResultCard({ item }: { item: any }) {
       ? Math.round(item.trust_score * 100)
       : null;
 
+  const rankingPercent =
+    item?.ranking_score !== undefined
+      ? Math.round(item.ranking_score * 100)
+      : null;
+
   const loadFeedback = async () => {
 
     if (!item?.seller_name) return;
 
-    // toggle se già caricati
     if (feedbacks.length > 0) {
       setOpen(!open);
       return;
@@ -153,33 +168,65 @@ export default function SearchResultCard({ item }: { item: any }) {
           {trustPercent !== null && (
             <Chip
               icon={<VerifiedUserIcon sx={{ fontSize: 16 }} />}
-              label={`Trust Score: ${trustPercent}%`}
+              label={`Trust Score ${trustPercent}%`}
               size="small"
               sx={{
-                bgcolor: trustPercent > 80 ? "#f4f4f4" : "#fff3cd",
-                color: trustPercent > 80 ? "#0d0d0d" : "#856404",
+                bgcolor: "#f4f4f4",
+                color: "#0d0d0d",
                 fontWeight: 500,
                 fontSize: 12,
-                border: trustPercent > 80 ? "1px solid #e5e5e5" : "none",
+                border: "1px solid #e5e5e5",
               }}
               onClick={(e) => e.stopPropagation()}
             />
           )}
 
-          {item._rerank_score !== undefined && (
-            <Typography
-              variant="caption"
+          {rankingPercent !== null && (
+            <Chip
+              icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+              label={`AI Match ${rankingPercent}%`}
+              size="small"
               sx={{
-                color: "#666",
-                fontWeight: 500
+                bgcolor: "#eef3ff",
+                color: "#3b5ccc",
+                fontWeight: 500,
+                fontSize: 12,
               }}
               onClick={(e) => e.stopPropagation()}
-            >
-              AI Match: {(item._rerank_score * 100).toFixed(0)}%
-            </Typography>
+            />
           )}
 
         </Box>
+
+        {/* WHY THIS RESULT */}
+        {item.explanations && item.explanations.length > 0 && (
+
+          <Box
+            display="flex"
+            gap={1}
+            flexWrap="wrap"
+            mb={2}
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            {item.explanations.map((exp: string, i: number) => (
+
+              <Chip
+                key={i}
+                label={exp}
+                size="small"
+                sx={{
+                  bgcolor: "#fafafa",
+                  border: "1px solid #e5e5e5",
+                  fontSize: 11
+                }}
+              />
+
+            ))}
+
+          </Box>
+
+        )}
 
         {/* FEEDBACK BUTTON */}
         <Box mt={2}>

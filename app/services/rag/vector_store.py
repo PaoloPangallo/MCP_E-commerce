@@ -1,16 +1,24 @@
 import faiss
 import numpy as np
+import pickle
+import os
 from typing import List, Dict
 
 from app.services.rag.embedding import embed
 
 DIM = 384
 
+INDEX_PATH = "rag_index.faiss"
+META_PATH = "rag_metadata.pkl"
+
 # cosine similarity → inner product
 _index = faiss.IndexFlatIP(DIM)
 
 _documents: List[Dict] = []
 
+# ------------------------------------------------
+# NORMALIZE VECTOR
+# ------------------------------------------------
 
 def _normalize(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v)
@@ -18,6 +26,40 @@ def _normalize(v: np.ndarray) -> np.ndarray:
         return v
     return v / norm
 
+
+# ------------------------------------------------
+# LOAD INDEX (if exists)
+# ------------------------------------------------
+
+def load_index():
+
+    global _index, _documents
+
+    if os.path.exists(INDEX_PATH):
+
+        _index = faiss.read_index(INDEX_PATH)
+
+    if os.path.exists(META_PATH):
+
+        with open(META_PATH, "rb") as f:
+            _documents = pickle.load(f)
+
+
+# ------------------------------------------------
+# SAVE INDEX
+# ------------------------------------------------
+
+def save_index():
+
+    faiss.write_index(_index, INDEX_PATH)
+
+    with open(META_PATH, "wb") as f:
+        pickle.dump(_documents, f)
+
+
+# ------------------------------------------------
+# ADD DOCUMENTS
+# ------------------------------------------------
 
 def add_documents(texts: List[str], metadata: List[Dict]):
 
@@ -53,6 +95,13 @@ def add_documents(texts: List[str], metadata: List[Dict]):
 
     _documents.extend(metas)
 
+    # save automatically
+    save_index()
+
+
+# ------------------------------------------------
+# SEARCH
+# ------------------------------------------------
 
 def search(query: str, k: int = 5):
 
@@ -88,3 +137,10 @@ def search(query: str, k: int = 5):
         results.append(doc)
 
     return results
+
+
+# ------------------------------------------------
+# AUTO LOAD ON IMPORT
+# ------------------------------------------------
+
+load_index()

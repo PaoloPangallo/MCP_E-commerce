@@ -5,6 +5,8 @@ _documents: List[Dict] = []
 _corpus: List[List[str]] = []
 _bm25 = None
 
+_seen_texts = set()
+
 
 def _tokenize(text: str):
     return text.lower().split()
@@ -14,14 +16,30 @@ def add_documents(texts: List[str], metadata: List[Dict]):
 
     global _bm25
 
+    added = 0
+
     for text, meta in zip(texts, metadata):
 
+        if not text:
+            continue
+
+        # dedup
+        if text in _seen_texts:
+            continue
+
         tokens = _tokenize(text)
+
+        if not tokens:
+            continue
 
         _corpus.append(tokens)
         _documents.append(meta)
 
-    _bm25 = BM25Okapi(_corpus)
+        _seen_texts.add(text)
+        added += 1
+
+    if added > 0:
+        _bm25 = BM25Okapi(_corpus)
 
 
 def search(query: str, k: int = 5):
@@ -30,6 +48,9 @@ def search(query: str, k: int = 5):
         return []
 
     tokens = _tokenize(query)
+
+    if not tokens:
+        return []
 
     scores = _bm25.get_scores(tokens)
 

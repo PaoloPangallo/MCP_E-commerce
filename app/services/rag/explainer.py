@@ -11,10 +11,15 @@ def explain_results(query: str, items: List[Dict]) -> str:
     best_title = best.get("title")
     best_price = best.get("price")
     best_seller = best.get("seller_name")
+
     trust = best.get("trust_score")
-    score = best.get("_rerank_score")
+    score = best.get("ranking_score") or best.get("_rerank_score")
 
     explanation = []
+
+    # ------------------------------------------------
+    # overview
+    # ------------------------------------------------
 
     explanation.append(
         f"Ho trovato {len(items)} risultati per '{query}'."
@@ -22,33 +27,69 @@ def explain_results(query: str, items: List[Dict]) -> str:
 
     if best_title:
         explanation.append(
-            f"Il risultato più rilevante è '{best_title}'."
+            f"Il prodotto più rilevante è '{best_title}'."
         )
 
-    if trust:
+    # ------------------------------------------------
+    # trust
+    # ------------------------------------------------
+
+    if trust is not None and best_seller:
         explanation.append(
-            f"Il venditore {best_seller} ha un trust score di {round(trust*100)}%."
+            f"Il venditore {best_seller} ha un trust score di {round(trust * 100)}%."
         )
+
+    # ------------------------------------------------
+    # prezzo
+    # ------------------------------------------------
 
     if best_price:
         explanation.append(
-            f"Il prezzo è {best_price}€."
+            f"Il prezzo del prodotto è {best_price}€."
         )
 
-    if score:
+    # ------------------------------------------------
+    # explainable ranking
+    # ------------------------------------------------
+
+    reasons = best.get("explanations") or []
+
+    if reasons:
+
+        readable = ", ".join(reasons)
+
         explanation.append(
-            "Questo prodotto è stato classificato in cima grazie alla combinazione di affidabilità del venditore, prezzo e rilevanza rispetto alla tua ricerca."
+            f"Questo risultato è stato classificato in alto perché: {readable}."
         )
 
-    # feedback RAG
+    elif score:
+        explanation.append(
+            "Questo prodotto è stato classificato in cima grazie alla combinazione di rilevanza rispetto alla query, affidabilità del venditore e prezzo competitivo."
+        )
+
+    # ------------------------------------------------
+    # RAG feedback
+    # ------------------------------------------------
+
     feedbacks = best.get("rag_feedback") or []
 
     if feedbacks:
-        example = feedbacks[0].get("text")
 
-        if example:
+        examples = []
+
+        for f in feedbacks[:2]:
+
+            text = f.get("text")
+
+            if text:
+                examples.append(text)
+
+        if examples:
+
+            joined = " | ".join(examples)
+
             explanation.append(
-                f"Ad esempio, un feedback recente dice: \"{example}\"."
+                f"Alcuni feedback recenti sul venditore indicano: \"{joined}\"."
             )
 
     return " ".join(explanation)
