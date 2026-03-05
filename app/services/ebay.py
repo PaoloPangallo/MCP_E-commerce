@@ -17,15 +17,8 @@ EBAY_MARKETPLACE_ID = os.getenv("EBAY_MARKETPLACE_ID", "EBAY_IT").strip()
 
 REQUEST_TIMEOUT = int(os.getenv("EBAY_REQUEST_TIMEOUT", "20"))
 
-# Quanto espandere "approx" (intorno a/circa/sui)
-APPROX_PRICE_PCT = float(os.getenv("APPROX_PRICE_PCT", "0.2"))          # 0.2 => ±20%
-APPROX_PRICE_MIN_DELTA = float(os.getenv("APPROX_PRICE_MIN_DELTA", "10"))  # minimo ±10 euro
-
-# Autocorrezione eBay
-EBAY_AUTO_CORRECT = os.getenv("EBAY_AUTO_CORRECT", "true").strip().lower() == "true"
-
-# Aggiornamento brand vocab runtime (sconsigliato se vuoi zero rumore; se on, usa SOLO campo strutturato)
-EBAY_UPDATE_BRAND_VOCAB = os.getenv("EBAY_UPDATE_BRAND_VOCAB", "false").strip().lower() == "true"
+APPROX_PRICE_PCT = float(os.getenv("APPROX_PRICE_PCT", "0.2"))
+APPROX_PRICE_MIN_DELTA = float(os.getenv("APPROX_PRICE_MIN_DELTA", "10"))
 
 if EBAY_ENV == "production":
     OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
@@ -35,7 +28,7 @@ else:
     SEARCH_URL = "https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search"
 
 # ============================================================
-# TOKEN CACHE (semplice, in-memory)
+# TOKEN CACHE
 # ============================================================
 
 _token_cache: Dict[str, Any] = {
@@ -43,15 +36,13 @@ _token_cache: Dict[str, Any] = {
     "expires_at": 0.0,
 }
 
+
 # ============================================================
 # OAUTH
 # ============================================================
 
 def _get_oauth_token() -> str:
-    """
-    Restituisce un access token valido.
-    Usa una cache in-memory finché il token non scade.
-    """
+
     global _token_cache
 
     now = time.time()
@@ -60,10 +51,10 @@ def _get_oauth_token() -> str:
         return _token_cache["access_token"]
 
     if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
-        raise RuntimeError("EBAY_CLIENT_ID o EBAY_CLIENT_SECRET mancanti nel .env")
+        raise RuntimeError("EBAY_CLIENT_ID o EBAY_CLIENT_SECRET mancanti")
 
     auth_string = f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}"
-    encoded_auth = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
+    encoded_auth = base64.b64encode(auth_string.encode()).decode()
 
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -83,7 +74,7 @@ def _get_oauth_token() -> str:
     )
 
     if response.status_code != 200:
-        raise RuntimeError(f"OAuth error: {response.status_code} {response.text}")
+        raise RuntimeError(f"OAuth error {response.status_code}: {response.text}")
 
     token_data = response.json()
 
@@ -91,15 +82,16 @@ def _get_oauth_token() -> str:
     expires_in = token_data.get("expires_in", 7200)
 
     if not access_token:
-        raise RuntimeError(f"OAuth response without access_token: {token_data}")
+        raise RuntimeError("OAuth response without access_token")
 
     _token_cache["access_token"] = access_token
-    _token_cache["expires_at"] = now + float(expires_in) - 60  # buffer sicurezza
+    _token_cache["expires_at"] = now + float(expires_in) - 60
 
     return access_token
 
+
 # ============================================================
-# CONSTRAINTS -> EBAY FILTERS
+# PRICE FILTER
 # ============================================================
 
 def _normalize_numeric(value: Any) -> Optional[float]:
@@ -107,28 +99,23 @@ def _normalize_numeric(value: Any) -> Optional[float]:
         if value is None:
             return None
         return float(value)
-    except (TypeError, ValueError):
+    except:
         return None
 
+
 def _expand_approx(value: float) -> Tuple[float, float]:
-    """
-    Converte approx (es. 100) in range (es. 80..120), configurabile via env.
-    """
+
     delta = max(value * APPROX_PRICE_PCT, APPROX_PRICE_MIN_DELTA)
     return round(value - delta, 2), round(value + delta, 2)
 
+
 def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
-    """
-    Converte constraints di prezzo nel formato eBay Browse API.
 
-    Supporta:
-    - <=, >=, between, approx
-    """
-
-    min_price: Optional[float] = None
-    max_price: Optional[float] = None
+    min_price = None
+    max_price = None
 
     for c in constraints:
+
         if c.get("type") != "price":
             continue
 
@@ -136,31 +123,22 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
         val = c.get("value")
 
         if op == "<=":
-            candidate = _normalize_numeric(val)
-            if candidate is not None:
-                max_price = candidate
+            max_price = _normalize_numeric(val)
 
         elif op == ">=":
-            candidate = _normalize_numeric(val)
-            if candidate is not None:
-                min_price = candidate
+            min_price = _normalize_numeric(val)
 
-        elif op == "between" and isinstance(val, list) and len(val) == 2:
-            left = _normalize_numeric(val[0])
-            right = _normalize_numeric(val[1])
-            if left is not None and right is not None:
-                min_price = min(left, right)
-                max_price = max(left, right)
+        elif op == "between" and isinstance(val, list):
 
-        elif op == "approx":
-            candidate = _normalize_numeric(val)
-            if candidate is not None:
-                lo, hi = _expand_approx(candidate)
-                min_price = lo
-                max_price = hi
+            if len(val) == 2:
+                left = _normalize_numeric(val[0])
+                right = _normalize_numeric(val[1])
 
-    # 🔥 Ignora filtri inutili tipo >= 0 o >= 1
-    if min_price is not None and min_price <= 1:
+                if left and right:
+                    min_price = min(left, right)
+                    max_price = max(left, right)
+
+    if min_price and min_price <= 1:
         min_price = None
 
     if min_price is None and max_price is None:
@@ -174,7 +152,13 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
 
     return f"price:[{min_price}..{max_price}]"
 
+
+# ============================================================
+# CONDITION FILTER
+# ============================================================
+
 def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
+
     mapping = {
         "new": "1000",
         "refurbished": "2000",
@@ -182,26 +166,34 @@ def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
     }
 
     for c in constraints:
+
         if c.get("type") != "condition":
             continue
 
-        val = str(c.get("value", "")).strip().lower()
-        condition_id = mapping.get(val)
-        if condition_id:
-            return f"conditionIds:{{{condition_id}}}"
+        val = str(c.get("value", "")).lower()
+
+        if val in mapping:
+            return f"conditionIds:{{{mapping[val]}}}"
 
     return None
 
+
+# ============================================================
+# BUILD EBAY FILTER STRING
+# ============================================================
+
 def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
-    filters: List[str] = []
+
+    filters = []
 
     price_filter = _build_price_filter(constraints)
+
     if price_filter:
         filters.append(price_filter)
-        # ✅ OBBLIGATORIO con price:[..] secondo eBay Browse API
         filters.append("priceCurrency:EUR")
 
     condition_filter = _build_condition_filter(constraints)
+
     if condition_filter:
         filters.append(condition_filter)
 
@@ -210,73 +202,78 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
 
     return ",".join(filters)
 
-# ============================================================
-# PREFERENCES -> EBAY PARAMS
-# ============================================================
-
-def _extract_sort(preferences: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    """
-    Mappa le preferences di sort (parser) al parametro sort eBay.
-    """
-    if not preferences:
-        return None
-
-    for p in preferences:
-        if p.get("type") != "sort":
-            continue
-        v = p.get("value")
-        if v == "price_asc":
-            return "price"
-        if v == "price_desc":
-            return "-price"
-        if v == "newest":
-            return "newlyListed"
-    return None
 
 # ============================================================
-# RESPONSE NORMALIZATION
+# BUILD EBAY QUERY
+# ============================================================
+
+def _build_query(parsed: Dict[str, Any]) -> str:
+
+    parts = []
+
+    brands = parsed.get("brands") or []
+    product = parsed.get("product")
+    semantic_query = parsed.get("semantic_query")
+
+    if brands:
+        parts.extend(brands)
+
+    if product:
+        parts.append(product)
+
+    if not parts and semantic_query:
+        parts.append(semantic_query)
+
+    if not parts:
+        parts.append(parsed.get("original_query", ""))
+
+    return " ".join(parts).strip()
+
+
+# ============================================================
+# NORMALIZE RESPONSE
 # ============================================================
 
 def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
+
     price_info = item.get("price") or {}
     seller_info = item.get("seller") or {}
     image_info = item.get("image") or {}
 
-    price_value = _normalize_numeric(price_info.get("value")) or 0.0
-    seller_rating = _normalize_numeric(seller_info.get("feedbackPercentage"))
-
     return {
         "ebay_id": item.get("itemId"),
         "title": item.get("title"),
-        "price": price_value,
+        "price": _normalize_numeric(price_info.get("value")) or 0,
         "currency": price_info.get("currency"),
         "condition": item.get("condition"),
         "seller_name": seller_info.get("username"),
-        "seller_rating": seller_rating,
+        "seller_rating": _normalize_numeric(seller_info.get("feedbackPercentage")),
         "url": item.get("itemWebUrl"),
         "image_url": image_info.get("imageUrl"),
-        # se disponibile (non sempre): brand strutturato
         "brand": item.get("brand"),
     }
 
+
 # ============================================================
-# PUBLIC API
+# PUBLIC SEARCH API
 # ============================================================
 
 def search_items(
-    query_text: str,
-    constraints: List[Dict[str, Any]],
-    preferences: Optional[List[Dict[str, Any]]] = None,
+    parsed_query: Dict[str, Any],
     limit: int = 30,
 ) -> List[Dict[str, Any]]:
 
     token = _get_oauth_token()
-    print("SEARCH URL:", SEARCH_URL)
 
     headers = {
         "Authorization": f"Bearer {token}",
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
+
+    query = _build_query(parsed_query)
+
+    constraints = parsed_query.get("constraints", [])
+    preferences = parsed_query.get("preferences", [])
 
     items = []
     offset = 0
@@ -285,18 +282,15 @@ def search_items(
     while len(items) < limit:
 
         params = {
-            "q": query_text.strip(),
+            "q": query,
             "limit": page_size,
-            "offset": offset
+            "offset": offset,
         }
 
         filter_string = _build_filter_string(constraints)
+
         if filter_string:
             params["filter"] = filter_string
-
-        sort_value = _extract_sort(preferences)
-        if sort_value:
-            params["sort"] = sort_value
 
         response = requests.get(
             SEARCH_URL,
@@ -306,14 +300,12 @@ def search_items(
         )
 
         if response.status_code != 200:
-            raise RuntimeError(f"Search error: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"eBay search error {response.status_code}: {response.text}"
+            )
 
         data = response.json()
 
-        print("EBAY ITEMS:", len(data.get("itemSummaries", [])))
-        print("EBAY TOTAL:", data.get("total"))
-        print("EBAY LIMIT:", params.get("limit"))
-        print(data)
         page_items = data.get("itemSummaries", [])
 
         if not page_items:
@@ -325,4 +317,4 @@ def search_items(
 
     items = items[:limit]
 
-    return [_normalize_item(item) for item in items]
+    return [_normalize_item(i) for i in items]

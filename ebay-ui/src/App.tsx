@@ -7,172 +7,230 @@ import MessageBubble from "./component/MessageBubble";
 import SearchResultList from "./component/SearchResultList";
 import AIAnalysisCard from "./component/AIAnalysisCard";
 
+
+// --------------------------------------------------
+// TYPES
+// --------------------------------------------------
+
 interface Message {
-  role: "user" | "assistant";
-  content: string;
+  role: "user" | "assistant"
+  content: string
+}
+
+interface SearchItem {
+  ebay_id?: string
+  title?: string
+  price?: number
+  currency?: string
+  condition?: string
+  seller_name?: string
+  seller_rating?: number
+  url?: string
+  image_url?: string
+
+  trust_score?: number
+  ranking_score?: number
+  explanations?: string[]
+
+  _already_in_db?: boolean
+}
+
+interface IRMetrics {
+  "precision@5"?: number
+  "precision@10"?: number
+  "recall@10"?: number
+  "ndcg@10"?: number
 }
 
 interface SearchBlock {
-  query: string;
-  results: any[];
-  analysis: string | null;
+  query: string
+  results: SearchItem[]
+  analysis: string | null
+  metrics?: IRMetrics
+  rag_context?: string
 }
+
+
+// --------------------------------------------------
+// APP
+// --------------------------------------------------
 
 export default function App() {
 
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Ciao! Dimmi cosa vuoi cercare su eBay.",
-    },
-  ]);
+      content: "Ciao! Dimmi cosa vuoi cercare su eBay."
+    }
+  ])
 
-  const [searches, setSearches] = useState<SearchBlock[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [searches, setSearches] = useState<SearchBlock[]>([])
+  const [loading, setLoading] = useState(false)
 
-  const [cache, setCache] = useState<Record<string, any>>({});
+  const [cache, setCache] = useState<Record<string, SearchBlock>>({})
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, searches]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, searches])
 
-  // -----------------------------
-  // Save search history
-  // -----------------------------
+
+  // --------------------------------------------------
+  // SAVE SEARCH HISTORY
+  // --------------------------------------------------
 
   const saveSearch = (query: string, resultsCount: number = 0) => {
 
     const history = JSON.parse(
       localStorage.getItem("search_history") || "[]"
-    );
+    )
 
     const updated = [
       { query, results: resultsCount },
       ...history.filter((h: any) => h.query !== query)
-    ];
+    ]
 
-    const newHistory = updated.slice(0, 20);
+    const newHistory = updated.slice(0, 20)
 
     localStorage.setItem(
       "search_history",
       JSON.stringify(newHistory)
-    );
+    )
 
-    window.dispatchEvent(new Event("search_history_updated"));
-  };
+    window.dispatchEvent(new Event("search_history_updated"))
+  }
 
-  // -----------------------------
-  // Handle search
-  // -----------------------------
+
+  // --------------------------------------------------
+  // HANDLE SEARCH
+  // --------------------------------------------------
 
   const handleSend = async (text: string) => {
 
-    if (!text || !text.trim()) return;
+    if (!text || !text.trim()) return
+
+    const query = text.trim()
+    const key = query.toLowerCase()
 
     const userMessage: Message = {
       role: "user",
-      content: text,
-    };
+      content: query
+    }
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage])
 
-    // -----------------------------
+
+    // --------------------------------------------------
     // CACHE HIT
-    // -----------------------------
+    // --------------------------------------------------
 
-    if (cache[text]) {
+    if (cache[key]) {
 
-      const cached = cache[text];
+      const cached = cache[key]
 
-      saveSearch(text, cached.results.length);
+      saveSearch(query, cached.results.length)
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: `Ho trovato ${cached.results.length} risultati per "${text}" (cache).`,
-      };
+        content: `Ho trovato ${cached.results.length} risultati per "${query}" (cache).`
+      }
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, assistantMessage])
 
-      setSearches((prev) => [
-        ...prev,
-        {
-          query: text,
-          results: cached.results,
-          analysis: cached.analysis
-        }
-      ]);
+      setSearches(prev => [...prev, cached])
 
-      return;
+      return
     }
 
-    setLoading(true);
+
+    setLoading(true)
 
     try {
 
-      const res = await fetch("http://127.0.0.1:8000/search", {
+      const res = await fetch("http://127.0.0.1:8020/search", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          query: text,
-          llm_engine: "ollama",
-        }),
-      });
+          query,
+          llm_engine: "ollama"
+        })
+      })
 
       if (!res.ok) {
-        throw new Error("Backend error");
+        throw new Error("Backend error")
       }
 
-      const data = await res.json();
+      const data = await res.json()
 
-      const newResults = data.results || [];
-      const newAnalysis = data.analysis || null;
+      const newResults: SearchItem[] = data.results || []
+      const newAnalysis: string | null = data.analysis || null
 
-      // save in cache
-      setCache((prev) => ({
+      const newMetrics: IRMetrics | undefined = data.metrics || undefined
+      const newRagContext: string | undefined = data.rag_context || undefined
+
+
+      const newSearch: SearchBlock = {
+        query,
+        results: newResults,
+        analysis: newAnalysis,
+        metrics: newMetrics,
+        rag_context: newRagContext
+      }
+
+
+      // --------------------------------------------------
+      // CACHE
+      // --------------------------------------------------
+
+      setCache(prev => ({
         ...prev,
-        [text]: {
-          results: newResults,
-          analysis: newAnalysis
-        }
-      }));
+        [key]: newSearch
+      }))
 
-      // update history
-      saveSearch(text, newResults.length);
+
+      // --------------------------------------------------
+      // SAVE HISTORY
+      // --------------------------------------------------
+
+      saveSearch(query, newResults.length)
+
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: `Ho trovato ${data.results_count || newResults.length} risultati per "${text}".`,
-      };
+        content: `Ho trovato ${data.results_count || newResults.length} risultati per "${query}".`
+      }
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, assistantMessage])
 
-      const newSearch: SearchBlock = {
-        query: text,
-        results: newResults,
-        analysis: newAnalysis
-      };
+      setSearches(prev => [...prev, newSearch])
 
-      setSearches((prev) => [...prev, newSearch]);
+    }
+    catch (err) {
 
-    } catch (err) {
-
-      console.error("Search error:", err);
+      console.error("Search error:", err)
 
       const errorMessage: Message = {
         role: "assistant",
-        content: "Errore durante la ricerca.",
-      };
+        content: "Errore durante la ricerca."
+      }
 
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages(prev => [...prev, errorMessage])
 
-    } finally {
-      setLoading(false);
     }
-  };
+    finally {
+      setLoading(false)
+    }
+
+  }
+
+
+  // --------------------------------------------------
+  // RENDER
+  // --------------------------------------------------
 
   return (
 
@@ -194,37 +252,56 @@ export default function App() {
 
         <Box sx={{ width: "100%", maxWidth: 1000 }}>
 
-          {/* Chat messages */}
+
+          {/* CHAT MESSAGES */}
+
           {messages.map((msg, i) => (
+
             <Box key={i} mb={2}>
               <MessageBubble role={msg.role}>
                 {msg.content}
               </MessageBubble>
             </Box>
+
           ))}
 
-          {/* Search blocks */}
+
+          {/* SEARCH RESULTS */}
+
           {searches.map((search, i) => (
 
-            <Box key={i} mt={3}>
+            <Box key={search.query + i} mt={3}>
 
               {search.analysis && (
-                <AIAnalysisCard text={search.analysis} />
+
+                <AIAnalysisCard
+                  text={search.analysis}
+                  metrics={search.metrics}
+                  rag_context={search.rag_context}
+                />
+
               )}
 
               {search.results.length > 0 && (
-                <SearchResultList results={search.results} />
+
+                <SearchResultList
+                  results={search.results}
+                />
+
               )}
 
             </Box>
 
           ))}
 
+
           <div ref={bottomRef} />
 
         </Box>
 
+
         {loading && (
+
           <Box
             sx={{
               position: "fixed",
@@ -235,12 +312,19 @@ export default function App() {
           >
             <CircularProgress size={24} />
           </Box>
+
         )}
 
       </Box>
 
-      <ChatInput onSend={handleSend} disabled={loading} />
+
+      <ChatInput
+        onSend={handleSend}
+        disabled={loading}
+      />
 
     </ChatLayout>
-  );
+
+  )
+
 }

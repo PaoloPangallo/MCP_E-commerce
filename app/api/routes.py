@@ -1,5 +1,5 @@
 import logging
-import re
+import os
 import time
 from typing import Literal
 
@@ -20,6 +20,8 @@ from app.services.rag.reranker import rerank_products
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+print("SEARCH ROUTER FILE:", os.path.abspath(__file__))
 
 
 # ============================================================
@@ -58,42 +60,19 @@ def health():
 
 @router.post("/parse")
 def parse(request: SearchRequest):
-    return parse_query_service(
-        request.query,
-        llm_engine=request.llm_engine,
-        include_meta=True,
-    )
+    if not request.query or not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query vuota")
 
+    use_llm = request.llm_engine != "rule_based"
 
-# ============================================================
-# BUILD EBAY QUERY (robusta + <=100 chars)
-# ============================================================
-
-def build_ebay_query(parsed: dict, original_query: str) -> str:
-    semantic = (parsed.get("semantic_query") or "").strip()
-    product = (parsed.get("product") or "").strip()
-    brands = parsed.get("brands", []) or []
-
-    # Preferisci semantic_query (di solito è già "scarpe adidas", "garmin watch", ecc.)
-    if semantic:
-        q = semantic
-    else:
-        tokens = []
-        if brands:
-            tokens.extend([str(b).strip() for b in brands if str(b).strip()])
-        if product:
-            tokens.append(product)
-        q = " ".join(tokens).strip()
-
-    # Fallback finale
-    if not q:
-        q = original_query.strip()
-
-    # normalizza token (evita simboli strani)
-    q = " ".join(re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]{2,}", q))
-
-    # eBay tronca >100 char → tronchiamo noi
-    return q[:100].strip() if q else original_query
+    try:
+        return parse_query_service(
+            request.query,
+            use_llm=use_llm,
+            include_meta=True,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
 
 
 # ============================================================
@@ -102,8 +81,6 @@ def build_ebay_query(parsed: dict, original_query: str) -> str:
 
 @router.post("/search")
 def search(request: SearchRequest, db: Session = Depends(get_db)):
-
-    print("SEARCH STARTED")
 
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
@@ -115,12 +92,14 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     # 1) PARSE
     # ============================================================
 
+    use_llm = request.llm_engine != "rule_based"
+
     try:
         t = time.time()
 
         parsed = parse_query_service(
             request.query,
-            llm_engine=request.llm_engine,
+            use_llm=use_llm,
             include_meta=True,
         )
 
@@ -129,10 +108,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
 
-    constraints = parsed.get("constraints", []) or []
-    preferences = parsed.get("preferences", []) or []
-
-    ebay_query = build_ebay_query(parsed, request.query)
+    # debug output
+    ebay_query_used = parsed.get("semantic_query") or request.query
 
     # ============================================================
     # 1.5) RAG retrieval (pre-query context)
@@ -150,10 +127,9 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     try:
         t = time.time()
 
+        # ✅ NEW: ebay.py ora vuole TUTTA la parsed_query
         items = search_items(
-            query_text=ebay_query,
-            constraints=constraints,
-            preferences=preferences,
+            parsed_query=parsed,
             limit=20
         )
 
@@ -176,15 +152,11 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     filtered_items = []
 
     for item in items:
-
         ebay_id = item.get("ebay_id")
-
         if not ebay_id:
             continue
-
         if ebay_id in seen_ids:
             continue
-
         seen_ids.add(ebay_id)
         filtered_items.append(item)
 
@@ -205,18 +177,18 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     seller_trust_cache = {}
 
     try:
-
-        t = time.time()
+        t_db = time.time()
 
         for item in items:
 
             ebay_id = item.get("ebay_id")
+            if not ebay_id:
+                continue
 
             exists = db.query(Listing).filter_by(ebay_id=ebay_id).first()
             already = exists is not None
 
             if not already:
-
                 listing = Listing(
                     ebay_id=ebay_id,
                     title=item.get("title"),
@@ -228,7 +200,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                     url=item.get("url"),
                     image_url=item.get("image_url"),
                 )
-
                 db.add(listing)
                 saved_count += 1
 
@@ -244,27 +215,19 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             ][:3]
 
             if seller_name:
-
                 try:
-
                     if seller_name in seller_trust_cache:
-
                         trust_score = seller_trust_cache[seller_name]
-
                     else:
-
                         # ---------- feedback fetch (cached) ----------
                         if seller_name not in seller_feedback_cache:
-
                             feedbacks = get_seller_feedback(
                                 seller_name,
                                 limit=10
                             )
-
                             seller_feedback_cache[seller_name] = feedbacks
 
-                            # ✅ NEW: ingest feedback in RAG (persistente)
-                            # indicizziamo solo quando li scarichiamo davvero
+                            # ✅ ingest feedback in RAG (persistente)
                             try:
                                 ingest_seller_feedback(
                                     seller_name=seller_name,
@@ -273,7 +236,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
                                 )
                             except Exception:
                                 pass
-
                         else:
                             feedbacks = seller_feedback_cache[seller_name]
 
@@ -292,7 +254,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             # ---------------- OUTPUT ----------------
 
             item_copy = dict(item)
-
             item_copy["_already_in_db"] = already
             item_copy["trust_score"] = trust_score
             item_copy["rag_feedback"] = rag_context
@@ -300,17 +261,11 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             results_out.append(item_copy)
 
         db.commit()
-
-        timings["db_commit_s"] = round(time.time() - t, 3)
+        timings["db_commit_s"] = round(time.time() - t_db, 3)
 
     except Exception as e:
-
         db.rollback()
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Errore DB: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Errore DB: {str(e)}")
 
     timings["total_s"] = round(time.time() - t0, 3)
 
@@ -326,7 +281,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
     for item in results_out:
 
-        # NB: il tuo reranker potrebbe mettere "score" oppure "_rerank_score"
         relevance = item.get("score", item.get("_rerank_score", 0)) or 0
         trust = item.get("trust_score") or 0
         price = item.get("price") or 0
@@ -341,7 +295,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             0.1 * price_score
         )
 
-        item["ranking_score"] = round(ranking_score, 3)
+        item["ranking_score"] = round(float(ranking_score), 3)
 
     # ============================================================
     # 6) EXPLAINABLE RANKING
@@ -361,7 +315,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
             explanations.append("High relevance match")
 
         price = item.get("price")
-
         if price and price < 200:
             explanations.append("Competitive price")
 
@@ -371,8 +324,6 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     # 7) RAG CONTEXT + AI ANALYSIS
     # ============================================================
 
-    # (opzionale ma utile) ricarica RAG docs post-ingest,
-    # così build_context/explain_results vedono anche i feedback appena indicizzati
     try:
         rag_docs_after = retrieve_context(request.query, k=10)
     except Exception:
@@ -387,41 +338,28 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
     analysis = explain_results(request.query, results_out)
 
     # ============================================================
-    # 8) IR METRICS
+    # 8) IR METRICS (proxy labels)
     # ============================================================
 
-    relevance_labels = []
-
-    for item in results_out:
-        score = item.get("ranking_score", 0)
-
-        # proxy relevance
-        relevance = 1 if score > 0.75 else 0
-
-        relevance_labels.append(relevance)
+    relevance_labels = [
+        item.get("ranking_score", 0)
+        for item in results_out
+    ]
 
     metrics = {
-
         "precision@5": precision_at_k(relevance_labels, 5),
-
         "precision@10": precision_at_k(relevance_labels, 10),
-
         "recall@10": recall_at_k(
             relevance_labels,
             total_relevant=sum(relevance_labels),
             k=10
         ),
-
         "ndcg@10": ndcg_at_k(relevance_labels, 10),
     }
 
-    # ============================================================
-    # RESPONSE
-    # ============================================================
-
     return {
         "parsed_query": parsed,
-        "ebay_query_used": ebay_query,
+        "ebay_query_used": ebay_query_used,
         "results_count": len(results_out),
         "saved_new_count": saved_count,
         "analysis": analysis,

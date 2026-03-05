@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, HTTPException
 
 from app.services.feedback import get_seller_feedback
@@ -6,6 +8,7 @@ from app.services.nlp_sentiment import compute_sentiment_score
 
 
 seller_router = APIRouter()
+
 
 
 @seller_router.get("/seller/{seller_name}/feedback")

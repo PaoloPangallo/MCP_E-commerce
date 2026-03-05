@@ -2,6 +2,11 @@ import { Box, Typography, Divider, Chip } from "@mui/material";
 import SearchResultCard from "./SearchResultCard";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 
+
+// ----------------------------------------------------
+// TYPES
+// ----------------------------------------------------
+
 interface SearchItem {
   ebay_id?: string
   title?: string
@@ -9,17 +14,33 @@ interface SearchItem {
   currency?: string
   image_url?: string
   url?: string
+
   seller_name?: string
   seller_rating?: number
+
   trust_score?: number
-  _rerank_score?: number
+  ranking_score?: number
+
+  explanations?: string[]
+  rag_feedback?: any[]
+
+  _already_in_db?: boolean
 }
+
+
+// ----------------------------------------------------
+// COMPONENT
+// ----------------------------------------------------
 
 export default function SearchResultList({
   results = [],
 }: {
   results?: SearchItem[]
 }) {
+
+  // ----------------------------------------------------
+  // EMPTY STATE
+  // ----------------------------------------------------
 
   if (!results || results.length === 0) {
     return (
@@ -53,7 +74,13 @@ export default function SearchResultList({
     )
   }
 
+
+  // ----------------------------------------------------
+  // UI
+  // ----------------------------------------------------
+
   return (
+
     <Box
       sx={{
         mt: 3,
@@ -62,7 +89,7 @@ export default function SearchResultList({
       }}
     >
 
-      {/* Header */}
+      {/* HEADER */}
       <Box
         sx={{
           display: "flex",
@@ -85,16 +112,20 @@ export default function SearchResultList({
       </Box>
 
 
-      {/* Lista */}
+      {/* LIST */}
       {results.map((item, index) => {
 
         const key = item.ebay_id ?? `${index}-${item.title}`
 
+        const ranking = item.ranking_score ?? 0
+
         return (
+
           <Box key={key} sx={{ position: "relative" }}>
 
-            {/* AI Best Match */}
-            {index === 0 && item._rerank_score && item._rerank_score > 0.7 && (
+            {/* AI BEST MATCH */}
+            {index === 0 && ranking > 0.7 && (
+
               <Box
                 sx={{
                   position: "absolute",
@@ -103,6 +134,7 @@ export default function SearchResultList({
                   zIndex: 1,
                 }}
               >
+
                 <Chip
                   icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
                   label="AI Best Match"
@@ -114,36 +146,43 @@ export default function SearchResultList({
                     fontSize: 11,
                     height: 24,
                     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+
                     "& .MuiChip-icon": {
                       color: "#856404",
                     },
                   }}
                 />
+
               </Box>
+
             )}
 
             <SearchResultCard
               item={item}
-              best={index === 0}
             />
 
-            {/* Divider ogni 3 */}
+            {/* DIVIDER EVERY 3 */}
             {index < results.length - 1 && (index + 1) % 3 === 0 && (
+
               <Divider
                 sx={{
                   my: 3,
                   borderColor: "#ececf1",
                 }}
               />
+
             )}
 
           </Box>
+
         )
 
       })}
 
-      {/* Footer */}
+
+      {/* FOOTER */}
       {results.length > 5 && (
+
         <Box
           sx={{
             mt: 4,
@@ -152,6 +191,7 @@ export default function SearchResultList({
             textAlign: "center",
           }}
         >
+
           <Typography
             sx={{
               fontSize: 13,
@@ -160,9 +200,13 @@ export default function SearchResultList({
           >
             Fine risultati · {results.length} articoli analizzati
           </Typography>
+
         </Box>
+
       )}
 
     </Box>
+
   )
+
 }

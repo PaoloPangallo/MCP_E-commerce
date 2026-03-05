@@ -10,6 +10,7 @@ import {
 
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import SellerTrustGauge from "./SellerTrustGauge"
 
 import { useState } from "react";
 import SellerFeedbackList from "./SellerFeedbackList";
@@ -44,7 +45,7 @@ export default function SearchResultCard({ item }: { item: any }) {
       setLoading(true);
 
       const res = await fetch(
-        `http://127.0.0.1:8000/seller/${item.seller_name}/feedback`
+        `http://127.0.0.1:8020/seller/${item.seller_name}/feedback`
       );
 
       if (!res.ok) {
@@ -161,7 +162,7 @@ export default function SearchResultCard({ item }: { item: any }) {
           </Typography>
 
         </Box>
-
+        <SellerTrustGauge trust={item.trust_score} />
         {/* TRUST + AI SCORE */}
         <Box display="flex" alignItems="center" gap={2} mb={1}>
 

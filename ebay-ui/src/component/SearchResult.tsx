@@ -1,79 +1,163 @@
-import { Paper, Typography, Box, Chip, Rating } from "@mui/material";
+import {
+  Paper,
+  Typography,
+  Box,
+  Chip,
+  Rating,
+  Button,
+  CircularProgress
+} from "@mui/material";
+
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+
+import { useState } from "react";
+import SellerFeedbackList from "./SellerFeedbackList";
+
+
+// ----------------------------------------------------
+// TYPES
+// ----------------------------------------------------
 
 interface SearchItem {
-  title?: string;
-  price?: number;
-  currency?: string;
-  url?: string;
-  image_url?: string;
-  seller_name?: string;
-  seller_rating?: number;
-  trust_score?: number;
-  _already_in_db?: boolean;
+  ebay_id?: string
+  title?: string
+  price?: number
+  currency?: string
+  url?: string
+  image_url?: string
+
+  seller_name?: string
+  seller_rating?: number
+
+  trust_score?: number
+  ranking_score?: number
+
+  explanations?: string[]
+
+  rag_feedback?: any[]
+
+  _already_in_db?: boolean
 }
 
-function getTrustInfo(score?: number) {
-  if (score === undefined || score === null) {
-    return {
-      percent: null,
-      bg: "#ececf1",
-      text: "#6e6e80",
-    };
-  }
 
-  const percent = Math.round(score * 100);
-
-  if (percent >= 80) {
-    return { percent, bg: "#d4f4dd", text: "#0d8c6b" };
-  }
-
-  if (percent >= 60) {
-    return { percent, bg: "#fff3cd", text: "#856404" };
-  }
-
-  return { percent, bg: "#f8d7da", text: "#842029" };
-}
+// ----------------------------------------------------
+// COMPONENT
+// ----------------------------------------------------
 
 export default function SearchResultCard({ item }: { item: SearchItem }) {
-  const trust = getTrustInfo(item.trust_score);
+
+  const [feedbacks, setFeedbacks] = useState<any[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const trustPercent =
+    item.trust_score !== undefined && item.trust_score !== null
+      ? Math.round(item.trust_score * 100)
+      : null
+
+  const rankingPercent =
+    item.ranking_score !== undefined && item.ranking_score !== null
+      ? Math.round(item.ranking_score * 100)
+      : null
+
+
+  // ----------------------------------------------------
+  // OPEN ITEM
+  // ----------------------------------------------------
 
   const openItem = () => {
-    if (item.url) {
-      window.open(item.url, "_blank");
+
+    if (!item.url) return
+
+    window.open(item.url, "_blank")
+  }
+
+
+  // ----------------------------------------------------
+  // LOAD FEEDBACK
+  // ----------------------------------------------------
+
+  const loadFeedback = async () => {
+
+    if (!item.seller_name) return
+
+    // toggle if already loaded
+    if (feedbacks.length > 0) {
+      setOpen(!open)
+      return
     }
-  };
+
+    try {
+
+      setLoading(true)
+
+      const seller = encodeURIComponent(item.seller_name)
+
+      const res = await fetch(
+        `http://127.0.0.1:8020/seller/${seller}/feedback`
+      )
+
+      if (!res.ok) {
+        throw new Error("Errore API feedback")
+      }
+
+      const data = await res.json()
+
+      setFeedbacks(data.feedbacks || [])
+      setOpen(true)
+
+    } catch (err) {
+
+      console.error("Errore caricamento feedback:", err)
+
+    } finally {
+
+      setLoading(false)
+
+    }
+
+  }
+
+
+  // ----------------------------------------------------
+  // UI
+  // ----------------------------------------------------
 
   return (
+
     <Paper
       elevation={0}
-      onClick={openItem}
       sx={{
         p: 3,
         mb: 2,
-        borderRadius: 3,
+        borderRadius: "16px",
         border: "1px solid #e5e5e5",
         display: "flex",
         gap: 3,
         transition: "all 0.2s",
         cursor: item.url ? "pointer" : "default",
         bgcolor: "#fff",
+
         "&:hover": {
-          borderColor: "#10a37f",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-          transform: "translateY(-2px)",
-        },
+          borderColor: "#a3a3a3",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
+        }
       }}
+
+      onClick={openItem}
     >
-      {/* Image */}
+
+      {/* IMAGE */}
       <Box
         sx={{
           width: 120,
           height: 120,
-          borderRadius: 2,
+          borderRadius: "8px",
           overflow: "hidden",
           flexShrink: 0,
-          bgcolor: "#f7f7f8",
+          bgcolor: "#f4f4f4",
+          border: "1px solid #e5e5e5"
         }}
       >
         <img
@@ -82,15 +166,16 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           style={{
             width: "100%",
             height: "100%",
-            objectFit: "cover",
+            objectFit: "cover"
           }}
         />
       </Box>
 
-      {/* Content */}
+
+      {/* CONTENT */}
       <Box flex={1}>
 
-        {/* Already seen */}
+        {/* ALREADY SEEN */}
         {item._already_in_db && (
           <Chip
             label="Già visto"
@@ -98,56 +183,49 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             sx={{
               mb: 1,
               bgcolor: "#f1f1f1",
-              fontSize: 11,
+              fontSize: 11
             }}
+            onClick={(e) => e.stopPropagation()}
           />
         )}
 
-        {/* Title */}
+
+        {/* TITLE */}
         <Typography
+          variant="h6"
           sx={{
             fontWeight: 600,
             fontSize: 18,
-            color: "#202123",
+            color: "#0d0d0d",
             mb: 1,
-            lineHeight: 1.4,
+            lineHeight: 1.4
           }}
         >
           {item.title || "Prodotto"}
         </Typography>
 
-        {/* Price */}
+
+        {/* PRICE */}
         <Typography
           sx={{
             fontSize: 24,
             fontWeight: 700,
-            color: "#10a37f",
-            mb: 2,
+            color: "#0d0d0d",
+            mb: 2
           }}
         >
           {item.price ?? "—"} {item.currency ?? ""}
         </Typography>
 
-        {/* Seller */}
-        <Box display="flex" alignItems="center" gap={1} mb={1} flexWrap="wrap">
-          <Typography
-            variant="body2"
-            sx={{
-              color: "#6e6e80",
-              fontSize: 14,
-            }}
-          >
+
+        {/* SELLER */}
+        <Box display="flex" alignItems="center" gap={1} mb={1}>
+
+          <Typography sx={{ color: "#666", fontSize: 14 }}>
             Venditore:
           </Typography>
 
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: 600,
-              color: "#202123",
-              fontSize: 14,
-            }}
-          >
+          <Typography sx={{ fontWeight: 500, fontSize: 14 }}>
             {item.seller_name || "N/A"}
           </Typography>
 
@@ -156,37 +234,148 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             precision={0.1}
             size="small"
             readOnly
-            sx={{ ml: 0.5 }}
           />
 
-          <Typography
-            variant="caption"
-            sx={{
-              color: "#6e6e80",
-              fontSize: 13,
-            }}
-          >
+          <Typography variant="caption" sx={{ color: "#666" }}>
             ({item.seller_rating ?? "N/A"}%)
           </Typography>
+
         </Box>
 
-        {/* Trust Score */}
-        {trust.percent !== null && (
-          <Box display="flex" alignItems="center" gap={1}>
+
+        {/* TRUST + AI MATCH */}
+        <Box display="flex" alignItems="center" gap={2} mb={1}>
+
+          {trustPercent !== null && (
+
             <Chip
               icon={<VerifiedUserIcon sx={{ fontSize: 16 }} />}
-              label={`Trust Score: ${trust.percent}%`}
+              label={`Trust Score ${trustPercent}%`}
               size="small"
               sx={{
-                bgcolor: trust.bg,
-                color: trust.text,
-                fontWeight: 600,
+                bgcolor: "#f4f4f4",
+                color: "#0d0d0d",
+                fontWeight: 500,
                 fontSize: 12,
+                border: "1px solid #e5e5e5"
               }}
+              onClick={(e) => e.stopPropagation()}
             />
+
+          )}
+
+          {rankingPercent !== null && (
+
+            <Chip
+              icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+              label={`AI Match ${rankingPercent}%`}
+              size="small"
+              sx={{
+                bgcolor: "#eef3ff",
+                color: "#3b5ccc",
+                fontWeight: 500,
+                fontSize: 12
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+
+          )}
+
+        </Box>
+
+
+        {/* WHY THIS RESULT */}
+        {item.explanations && item.explanations.length > 0 && (
+
+          <Box
+            display="flex"
+            gap={1}
+            flexWrap="wrap"
+            mb={2}
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            {item.explanations.map((exp, i) => (
+
+              <Chip
+                key={i}
+                label={exp}
+                size="small"
+                sx={{
+                  bgcolor: "#fafafa",
+                  border: "1px solid #e5e5e5",
+                  fontSize: 11
+                }}
+              />
+
+            ))}
+
           </Box>
+
         )}
+
+
+        {/* FEEDBACK BUTTON */}
+        <Box mt={2}>
+
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={loading}
+            onClick={(e) => {
+              e.stopPropagation()
+              loadFeedback()
+            }}
+            sx={{
+              textTransform: "none",
+              borderRadius: "16px",
+              borderColor: "#e5e5e5",
+              color: "#0d0d0d",
+
+              "&:hover": {
+                borderColor: "#a3a3a3",
+                bgcolor: "#f4f4f4"
+              }
+            }}
+          >
+
+            {loading
+              ? <CircularProgress size={16} />
+              : open
+                ? "Nascondi feedback"
+                : "Mostra feedback venditore"}
+
+          </Button>
+
+        </Box>
+
+
+        {/* FEEDBACK LIST */}
+        {open && (
+
+          <Box
+            mt={2}
+            sx={{
+              p: 2,
+              bgcolor: "#f4f4f4",
+              borderRadius: "8px"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            <SellerFeedbackList
+              feedbacks={feedbacks}
+              loading={loading}
+            />
+
+          </Box>
+
+        )}
+
       </Box>
+
     </Paper>
-  );
+
+  )
+
 }

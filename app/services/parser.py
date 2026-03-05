@@ -1,3 +1,4 @@
+
 """
 app/services/parser.py
 
@@ -21,11 +22,12 @@ import time
 import uuid
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
+from rapidfuzz import process, fuzz
 
+# Gemini REST client
 import requests
 import spacy
-from rapidfuzz import fuzz, process
 
 # ============================================================
 # LOAD .env (optional)
@@ -33,10 +35,13 @@ from rapidfuzz import fuzz, process
 try:
     from dotenv import load_dotenv  # pip install python-dotenv
 
+    # tenta root progetto: .../app/services/parser.py -> parents[2] = root (di solito)
     _ROOT = Path(__file__).resolve().parents[2]
     load_dotenv(dotenv_path=_ROOT / ".env", override=False)
+    # fallback: cerca comunque .env nella cwd
     load_dotenv(override=False)
 except Exception:
+    # se python-dotenv non è installato, userà solo le env del sistema
     pass
 
 # ============================================================
@@ -45,22 +50,24 @@ except Exception:
 
 SPACY_MODEL = "it_core_news_sm"
 
+# LLM provider: "ollama" | "gemini"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
+LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()  # es. "ollama"
 
 # Ollama
+
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "30"))
 
 # Gemini
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "30"))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()  # <-- NON hardcodata: arriva da .env
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
-# Whitelist SOLO per canonicalizzazione fallback (non deve essere “la fonte” dei brand)
+# Lista piccola e opzionale: SOLO canonicalizzazione/fallback (non dipendere solo da questa)
 BRAND_WHITELIST = {
     "apple": "Apple",
     "iphone": "iPhone",
@@ -84,6 +91,47 @@ BRAND_WHITELIST = {
     "bose": "Bose",
     "jbl": "JBL",
 }
+# Brand vocabulary dinamica (popolata dal layer search)
+BRAND_VOCAB: List[str] = []
+
+
+# ============================================================
+# BRAND VOCAB LOAD (offline da brand_vocab.json)
+# ============================================================
+
+def load_brand_vocab() -> List[str]:
+    try:
+        root = Path(__file__).resolve().parents[2]  # MCP_ECOM root
+        file_path = root / "brand_vocab.json"
+
+        if not file_path.exists():
+            logger.warning("brand_vocab.json not found at %s", file_path)
+            return []
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            brands = json.load(f)
+
+        if not isinstance(brands, list):
+            logger.warning("brand_vocab.json invalid format")
+            return []
+
+        # normalizzazione pulita
+        clean = []
+        for b in brands:
+            if isinstance(b, str):
+                b = b.strip()
+                if b:
+                    clean.append(b)
+
+        logger.info("Loaded %d brands into BRAND_VOCAB", len(clean))
+        return sorted(set(clean))
+
+    except Exception as e:
+        logger.warning("Failed loading brand_vocab.json: %s", e)
+        return []
+
+
+BRAND_VOCAB: List[str] = load_brand_vocab()
 
 CONDITION_SYNONYMS = {
     "new": {"nuovo", "nuova", "sigillato", "mai usato"},
@@ -91,6 +139,7 @@ CONDITION_SYNONYMS = {
     "refurbished": {"ricondizionato", "rigenerato", "refurbished"},
 }
 
+# Termini “vuoti”/vaghi: filtro anti-rumore (MINIMO)
 VAGUE_PRODUCT_TERMS = {
     "qualcosa",
     "qualcosa tipo",
@@ -106,8 +155,9 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     "semantic_query": "",
     "product": None,
     "brands": [],
-    "constraints": [],
-    "preferences": [],
+    "compatibilities": {},  # dynamic properties for compatibility_filter
+    "constraints": [],  # hard filters
+    "preferences": [],  # soft wishes (ranking hints)
     "_meta": {
         "llm_enabled": False,
         "llm_success": False,
@@ -115,6 +165,7 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
         "confidence": 0.0,
     },
 }
+
 
 # ============================================================
 # LOAD NLP
@@ -132,83 +183,6 @@ def load_nlp(model_name: str = SPACY_MODEL):
 
 nlp = load_nlp()
 
-# ============================================================
-# BRAND VOCAB LOAD (offline da brand_vocab.json)
-# ============================================================
-
-BRAND_VOCAB: List[str] = []
-_BRAND_CANON_BY_LOWER: Dict[str, str] = {}
-_BRAND_LOWER_LIST: List[str] = []
-
-def _rebuild_brand_indexes() -> None:
-    global _BRAND_CANON_BY_LOWER, _BRAND_LOWER_LIST
-    _BRAND_CANON_BY_LOWER = {b.lower(): b for b in BRAND_VOCAB if isinstance(b, str) and b.strip()}
-    _BRAND_LOWER_LIST = list(_BRAND_CANON_BY_LOWER.keys())
-
-def load_brand_vocab() -> List[str]:
-    try:
-        # stessa directory del parser
-        file_path = Path(__file__).resolve().parent / "brand_vocab.json"
-
-        print("Loading brand vocab from:", file_path)
-
-        if not file_path.exists():
-            logger.warning("brand_vocab.json not found at %s", file_path)
-            return []
-
-        with open(file_path, "r", encoding="utf-8") as f:
-            brands = json.load(f)
-
-        if not isinstance(brands, list):
-            logger.warning("brand_vocab.json invalid format (expected list)")
-            return []
-
-        clean = [b.strip() for b in brands if isinstance(b, str) and b.strip()]
-
-        logger.info("Loaded %d brands into BRAND_VOCAB", len(clean))
-        return sorted(set(clean))
-
-    except Exception as e:
-        logger.warning("Failed loading brand_vocab.json: %s", e)
-        return []
-
-
-BRAND_VOCAB = load_brand_vocab()
-_rebuild_brand_indexes()
-
-def update_brand_vocab(brands: List[str]) -> None:
-    """Opzionale: se vuoi arricchire runtime. Manteniamo gli indici coerenti."""
-    global BRAND_VOCAB
-    changed = False
-    for b in brands:
-        if isinstance(b, str):
-            b = b.strip()
-            if b and b not in BRAND_VOCAB:
-                BRAND_VOCAB.append(b)
-                changed = True
-    if changed:
-        BRAND_VOCAB = sorted(set(BRAND_VOCAB))
-        _rebuild_brand_indexes()
-
-def clean_semantic_query(text: str) -> str:
-    if not text:
-        return text
-
-    text = re.sub(
-        r"\b(intorno\s+ai|intorno\s+a|intorno\s+alle|circa|sui|sulle|verso|"
-        r"fino\s+a|massimo|max|meno\s+di|oltre|almeno|minimo|min|"
-        r"sotto|sopra|più\s+di|tra|da)\b",
-        " ",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    text = re.sub(r"\b(euro|eur|€)\b", " ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b\d+\b", " ", text)
-    text = re.sub(r"\b(i|gli|le|il|lo|la|un|una|ai|alle|al)\b", " ", text, flags=re.IGNORECASE)
-
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
 
 # ============================================================
 # UTILS
@@ -220,14 +194,17 @@ def empty_result(original_query: str = "") -> Dict[str, Any]:
     result["semantic_query"] = original_query
     return result
 
+
 def normalize_text(text: str) -> str:
     text = (text or "").strip()
     text = text.replace("€", " euro ")
     text = re.sub(r"\s+", " ", text)
     return text
 
+
 def normalize_for_matching(text: str) -> str:
     return normalize_text(text).lower()
+
 
 def normalize_condition(value: Optional[str]) -> Optional[str]:
     if value is None:
@@ -240,6 +217,7 @@ def normalize_condition(value: Optional[str]) -> Optional[str]:
             return canonical
     return value_norm
 
+
 def normalize_brand(value: str) -> str:
     raw = (value or "").strip()
     if not raw:
@@ -248,6 +226,7 @@ def normalize_brand(value: str) -> str:
     if lowered in BRAND_WHITELIST:
         return BRAND_WHITELIST[lowered]
     return raw[0].upper() + raw[1:] if len(raw) > 1 else raw.upper()
+
 
 def normalize_float(value: Any) -> Optional[float]:
     if value is None:
@@ -274,6 +253,7 @@ def normalize_float(value: Any) -> Optional[float]:
 
     return None
 
+
 def dedupe_keep_order(items: List[Any]) -> List[Any]:
     seen = set()
     out = []
@@ -287,6 +267,7 @@ def dedupe_keep_order(items: List[Any]) -> List[Any]:
             out.append(item)
     return out
 
+
 def is_vague_product(text: str) -> bool:
     t = (text or "").strip().lower()
     if not t:
@@ -297,134 +278,89 @@ def is_vague_product(text: str) -> bool:
         return True
     return False
 
-def _valid_brand_set() -> set:
-    # brand_vocab è la fonte. la whitelist è solo fallback canonico.
-    return set(BRAND_VOCAB) | set(BRAND_WHITELIST.values())
-
-def filter_valid_brands(brands: List[str]) -> List[str]:
-    valid = _valid_brand_set()
-    cleaned: List[str] = []
-
-    for b in brands:
-        if not isinstance(b, str):
-            continue
-
-        b = b.strip()
-        if not b:
-            continue
-
-        # ❌ escludi parole generiche comuni
-        if b.lower() in {"scarpa", "scarpe", "euro", "uomo", "donna"}:
-            continue
-
-        if b in valid:
-            cleaned.append(b)
-            continue
-
-        canon = _BRAND_CANON_BY_LOWER.get(b.lower())
-        if canon:
-            cleaned.append(canon)
-
-    return dedupe_keep_order(cleaned)
 
 # ============================================================
 # PRICE EXTRACTION
 # ============================================================
 
 NUM_PATTERN = r"(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)"
-OPT_ART = r"(?:\s+(?:i|gli|le))?"
+
+ARTICLE_PATTERN = r"(?:\s+(?:i|le|gli|ai|alle|agli|al|alla|di|a|un))?"
 
 PRICE_RANGE_PATTERNS = [
     re.compile(
-        rf"\b(?:tra|da){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|a){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE,
+        rf"\b(?:tra|da){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|a){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        re.IGNORECASE
+    ),
+    re.compile(
+        rf"\b(?:prezzo|costo)\s+(?:minimo|min){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|ed|a)\s+(?:prezzo|costo)?\s*(?:massimo|max){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        re.IGNORECASE
     ),
 ]
 
 MAX_PRICE_PATTERNS = [
     re.compile(
-        rf"\b(?:sotto|meno\s+di|massimo|max|fino\s+a|entro|non\s+oltre){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE,
-    ),
-]
-
-MIN_PRICE_PATTERNS = [
-    re.compile(
-        rf"\b(?:almeno|minimo|min|sopra|oltre|più\s+di){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE,
+        rf"\b(?:sotto|meno di|massimo|max|fino a|entro|non oltre){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        re.IGNORECASE
     ),
 ]
 
 APPROX_PRICE_PATTERNS = [
     re.compile(
-        rf"\b(?:circa|intorno\s+a|intorno\s+ai|intorno\s+alle|sui|sulle|verso){OPT_ART}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE,
+        rf"\b(?:circa|intorno a|intorno|sui|sulle|verso){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        re.IGNORECASE
+    ),
+]
+
+MIN_PRICE_PATTERNS = [
+    re.compile(
+        rf"\b(?:almeno|minimo|min|sopra|oltre|più di){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        re.IGNORECASE
     ),
 ]
 
 EXPLICIT_PRICE_PATTERN = re.compile(
     rf"\b{NUM_PATTERN}\s*(?:euro|€)\b",
-    re.IGNORECASE,
+    re.IGNORECASE
 )
 
-def extract_price_constraint(text: str) -> Optional[Dict[str, Any]]:
+
+def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
+    """Restituisce (min_price, max_price)."""
     normalized = normalize_for_matching(text)
 
-    min_price = None
-    max_price = None
-
-    # RANGE ESPLICITO
     for pattern in PRICE_RANGE_PATTERNS:
         m = pattern.search(normalized)
         if m:
             p1 = normalize_float(m.group(1))
             p2 = normalize_float(m.group(2))
             if p1 is not None and p2 is not None:
-                return {
-                    "type": "price",
-                    "operator": "between",
-                    "value": [min(p1, p2), max(p1, p2)],
-                }
+                return min(p1, p2), max(p1, p2)
 
-    # MIN
-    for pattern in MIN_PRICE_PATTERNS:
+    for pattern in APPROX_PRICE_PATTERNS:
         m = pattern.search(normalized)
         if m:
             val = normalize_float(m.group(1))
             if val is not None:
-                min_price = val
+                return round(val * 0.8, 2), round(val * 1.2, 2)
 
-    # MAX
     for pattern in MAX_PRICE_PATTERNS:
         m = pattern.search(normalized)
         if m:
-            val = normalize_float(m.group(1))
-            if val is not None:
-                max_price = val
+            return None, normalize_float(m.group(1))
 
-    # Se entrambi trovati → between
-    if min_price is not None and max_price is not None:
-        return {
-            "type": "price",
-            "operator": "between",
-            "value": [min(min_price, max_price), max(min_price, max_price)],
-        }
+    for pattern in MIN_PRICE_PATTERNS:
+        m = pattern.search(normalized)
+        if m:
+            return normalize_float(m.group(1)), None
 
-    if min_price is not None:
-        return {
-            "type": "price",
-            "operator": ">=",
-            "value": min_price,
-        }
+    explicit_prices = [normalize_float(m.group(1)) for m in EXPLICIT_PRICE_PATTERN.finditer(normalized)]
+    explicit_prices = [p for p in explicit_prices if p is not None]
+    if len(explicit_prices) == 1:
+        return None, explicit_prices[0]
 
-    if max_price is not None:
-        return {
-            "type": "price",
-            "operator": "<=",
-            "value": max_price,
-        }
+    return None, None
 
-    return None
 
 # ============================================================
 # CONDITION EXTRACTION
@@ -438,138 +374,104 @@ def extract_condition(text: str) -> Optional[str]:
                 return canonical
     return None
 
+
 # ============================================================
-# BRAND EXTRACTION / CORRECTION
+# BRAND EXTRACTION
 # ============================================================
 
-def _fuzzy_match_brand(token: str, threshold: int = 80) -> Optional[str]:
-    """Match su brand_vocab in modo case-insensitive e ritorna brand canonico."""
-    if not _BRAND_LOWER_LIST:
-        return None
 
-    t = token.strip()
-    if len(t) < 4:
-        return None
-
-    t_low = t.lower()
-
-    match = process.extractOne(t_low, _BRAND_LOWER_LIST, scorer=fuzz.ratio)
-    if not match:
-        return None
-
-    best_low, score, _ = match
-    if score < threshold:
-        return None
-
-    canon = _BRAND_CANON_BY_LOWER.get(best_low)
-    if not canon:
-        return None
-
-    # vincolo generico: stessa iniziale (riduce falsi positivi senza hardcode)
-    if t_low[0] != canon.lower()[0]:
-        return None
-
-    # vincolo generico: lunghezze compatibili
-    if abs(len(t_low) - len(canon)) > 3:
-        return None
-
-    return canon
-
-def fuzzy_brand_detection(text: str, threshold: int = 80) -> List[str]:
-    words = re.findall(r"\b\w+\b", text)
-    found: List[str] = []
-    for w in words:
-        b = _fuzzy_match_brand(w, threshold=threshold)
-        if b:
-            found.append(b)
-    return dedupe_keep_order(found)
-
-def correct_brands_in_text(text: str) -> str:
-    """Corregge token brand-like nel testo usando brand_vocab (no hardcode)."""
+def fuzzy_brand_detection(text: str, threshold: int = 85) -> List[str]:
     if not BRAND_VOCAB:
-        return text
+        return []
 
-    tokens = re.findall(r"\w+|\S", text)
-    corrected: List[str] = []
+    words = re.findall(r"\b\w+\b", text.lower())
+    found = []
 
-    for tok in tokens:
-        if not tok.isalpha() or len(tok) < 4:
-            corrected.append(tok)
+    for word in words:
+        if len(word) < 4:
             continue
 
-        canon = _fuzzy_match_brand(tok, threshold=80)
-        corrected.append(canon if canon else tok)
+        match = process.extractOne(
+            word,
+            cast(List[str], BRAND_VOCAB),
+            scorer=fuzz.partial_ratio
+        )
 
-    # ricostruzione con spazi
-    out = ""
-    for t in corrected:
-        if re.fullmatch(r"\W", t):
-            out += t
-        else:
-            out += (" " if out and not out.endswith((" ", "\n")) else "") + t
-    return out.strip()
+        if match:
+            brand, score, _ = match
+
+            # Evita match troppo diversi in lunghezza
+            if score >= threshold and abs(len(word) - len(brand)) <= 3:
+                found.append(brand)
+
+    return dedupe_keep_order(found)
+
+
+def update_brand_vocab(brands: List[str]):
+    global BRAND_VOCAB
+    for b in brands:
+        if isinstance(b, str) and b.strip():
+            if b not in BRAND_VOCAB:
+                BRAND_VOCAB.append(b)
+
 
 def extract_brands(doc, original_text: str) -> List[str]:
-    """Brand = whitelist match + fuzzy su vocab + (opzionale) NER validato su vocab."""
     found: List[str] = []
     text_norm = normalize_for_matching(original_text)
 
-    # 1) whitelist (solo canonicalizzazione)
+    # 1️⃣ whitelist
     for raw, canonical in BRAND_WHITELIST.items():
         if re.search(rf"\b{re.escape(raw)}\b", text_norm):
             found.append(canonical)
 
-    logger.debug("Brand detection on: %s", original_text)
+    # 2️⃣ fuzzy matching su vocab reale
+    fuzzy_found = fuzzy_brand_detection(original_text)
+    found.extend(fuzzy_found)
 
-    # 2) fuzzy su vocab reale
-    found.extend(fuzzy_brand_detection(original_text, threshold=80))
-
-    # 3) NER: teniamo SOLO se è brand in vocab (nessuna euristica extra)
+    # 3️⃣ NER solo se nel vocabolario ufficiale
     for ent in getattr(doc, "ents", []):
-        cand = ent.text.strip(" ,.-")
-        if not cand:
-            continue
-        canon = _BRAND_CANON_BY_LOWER.get(cand.lower())
-        if canon:
-            found.append(canon)
+        candidate = ent.text.strip(" ,.-")
 
-    return filter_valid_brands(dedupe_keep_order(found))
+        if not candidate:
+            continue
+
+        # 🔥 VALIDAZIONE FORTE
+        if candidate in BRAND_VOCAB:
+            found.append(candidate)
+
+    return dedupe_keep_order(found)
+
 
 # ============================================================
 # PRODUCT EXTRACTION (fallback conservativo)
 # ============================================================
 
 def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]:
+    """
+    Fallback leggero e conservativo.
+    NB: l'LLM è la fonte principale per product.
+    """
     brand_norm = {b.lower() for b in brands}
     candidates: List[str] = []
 
+    # noun_chunks
     try:
         for chunk in doc.noun_chunks:
             text = chunk.text.strip()
             if not text:
                 continue
-
             text_norm = text.lower()
 
-            # ❌ evita chunk che contengono brand
             if any(b in text_norm for b in brand_norm):
                 continue
-
-            # ❌ evita numeri/prezzi
             if re.search(r"\d+\s*(euro|€)?", text_norm):
                 continue
 
-            # ❌ evita parole monetarie
-            if re.search(r"\b(euro|eur)\b", text_norm):
+            forbidden = {"prezzo", "euro", "minimo", "massimo", "massima", "minima", "costo"}
+            if any(f in text_norm.split() for f in forbidden):
                 continue
 
-            tokens = [
-                t.text for t in chunk
-                if not t.is_punct
-                and not t.is_space
-                and t.text.lower() not in {"euro", "eur"}
-            ]
-
+            tokens = [t.text for t in chunk if not t.is_punct and not t.is_space]
             if tokens:
                 cand = " ".join(tokens).strip()
                 if cand and not is_vague_product(cand):
@@ -582,29 +484,25 @@ def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]
         best = candidates[0].strip()
         return None if is_vague_product(best) else best
 
-    # fallback token-level
+    # fallback token-based
     content_tokens: List[str] = []
+    forbidden_tokens = {"prezzo", "euro", "minimo", "massimo", "costo", "sotto", "sopra", "circa", "intorno", "entro"}
     for token in doc:
         if token.is_stop or token.is_punct or token.is_space:
             continue
-
-        if token.text.lower() in brand_norm:
+        if token.text.lower() in brand_norm or token.text.lower() in forbidden_tokens:
             continue
-
-        if token.text.lower() in {"euro", "eur"}:
-            continue
-
         if re.fullmatch(r"\d+(?:[.,]\d+)?", token.text):
             continue
-
         if token.pos_ in {"NOUN", "PROPN"}:
             content_tokens.append(token.text)
 
     if content_tokens:
-        best = " ".join(content_tokens[:3]).strip()
+        best = " ".join(content_tokens[:4]).strip()
         return None if is_vague_product(best) else best
 
     return None
+
 
 # ============================================================
 # RULE-BASED PARSER
@@ -615,22 +513,27 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
     doc = nlp(normalized)
 
     brands = extract_brands(doc, query)
+    min_price, max_price = extract_base_price(query)
     condition = extract_condition(query)
     product = extract_product(doc, query, brands)
-    price_c = extract_price_constraint(query)
 
     result = empty_result(query)
     result["brands"] = brands
     result["product"] = product
-    result["semantic_query"] = query  # LLM/cleaner può migliorare
+    result["semantic_query"] = query  # raw per embeddings; pulizia la fa LLM
 
-    if price_c:
-        result["constraints"].append(price_c)
+    if min_price is not None and max_price is not None:
+        result["constraints"].append({"type": "price", "operator": "between", "value": [min_price, max_price]})
+    elif max_price is not None:
+        result["constraints"].append({"type": "price", "operator": "<=", "value": max_price})
+    elif min_price is not None:
+        result["constraints"].append({"type": "price", "operator": ">=", "value": min_price})
 
     if condition:
         result["constraints"].append({"type": "condition", "value": condition})
 
     return result
+
 
 # ============================================================
 # LLM PROVIDERS
@@ -639,14 +542,20 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 def call_ollama(prompt: str) -> Optional[str]:
     try:
         url = "http://localhost:11434/api/generate"
+
+        print(OLLAMA_MODEL)
         payload = {
             "model": OLLAMA_MODEL,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0, "num_predict": 350},
+            "options": {
+                "temperature": 0,
+                "num_predict": 300
+            }
         }
 
         response = requests.post(url, json=payload, timeout=OLLAMA_TIMEOUT)
+
         if response.status_code != 200:
             logger.warning("Ollama HTTP %s", response.status_code)
             return None
@@ -658,12 +567,13 @@ def call_ollama(prompt: str) -> Optional[str]:
         logger.exception("Ollama REST error: %s", e)
         return None
 
+
 def call_gemini(prompt: str) -> Optional[str]:
     request_id = str(uuid.uuid4())[:8]
-    logger.info("[%s] GEMINI call started", request_id)
+    logger.info(f"[{request_id}] GEMINI call started")
 
     if not GEMINI_API_KEY:
-        logger.error("[%s] GEMINI_API_KEY missing", request_id)
+        logger.error(f"[{request_id}] GEMINI_API_KEY missing")
         return None
 
     url = (
@@ -672,54 +582,75 @@ def call_gemini(prompt: str) -> Optional[str]:
     )
 
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0, "maxOutputTokens": 350},
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ]
     }
 
     try:
         t0 = time.time()
-        response = requests.post(url, json=payload, timeout=GEMINI_TIMEOUT)
+
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=GEMINI_TIMEOUT
+        )
+
         elapsed = round(time.time() - t0, 2)
-        logger.info("[%s] Gemini HTTP %s in %ss", request_id, response.status_code, elapsed)
+        logger.info(f"[{request_id}] Gemini HTTP {response.status_code} in {elapsed}s")
 
         if response.status_code == 429:
-            logger.warning("[%s] Gemini rate limit (429)", request_id)
+            logger.warning(f"[{request_id}] Gemini rate limit (429)")
             return None
+
         if response.status_code != 200:
-            logger.error("[%s] Gemini error body: %s", request_id, response.text[:300])
+            logger.error(f"[{request_id}] Gemini error body: {response.text[:300]}")
             return None
 
         data = response.json()
+
         text = (
             data.get("candidates", [{}])[0]
             .get("content", {})
             .get("parts", [{}])[0]
             .get("text")
         )
-        return text.strip() if text else None
+
+        if not text:
+            logger.warning(f"[{request_id}] Gemini returned empty text")
+            return None
+
+        logger.info(f"[{request_id}] Gemini success ({len(text)} chars)")
+        return text.strip()
 
     except requests.Timeout:
-        logger.error("[%s] Gemini TIMEOUT after %ss", request_id, GEMINI_TIMEOUT)
+        logger.error(f"[{request_id}] Gemini TIMEOUT after {GEMINI_TIMEOUT}s")
         return None
+
     except Exception as e:
-        logger.exception("[%s] Gemini unexpected error: %s", request_id, e)
+        logger.exception(f"[{request_id}] Gemini unexpected error: {e}")
         return None
 
-def call_llm(prompt: str, provider: Optional[str] = None) -> Tuple[Optional[str], str]:
-    """
-    Esegue chiamata LLM usando:
-    - provider passato esplicitamente
-    - altrimenti LLM_PROVIDER da env
-    """
-    primary = (provider or LLM_PROVIDER).strip().lower()
-    fallback = LLM_FALLBACK_PROVIDER.strip().lower()
 
-    def _call(p: str) -> Optional[str]:
-        if p == "ollama":
+def call_llm(prompt: str) -> Tuple[Optional[str], str]:
+    """
+    Ritorna: (output, provider_usato)
+    - Usa LLM_PROVIDER come principale
+    - Se fallisce e LLM_FALLBACK_PROVIDER è impostato, prova fallback (es. ollama)
+    """
+    primary = LLM_PROVIDER
+    fallback = LLM_FALLBACK_PROVIDER
+
+    def _call(provider: str) -> Optional[str]:
+        if provider == "ollama":
             return call_ollama(prompt)
-        if p == "gemini":
+        if provider == "gemini":
             return call_gemini(prompt)
-        logger.error("Unknown provider: %s", p)
+        logger.error("Unknown provider: %s", provider)
         return None
 
     out = _call(primary)
@@ -732,6 +663,7 @@ def call_llm(prompt: str, provider: Optional[str] = None) -> Tuple[Optional[str]
             return out2, fallback
 
     return None, primary
+
 
 # ============================================================
 # JSON EXTRACTION
@@ -749,20 +681,19 @@ def extract_first_json_object(text: str) -> Optional[str]:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return text[start : i + 1]
+                return text[start: i + 1]
     return None
+
 
 # ============================================================
 # VALIDATION / NORMALIZATION
 # ============================================================
 
-_ALLOWED_PRICE_OPS = {"<=", ">=", "between", "approx"}
-
 def normalize_price_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     operator = item.get("operator")
     value = item.get("value")
 
-    if operator not in _ALLOWED_PRICE_OPS:
+    if operator not in {"<=", ">=", "between"}:
         return None
 
     if operator == "between":
@@ -779,11 +710,13 @@ def normalize_price_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
     return {"type": "price", "operator": operator, "value": v}
 
+
 def normalize_condition_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     val = normalize_condition(item.get("value"))
     if not val:
         return None
     return {"type": "condition", "value": val}
+
 
 def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(c, dict):
@@ -795,13 +728,16 @@ def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return normalize_condition_item(c)
     return None
 
+
 def normalize_preference(p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(p, dict):
         return None
+
     ptype = p.get("type")
 
     if ptype == "price":
         return normalize_price_item(p)
+
     if ptype == "condition":
         return normalize_condition_item(p)
 
@@ -809,22 +745,10 @@ def normalize_preference(p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         val = p.get("value")
         if not isinstance(val, str) or not val.strip():
             return None
-        # brand preference valido solo se in vocab/whitelist
-        canon = _BRAND_CANON_BY_LOWER.get(val.strip().lower())
-        if canon:
-            return {"type": "brand", "value": canon}
-        norm = normalize_brand(val)
-        if norm in _valid_brand_set():
-            return {"type": "brand", "value": norm}
-        return None
-
-    if ptype == "sort":
-        val = p.get("value")
-        if val in {"price_asc", "price_desc", "newest"}:
-            return {"type": "sort", "value": val}
-        return None
+        return {"type": "brand", "value": normalize_brand(val)}
 
     return None
+
 
 def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, Any]:
     result = empty_result(original_query)
@@ -836,20 +760,13 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
         else original_query
     )
 
-    # Brands: accetta solo quelli validi (vocab/whitelist), anche se LLM spara parole
     brands = data.get("brands", [])
-    normalized_brands: List[str] = []
     if isinstance(brands, list):
+        normalized_brands: List[str] = []
         for b in brands:
             if isinstance(b, str) and b.strip():
-                canon = _BRAND_CANON_BY_LOWER.get(b.strip().lower())
-                if canon:
-                    normalized_brands.append(canon)
-                else:
-                    nb = normalize_brand(b)
-                    if nb in _valid_brand_set():
-                        normalized_brands.append(nb)
-    result["brands"] = filter_valid_brands(dedupe_keep_order(normalized_brands))
+                normalized_brands.append(normalize_brand(b))
+        result["brands"] = dedupe_keep_order(normalized_brands)
 
     product = data.get("product")
     if isinstance(product, str) and product.strip().lower() not in {"", "null", "none"}:
@@ -876,184 +793,240 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
                 norm_prefs.append(np)
         result["preferences"] = dedupe_keep_order(norm_prefs)
 
+    compatibilities = data.get("compatibilities", {})
+    if isinstance(compatibilities, dict):
+        result["compatibilities"] = {str(k): str(v) for k, v in compatibilities.items() if
+                                     str(k).strip() and str(v).strip()}
+
     return result
 
+
 def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Evita che l'LLM cambi numeri del modello (es 15 -> 13).
+    Se il numero nel product non compare nella query originale,
+    il product viene scartato.
+    """
+    import re
+
     original_numbers = re.findall(r"\b\d+\b", original_query)
     product = result.get("product")
+
     if not product:
         return result
 
     product_numbers = re.findall(r"\b\d+\b", product)
+
     if product_numbers and original_numbers:
         if not any(n in original_numbers for n in product_numbers):
             result["product"] = None
             result["semantic_query"] = original_query
+
     return result
+
 
 # ============================================================
 # LLM PARSE
 # ============================================================
 
-def llm_parse(query: str, provider: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def llm_parse(query: str) -> Tuple[Optional[Dict[str, Any]], str]:
     prompt = f"""
-    You are a strict semantic query parser for an Italian e-commerce assistant.
+You are a strict semantic query parser for an e-commerce assistant.
 
-    Your task:
-    Extract structured data from a user query.
+Return ONLY valid minified JSON.
+No markdown.
+No explanations.
+No code fences.
 
-    Return ONLY valid minified JSON.
-    No markdown.
-    No explanations.
-    No code fences.
+Schema:
+{{
+  "semantic_query": "",
+  "product": null,
+  "brands": [],
+  "compatibilities": {{}},
+  "constraints": [],
+  "preferences": []
+}}
 
-    Schema:
-    {{
-      "semantic_query": "",
-      "product": null,
-      "brands": [],
-      "constraints": [],
-      "preferences": []
-    }}
+Definitions:
+- semantic_query: short cleaned version of the query useful for semantic retrieval.
+- product: the main item/model explicitly mentioned (e.g. "iPhone 15", "PS5", "MacBook Air M3"). Use null only if no item/model is stated.
+- brands: brands explicitly mentioned.
+- compatibilities: Key-value pairs for item compatibility (e.g., {{"Make": "BMW", "Year": "2018", "Model": "318i", "Memory": "128GB"}}). Used to extract dynamic parameters.
+- constraints: hard filters that restrict search results.
+- preferences: soft wishes that influence ranking but should NOT exclude results.
 
-    Allowed price operators:
-    "<=" | ">=" | "between" | "approx"
+Allowed constraint/preference item types:
 
-    Important rules:
+Price:
+{{
+  "type": "price",
+  "operator": "<=" | ">=" | "between",
+  "value": number OR [min, max]
+}}
 
-    1. Do NOT invent brands.
-    2. Extract only brands explicitly mentioned.
-    3. If the user includes mathematical expressions (e.g. "radice di 60",
-       "square root of 60", "60/2", "2*30"), evaluate them numerically.
-    4. If a single numeric price appears, use operator:
-       - "<=" for max/massimo/sotto/fino a
-       - ">=" for minimo/almeno/sopra
-       - "approx" for circa/intorno/sui
-    5. semantic_query must contain ONLY meaningful search keywords.
-       Remove price operators, numbers, mathematical expressions and filler words.
-    6. If unsure about a field, set it to null or empty list.
-    7. Output JSON only.
+Condition:
+{{
+  "type": "condition",
+  "value": "new" | "used" | "refurbished"
+}}
 
-    Examples:
+Optional brand preference:
+{{
+  "type": "brand",
+  "value": "Samsung"
+}}
 
-    Input: "cintura lacoste massimo 60 euro"
-    Output:
-    {{"semantic_query":"cintura Lacoste","product":"cintura","brands":["Lacoste"],"constraints":[{{"type":"price","operator":"<=","value":60}}],"preferences":[]}}
+Rules:
+- Put ONLY mandatory requirements in constraints.
+- Put optional wishes in preferences.
+- Do NOT invent brands or products. Never include words like "euro", "numero", "prezzo", "costo" or currency symbols in the "brands" or "product" fields.
+- If the user gives a MAX BUDGET (e.g. "massimo 1000 euro", "entro 500", "sotto 100"), use ONLY "<=" (not both >= and <=). It corresponds to [0, max].
+- If the user gives a MINIMUM budget (e.g. "almeno 300 euro", "sopra i 2 euro"), use ONLY ">=".
+- If the user gives BOTH a minimum and a maximum (e.g. "minimo 10 massimo 20 euro", "tra 100 e 200"), use "between" and provide the array [min, max].
+- If the user gives an APPROXIMATE budget (e.g. "intorno a 100 euro", "circa 200", "sui 300"), calculate a +/- 20% range and use "between" (e.g. 100 -> [80, 120]).
+- Use "between" only when a range is explicitly given (both min and max) or for approximate values.
+- If the query implies "X for Y" (e.g. "cover per iphone", "cintura per jeans"), extract ONLY "X" as the `product`, and place "Y" details into `compatibilities`.
+- If a price is expressed as a mathematical expression (e.g., "10+5", "radice quadrata di 144", "metà di 50"), evaluate the expression mathematically and use ONLY the final numerical result (e.g., 15, 12, 25). Do NOT use the original text numbers.
+- Output JSON only.
 
-    Input: "cintura lacoste max radice di 60 euro"
-    Output:
-    {{"semantic_query":"cintura Lacoste","product":"cintura","brands":["Lacoste"],"constraints":[{{"type":"price","operator":"<=","value":7.75}}],"preferences":[]}}
+Examples (must follow exactly):
+Query: "iphone 13 massimo 1000 euro"
+Output: {{"semantic_query":"iphone 13","product":"iPhone 13","brands":["Apple"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"<=","value":1000}}],"preferences":[]}}
 
-    Query: {json.dumps(query, ensure_ascii=False)}
-    """.strip()
+Query: "lenti vista rayban con prezzo minimo radice quadrata di 144 euro"
+Output: {{"semantic_query":"lenti vista rayban","product":"lenti","brands":["Ray-Ban"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":">=","value":12}}],"preferences":[]}}
 
-    response, used_provider = call_llm(prompt, provider=provider)
+Query: "cerco prodotto intorno a 100 euro"
+Output: {{"semantic_query":"prodotto","product":"prodotto","brands":[],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"between","value":[80,120]}}],"preferences":[]}}
 
+Query: "tra 200 e 400 euro cuffie bose"
+Output: {{"semantic_query":"cuffie bose","product":"cuffie","brands":["Bose"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"between","value":[200,400]}}],"preferences":[]}}
+
+Query: "ciabatte defonseca minimo 10 massimo 20 euro"
+Output: {{"semantic_query":"ciabatte defonseca","product":"ciabatte","brands":["Defonseca"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"between","value":[10,20]}}],"preferences":[]}}
+
+Query: "freni per bmw 318i anno 2018"
+Output: {{"semantic_query":"freni bmw 318i 2018","product":"freni","brands":["BMW"],"compatibilities":{{"Make":"BMW","Model":"318i","Year":"2018"}},"constraints":[],"preferences":[]}}
+
+Query: "cintura lacoste per i miei jeans levis skinny"
+Output: {{"semantic_query":"cintura lacoste jeans levis","product":"cintura","brands":["Lacoste","Levi's"],"compatibilities":{{"Apparel":"Jeans skinny"}},"constraints":[],"preferences":[]}}
+
+Query: {json.dumps(query, ensure_ascii=False)}
+""".strip()
+
+    response, used_provider = call_llm(prompt)
     if not response:
         return None, used_provider
 
     json_text = extract_first_json_object(response)
     if not json_text:
+        logger.warning("No JSON object found in LLM output")
         return None, used_provider
 
     try:
         raw = json.loads(json_text)
     except json.JSONDecodeError:
+        logger.warning("Invalid JSON from LLM: %s", response[:200])
         return None, used_provider
 
     if not isinstance(raw, dict):
+        logger.warning("LLM output is not a JSON object")
         return None, used_provider
 
     parsed = validate_llm_result(raw, query)
     parsed = enforce_numeric_consistency(query, parsed)
-
     return parsed, used_provider
 
-# ============================================================
-# MERGE (LLM-first but deterministic price)
-# ============================================================
 
-def _get_price_constraints(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [c for c in items if c.get("type") == "price"]
-
-def _get_condition_constraint(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return next((c for c in items if c.get("type") == "condition"), None)
+# ============================================================
+# MERGE (LLM-first)
+# ============================================================
 
 def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    # Se LLM fallisce → puro rule-based
+    if not llm_result:
+        # costruiamo semantic_query pulita
+        semantic_parts = []
+
+        if rule_result.get("brands"):
+            semantic_parts.extend(rule_result["brands"])
+
+        if rule_result.get("product"):
+            semantic_parts.append(rule_result["product"])
+
+        rule_result["semantic_query"] = (
+            " ".join(semantic_parts)
+            if semantic_parts
+            else rule_result["original_query"]
+        )
+
+        return rule_result
 
     final = empty_result(rule_result["original_query"])
 
-    # --------------------------------------------------
-    # BRANDS
-    # --------------------------------------------------
-    llm_brands = llm_result.get("brands", []) if llm_result else []
-    rule_brands = rule_result.get("brands", [])
-    final["brands"] = filter_valid_brands(
-        dedupe_keep_order(llm_brands + rule_brands)
+    # ------------------------------------------------------------
+    # 1️⃣ semantic_query → LLM
+    # ------------------------------------------------------------
+    final["semantic_query"] = (
+            llm_result.get("semantic_query")
+            or rule_result.get("semantic_query")
+            or rule_result["original_query"]
     )
 
-    # --------------------------------------------------
-    # PRODUCT
-    # --------------------------------------------------
-    final["product"] = (
-        (llm_result.get("product") if llm_result else None)
-        or rule_result.get("product")
-    )
+    # ------------------------------------------------------------
+    # 2️⃣ PRODUCT → LLM SOLO SE CONSISTENTE
+    # ------------------------------------------------------------
+    final["product"] = llm_result.get("product")
 
-    # --------------------------------------------------
-    # CONSTRAINTS
-    # --------------------------------------------------
+    # ------------------------------------------------------------
+    # 3️⃣ BRANDS → unione ma pulita
+    # ------------------------------------------------------------
+    llm_brands = llm_result.get("brands", []) or []
+    rule_brands = rule_result.get("brands", []) or []
+
+    final["brands"] = dedupe_keep_order(llm_brands + rule_brands)
+
+    # ------------------------------------------------------------
+    # 4️⃣ CONSTRAINTS
+    #    Preferisci LLM sia per PREZZO che per CONDIZIONE, fallback su rule-based
+    # ------------------------------------------------------------
+
     rule_constraints = rule_result.get("constraints", [])
-    llm_constraints = llm_result.get("constraints", []) if llm_result else []
+    llm_constraints = llm_result.get("constraints", [])
 
-    rule_price = _get_price_constraints(rule_constraints)
-    llm_price = _get_price_constraints(llm_constraints)
+    # --- PRICE
+    llm_price_constraints = [c for c in llm_constraints if c.get("type") == "price"]
+    price_constraints = llm_price_constraints if llm_price_constraints else [c for c in rule_constraints if
+                                                                             c.get("type") == "price"]
 
-    price_constraints = rule_price if rule_price else llm_price
-
-    cond = (
-        _get_condition_constraint(llm_constraints)
-        or _get_condition_constraint(rule_constraints)
+    # --- CONDITION
+    llm_condition = next(
+        (c for c in llm_constraints if c.get("type") == "condition"),
+        None
     )
 
-    final["constraints"] = dedupe_keep_order(
-        price_constraints + ([cond] if cond else [])
-    )
+    if llm_condition:
+        condition_constraints = [llm_condition]
+    else:
+        condition_constraints = [
+            c for c in rule_constraints if c.get("type") == "condition"
+        ]
 
-    # --------------------------------------------------
-    # PREFERENCES
-    # --------------------------------------------------
-    final["preferences"] = llm_result.get("preferences", []) if llm_result else []
+    final["constraints"] = price_constraints + condition_constraints
 
-    # --------------------------------------------------
-    # CLEAN SEMANTIC QUERY
-    # --------------------------------------------------
-    semantic = (
-        (llm_result.get("semantic_query") if llm_result else None)
-        or rule_result.get("semantic_query")
-        or rule_result["original_query"]
-    )
+    # ------------------------------------------------------------
+    # 5️⃣ PREFERENCES → solo LLM
+    # ------------------------------------------------------------
+    final["preferences"] = llm_result.get("preferences", []) or []
 
-    semantic = correct_brands_in_text(semantic)
-    semantic = clean_semantic_query(semantic)
-
-    # rimuovi eventuali parole isolate di 1 carattere
-    semantic = re.sub(r"\b\w\b", "", semantic)
-    semantic = re.sub(r"\s+", " ", semantic).strip()
-
-
-    # fallback se vuoto
-    if not semantic:
-        parts = []
-        if final["brands"]:
-            parts.extend(final["brands"])
-        if final["product"]:
-            parts.append(final["product"])
-        semantic = " ".join(parts) if parts else rule_result["original_query"]
-
-    final["semantic_query"] = semantic.strip()
+    # ------------------------------------------------------------
+    # 6️⃣ COMPATIBILITÀ → solo LLM
+    # ------------------------------------------------------------
+    final["compatibilities"] = llm_result.get("compatibilities", {}) or {}
 
     return final
+
 
 # ============================================================
 # CONFIDENCE
@@ -1073,48 +1046,56 @@ def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[s
         score += 0.10
     return round(min(score, 0.95), 2)
 
+
 # ============================================================
 # MAIN SERVICE
 # ============================================================
 
-def parse_query_service(
-    text: str,
-    llm_engine: Optional[str] = None,
-    include_meta: bool = True
-) -> Dict[str, Any]:
+def correct_brands_in_text(text: str) -> str:
+    if not BRAND_VOCAB:
+        return text
 
-    original_query = normalize_text(text)
-    working_text = correct_brands_in_text(original_query)
+    words = text.split()
+    corrected = []
 
-    # -----------------------------
-    # Decide modalità LLM
-    # -----------------------------
-    if llm_engine == "rule_based":
-        use_llm = False
-        provider = None
-    elif llm_engine in {"ollama", "gemini"}:
-        use_llm = True
-        provider = llm_engine
-    else:
-        # fallback a default config
-        use_llm = True
-        provider = None
+    for w in words:
+        if len(w) < 4:
+            corrected.append(w)
+            continue
 
-    # -----------------------------
-    # Rule-based sempre attivo
-    # -----------------------------
-    rule_result = rule_based_parse(working_text)
+        match = process.extractOne(
+            w,
+            cast(List[str], BRAND_VOCAB),
+            scorer=fuzz.partial_ratio
+        )
+
+        if match:
+            brand, score, _ = match
+            if score >= 88 and abs(len(w) - len(brand)) <= 3:
+                corrected.append(brand)
+                continue
+
+        corrected.append(w)
+
+    return " ".join(corrected)
+
+
+def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = True, **kwargs) -> Dict[str, Any]:
+    text = normalize_text(text)
+
+    # 🔥 spell correction prima di tutto
+    text = correct_brands_in_text(text)
+
+    rule_result = rule_based_parse(text)
 
     llm_result = None
-    used_provider = None
+    used_provider: Optional[str] = None
 
     if use_llm:
-        llm_result, used_provider = llm_parse(working_text, provider=provider)
+        parsed_llm, used_provider = llm_parse(text)
+        llm_result = parsed_llm
 
     final = merge_results(rule_result, llm_result)
-
-    # ripristina query originale
-    final["original_query"] = original_query
 
     if include_meta:
         final["_meta"] = {
@@ -1123,8 +1104,11 @@ def parse_query_service(
             "llm_provider": used_provider if use_llm else None,
             "confidence": compute_confidence(final, llm_result),
         }
+    else:
+        final.pop("_meta", None)
 
     return final
+
 
 # ============================================================
 # DEMO
@@ -1132,14 +1116,19 @@ def parse_query_service(
 
 if __name__ == "__main__":
     queries = [
-        "vorrei un orologio garming usato intorno ai 200 euro",
-        "vorrei delle scarpe abidas 100 euro max",
-        "scarpe adidas intorno ai 100 euro",
-        "iphone 13 massimo 1000 euro",
-        "tra 200 e 400 euro cuffie bose",
-        "cerco samsung usato sui 500 euro",
+        "Cerco un iPhone 14 usato sotto 600 euro",
+        "Vorrei una PlayStation 5 nuova entro 450 euro",
+        "Laptop Lenovo o ASUS tra 500 e 800 euro",
+        "Mi serve un Dyson ricondizionato",
+        "Cerco cuffie Bose o JBL, meglio nuove ma accetto usate",
+        "Avvisami se un iPhone 14 scende sotto 500 euro",
+        "Meglio Samsung o Xiaomi sui 500 euro?",
+        "Secondo te 650 euro per questo iPhone 14 usato conviene?",
+        "vorrei qualcosa tipo samsung o xiaomi non troppo caro diciamo sui 500, se nuovo anche 600, fammi sapere quando esce qualcosa di nuovo",
+        "sono interessato a comprare un macbook air m3 massimo 800 da 1 terabyte, vecchio massimo un anno",
     ]
+
     for q in queries:
-        parsed = parse_query_service(q, llm_engine="ollama", include_meta=True)
+        parsed = parse_query_service(q, use_llm=True, include_meta=True)
         print(json.dumps(parsed, ensure_ascii=False, indent=2))
         print("-" * 80)
