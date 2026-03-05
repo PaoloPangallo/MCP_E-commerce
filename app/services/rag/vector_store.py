@@ -5,19 +5,17 @@ import os
 from typing import List, Dict, Optional
 
 from app.services.rag.embedding import embed
+from app.services.rag.schemas import make_doc_id
 
 DIM = 384
 
 INDEX_PATH = "rag_index.faiss"
 META_PATH = "rag_metadata.pkl"
 
-# cosine similarity → inner product
 _index = faiss.IndexFlatIP(DIM)
 
 _documents: List[Dict] = []
-
-# Dedup per testo (coerente con retriever key = doc["text"])
-_seen_texts = set()
+_seen_doc_ids = set()
 
 
 def _normalize(v: np.ndarray) -> np.ndarray:
@@ -27,14 +25,19 @@ def _normalize(v: np.ndarray) -> np.ndarray:
     return v / norm
 
 
-def _rebuild_seen_texts():
-    global _seen_texts
-    _seen_texts = set()
+def _rebuild_seen():
+    global _seen_doc_ids
+    _seen_doc_ids = set()
 
     for d in _documents:
-        t = (d.get("text") or "").strip()
-        if t:
-            _seen_texts.add(t)
+        did = d.get("doc_id")
+        if did:
+            _seen_doc_ids.add(did)
+        else:
+            # fallback: compute from text if old docs
+            t = (d.get("text") or "").strip()
+            if t:
+                _seen_doc_ids.add(make_doc_id(t))
 
 
 def load_index():
@@ -47,7 +50,7 @@ def load_index():
         with open(META_PATH, "rb") as f:
             _documents = pickle.load(f)
 
-    _rebuild_seen_texts()
+    _rebuild_seen()
 
 
 def save_index():
@@ -58,10 +61,9 @@ def save_index():
 
 def add_documents(texts: List[str], metadata: List[Dict]):
     """
-    Aggiunge documenti al FAISS store.
-    - Dedup basato sul campo 'text' (coerente con retriever.merge)
-    - Forza meta['text'] = text per coerenza
-    - Salva su disco automaticamente
+    - Dedup by doc_id
+    - Force meta['text'] and meta['doc_id']
+    - Persist index
     """
     if not texts or not metadata:
         return
@@ -75,15 +77,19 @@ def add_documents(texts: List[str], metadata: List[Dict]):
         if not text:
             continue
 
-        text = " ".join(str(text).split()).strip()
-        if not text:
+        clean = " ".join(str(text).split()).strip()
+        if not clean:
             continue
 
-        # Dedup globale per testo
-        if text in _seen_texts:
+        m = dict(meta or {})
+        m["text"] = clean
+        m["doc_id"] = m.get("doc_id") or make_doc_id(clean)
+
+        # dedup
+        if m["doc_id"] in _seen_doc_ids:
             continue
 
-        vec = embed(text)
+        vec = embed(clean)
         if vec is None:
             continue
 
@@ -93,14 +99,10 @@ def add_documents(texts: List[str], metadata: List[Dict]):
 
         vec = _normalize(vec)
 
-        # forza coerenza schema
-        meta = dict(meta or {})
-        meta["text"] = text
-
         vectors.append(vec)
-        metas.append(meta)
+        metas.append(m)
 
-        _seen_texts.add(text)
+        _seen_doc_ids.add(m["doc_id"])
         added += 1
 
     if not vectors:
@@ -115,7 +117,11 @@ def add_documents(texts: List[str], metadata: List[Dict]):
         save_index()
 
 
-def search(query: str, k: int = 5) -> List[Dict]:
+def search(query: str, k: int = 5, doc_type: Optional[str] = None) -> List[Dict]:
+    """
+    Returns top-k from FAISS. If doc_type is provided, filters results by meta['type'].
+    Filtering is post-search (fast enough for your scale).
+    """
     if len(_documents) == 0:
         return []
 
@@ -134,7 +140,10 @@ def search(query: str, k: int = 5) -> List[Dict]:
     q = _normalize(q)
     q = np.expand_dims(q, axis=0)
 
-    scores, ids = _index.search(q, k)
+    # oversample a bit if we need to filter
+    kk = k * 5 if doc_type else k
+
+    scores, ids = _index.search(q, kk)
 
     results: List[Dict] = []
 
@@ -145,10 +154,17 @@ def search(query: str, k: int = 5) -> List[Dict]:
 
         doc = dict(_documents[idx])
         doc["_similarity"] = float(score)
+
+        if doc_type and doc.get("type") != doc_type:
+            continue
+
         results.append(doc)
+
+        if len(results) >= k:
+            break
 
     return results
 
 
-# AUTO LOAD ON IMPORT
+# auto-load
 load_index()

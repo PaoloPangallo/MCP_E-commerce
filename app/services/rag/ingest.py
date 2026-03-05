@@ -2,11 +2,12 @@ from typing import List, Dict
 
 from .vector_store import add_documents as vector_add
 
-# bm25_store potrebbe non avere add_documents: lo gestiamo in try/except
 try:
     from .bm25_store import add_documents as bm25_add
 except Exception:
     bm25_add = None
+
+from app.services.rag.schemas import make_doc_id
 
 
 def ingest_seller_feedback(
@@ -14,11 +15,6 @@ def ingest_seller_feedback(
     feedbacks: List[Dict],
     max_docs: int = 20
 ) -> int:
-    """
-    Converte i feedback venditore in "documenti" RAG e li indicizza.
-    Ritorna quanti documenti sono stati indicizzati.
-    """
-
     if not seller_name or not feedbacks:
         return 0
 
@@ -27,7 +23,6 @@ def ingest_seller_feedback(
 
     for fb in feedbacks[:max_docs]:
 
-        # prova a trovare un testo utile nel feedback
         comment = (fb.get("comment") or fb.get("text") or "").strip()
         if not comment:
             continue
@@ -35,16 +30,18 @@ def ingest_seller_feedback(
         rating = fb.get("rating") or fb.get("type") or fb.get("value")
         ts = fb.get("time") or fb.get("date") or fb.get("timestamp")
 
-        # Documento "pulito" e informativo (utile al retrieval semantico)
         doc_text = f"Seller {seller_name} feedback: {comment}"
         if rating:
             doc_text += f" Rating: {rating}."
 
-        meta = {
-            # IMPORTANTISSIMO: serve al tuo retrieve_context (key = d.get('text'))
-            "text": doc_text,
+        doc_text = " ".join(doc_text.split()).strip()
+        if not doc_text:
+            continue
 
-            # campi utili per filtri/interpretazione
+        meta = {
+            "doc_id": make_doc_id(doc_text),
+            "text": doc_text,
+            "type": "seller_feedback",
             "seller": seller_name,
             "rating": rating,
             "time": ts,
@@ -57,10 +54,8 @@ def ingest_seller_feedback(
     if not texts:
         return 0
 
-    # indicizza nel vector store (FAISS)
     vector_add(texts, metas)
 
-    # indicizza anche in BM25 se disponibile
     if bm25_add is not None:
         try:
             bm25_add(texts, metas)

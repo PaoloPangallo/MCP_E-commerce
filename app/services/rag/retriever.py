@@ -1,33 +1,49 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
+
 from .vector_store import search as vector_search
 from .bm25_store import search as bm25_search
 
 
 def _rrf(rank: int, k0: int = 60) -> float:
-    # Reciprocal Rank Fusion: 1 / (k0 + rank)
     return 1.0 / (k0 + rank)
 
 
-def retrieve_context(query: str, k: int = 5, k0: int = 60) -> List[Dict]:
+def retrieve_context(
+    query: str,
+    k: int = 5,
+    doc_type: Optional[str] = None,
+    per_source: Optional[int] = None,
+    k0: int = 60
+) -> List[Dict]:
     """
-    Hybrid retrieval con RRF fusion tra:
-      - FAISS semantic search
-      - BM25 lexical search
+    Hybrid retrieval:
+      - vector_search + bm25_search
+      - RRF fusion
+      - dedup by doc_id (fallback text)
+      - optional doc_type filter
 
-    Ritorna documenti unici (key = text) con:
-      - _rrf_score (fusion)
-      - _sources (["vector","bm25"])
-      - _similarity / _bm25_score se presenti
+    per_source:
+      - if None => use k
+      - else fetch per_source from each source before fusion
     """
 
-    vector_docs = vector_search(query, k=k)
-    bm25_docs = bm25_search(query, k=k)
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    take = per_source if per_source is not None else k
+
+    vector_docs = vector_search(query, k=take, doc_type=doc_type)
+    bm25_docs = bm25_search(query, k=take, doc_type=doc_type)
 
     merged: Dict[str, Dict] = {}
 
-    # RRF from vector ranks
+    def key_of(d: Dict) -> str:
+        return d.get("doc_id") or (d.get("text") or "").strip()
+
+    # vector contribution
     for rank, d in enumerate(vector_docs, start=1):
-        key = (d.get("text") or "").strip()
+        key = key_of(d)
         if not key:
             continue
 
@@ -40,13 +56,11 @@ def retrieve_context(query: str, k: int = 5, k0: int = 60) -> List[Dict]:
                 merged[key]["_sources"].append("vector")
 
         merged[key]["_rrf_score"] += _rrf(rank, k0=k0)
-
-        # label source (compatibilità con tuo debug)
         merged[key]["_source"] = "hybrid"
 
-    # RRF from bm25 ranks
+    # bm25 contribution
     for rank, d in enumerate(bm25_docs, start=1):
-        key = (d.get("text") or "").strip()
+        key = key_of(d)
         if not key:
             continue
 
@@ -62,9 +76,6 @@ def retrieve_context(query: str, k: int = 5, k0: int = 60) -> List[Dict]:
         merged[key]["_source"] = "hybrid"
 
     results = list(merged.values())
-
-    # sort by fused score
     results.sort(key=lambda x: x.get("_rrf_score", 0.0), reverse=True)
 
-    # keep top-k
     return results[:k]
