@@ -10,26 +10,22 @@ export async function apiFetch<T = any>(
   path: string,
   options: ApiOptions = {}
 ): Promise<T> {
-
   const token = getToken()
 
   const controller = new AbortController()
-
-  const timeout = options.timeout ?? 20000
-
+  const timeout = options.timeout ?? 90000
   const id = setTimeout(() => controller.abort(), timeout)
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> || {})
+    ...((options.headers as Record<string, string>) || {})
   }
 
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`
+    headers.Authorization = `Bearer ${token}`
   }
 
   try {
-
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
@@ -37,7 +33,6 @@ export async function apiFetch<T = any>(
     })
 
     if (!res.ok) {
-
       let message = "API error"
 
       try {
@@ -45,23 +40,16 @@ export async function apiFetch<T = any>(
         message = data.detail || message
       } catch {}
 
-      if (res.status === 401) {
-        console.warn("Unauthorized - token expired?")
-      }
-
       throw new Error(message)
     }
 
     return await res.json()
-
   } catch (err: any) {
-
     if (err.name === "AbortError") {
       throw new Error("Request timeout")
     }
 
     throw err
-
   } finally {
     clearTimeout(id)
   }
