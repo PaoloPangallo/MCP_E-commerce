@@ -7,14 +7,16 @@ try:
 except Exception:
     bm25_add = None
 
-from app.services.rag.schemas import make_doc_id
-
 
 def ingest_seller_feedback(
     seller_name: str,
     feedbacks: List[Dict],
     max_docs: int = 20
 ) -> int:
+    """
+    Converte i feedback venditore in documenti RAG e li indicizza.
+    """
+
     if not seller_name or not feedbacks:
         return 0
 
@@ -39,9 +41,8 @@ def ingest_seller_feedback(
             continue
 
         meta = {
-            "doc_id": make_doc_id(doc_text),
             "text": doc_text,
-            "type": "seller_feedback",
+            "type": "seller_feedback",   # ✅ aggiunto
             "seller": seller_name,
             "rating": rating,
             "time": ts,

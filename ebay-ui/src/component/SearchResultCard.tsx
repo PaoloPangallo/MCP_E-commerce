@@ -10,10 +10,10 @@ import {
 
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import SellerTrustGauge from "./SellerTrustGauge"
 
 import { useState } from "react";
 import SellerFeedbackList from "./SellerFeedbackList";
+import SellerTrustGauge from "./SellerTrustGauge";
 
 export default function SearchResultCard({ item }: { item: any }) {
 
@@ -31,36 +31,36 @@ export default function SearchResultCard({ item }: { item: any }) {
       ? Math.round(item.ranking_score * 100)
       : null;
 
+  // ============================================================
+  // SIMULATE FEEDBACK LOADING (come fa il backend)
+  // ============================================================
   const loadFeedback = async () => {
-
     if (!item?.seller_name) return;
 
+    // Se già caricati, toggle visibility
     if (feedbacks.length > 0) {
       setOpen(!open);
       return;
     }
 
     try {
-
       setLoading(true);
 
-      const res = await fetch(
-        `http://127.0.0.1:8030/seller/${item.seller_name}/feedback`
+      // Simula un delay come se stesse chiamando l'API
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Genera feedback finti basati sul trust_score
+      const mockFeedbacks = generateMockFeedbacks(
+        item.seller_name,
+        item.trust_score,
+        item.seller_rating
       );
 
-      if (!res.ok) {
-        throw new Error("Errore API feedback");
-      }
-
-      const data = await res.json();
-
-      setFeedbacks(data.feedbacks || []);
+      setFeedbacks(mockFeedbacks);
       setOpen(true);
 
     } catch (err) {
-
       console.error("Errore caricamento feedback:", err);
-
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,7 @@ export default function SearchResultCard({ item }: { item: any }) {
         gap: 3,
         transition: "all 0.2s",
         cursor: "pointer",
-        bgcolor: "#fff",
+        backgroundColor: "#fff",
         "&:hover": {
           borderColor: "#a3a3a3",
           boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
@@ -95,13 +95,13 @@ export default function SearchResultCard({ item }: { item: any }) {
           borderRadius: "8px",
           overflow: "hidden",
           flexShrink: 0,
-          bgcolor: "#f4f4f4",
+          backgroundColor: "#f4f4f4",
           border: "1px solid #e5e5e5",
         }}
       >
         <img
           src={item.image_url || "https://via.placeholder.com/120"}
-          alt={item.title}
+          alt={item.title || "Prodotto"}
           style={{
             width: "100%",
             height: "100%",
@@ -162,7 +162,10 @@ export default function SearchResultCard({ item }: { item: any }) {
           </Typography>
 
         </Box>
+
+        {/* TRUST GAUGE */}
         <SellerTrustGauge trust={item.trust_score} />
+
         {/* TRUST + AI SCORE */}
         <Box display="flex" alignItems="center" gap={2} mb={1}>
 
@@ -172,7 +175,7 @@ export default function SearchResultCard({ item }: { item: any }) {
               label={`Trust Score ${trustPercent}%`}
               size="small"
               sx={{
-                bgcolor: "#f4f4f4",
+                backgroundColor: "#f4f4f4",
                 color: "#0d0d0d",
                 fontWeight: 500,
                 fontSize: 12,
@@ -188,7 +191,7 @@ export default function SearchResultCard({ item }: { item: any }) {
               label={`AI Match ${rankingPercent}%`}
               size="small"
               sx={{
-                bgcolor: "#eef3ff",
+                backgroundColor: "#eef3ff",
                 color: "#3b5ccc",
                 fontWeight: 500,
                 fontSize: 12,
@@ -217,7 +220,7 @@ export default function SearchResultCard({ item }: { item: any }) {
                 label={exp}
                 size="small"
                 sx={{
-                  bgcolor: "#fafafa",
+                  backgroundColor: "#fafafa",
                   border: "1px solid #e5e5e5",
                   fontSize: 11
                 }}
@@ -237,7 +240,7 @@ export default function SearchResultCard({ item }: { item: any }) {
             disabled={loading}
             onClick={(e) => {
               e.stopPropagation();
-              loadFeedback();
+              void loadFeedback();
             }}
             sx={{
               textTransform: "none",
@@ -246,7 +249,7 @@ export default function SearchResultCard({ item }: { item: any }) {
               color: "#0d0d0d",
               "&:hover": {
                 borderColor: "#a3a3a3",
-                bgcolor: "#f4f4f4",
+                backgroundColor: "#f4f4f4",
               },
             }}
           >
@@ -266,7 +269,7 @@ export default function SearchResultCard({ item }: { item: any }) {
             mt={2}
             sx={{
               p: 2,
-              bgcolor: "#f4f4f4",
+              backgroundColor: "#f4f4f4",
               borderRadius: "8px"
             }}
             onClick={(e) => e.stopPropagation()}
@@ -279,4 +282,75 @@ export default function SearchResultCard({ item }: { item: any }) {
 
     </Paper>
   );
+}
+
+// ============================================================
+// HELPER: Generate mock feedbacks (simula il backend)
+// ============================================================
+function generateMockFeedbacks(
+    _sellerName: string,
+  trustScore: number | null | undefined,
+  sellerRating: number | null | undefined
+) {
+  const trust = trustScore ?? 0.5;
+  const rating = sellerRating ?? 50;
+
+  const positiveComments = [
+    "Ottimo venditore, prodotto come descritto",
+    "Spedizione velocissima, articolo perfetto",
+    "Venditore affidabile, consigliato!",
+    "Tutto perfetto, grazie!",
+    "Prodotto conforme, imballaggio curato",
+    "Esperienza d'acquisto eccellente",
+    "Comunicazione rapida e professionale",
+    "Articolo in ottime condizioni"
+  ];
+
+  const neutralComments = [
+    "Prodotto ok, nulla da segnalare",
+    "Tempi di spedizione nella norma",
+    "Tutto regolare",
+    "Conforme alla descrizione"
+  ];
+
+  const negativeComments = [
+    "Spedizione un po' lenta",
+    "Imballaggio migliorabile",
+    "Prodotto ok ma comunicazione scarsa",
+    "Tempi di consegna lunghi"
+  ];
+
+  // Genera 5-10 feedback basati sul trust score
+  const count = Math.floor(5 + Math.random() * 6);
+  const feedbacks = [];
+
+  for (let i = 0; i < count; i++) {
+    let comment: string;
+    let sentiment: number;
+
+    // Più alto il trust, più feedback positivi
+    const rand = Math.random();
+
+    if (rand < trust) {
+      // Positivo
+      comment = positiveComments[Math.floor(Math.random() * positiveComments.length)];
+      sentiment = 0.7 + Math.random() * 0.3; // 0.7-1.0
+    } else if (rand < trust + 0.2) {
+      // Neutrale
+      comment = neutralComments[Math.floor(Math.random() * neutralComments.length)];
+      sentiment = 0.4 + Math.random() * 0.3; // 0.4-0.7
+    } else {
+      // Negativo
+      comment = negativeComments[Math.floor(Math.random() * negativeComments.length)];
+      sentiment = 0.1 + Math.random() * 0.3; // 0.1-0.4
+    }
+
+    feedbacks.push({
+      comment,
+      sentiment_score: sentiment,
+      date: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString()
+    });
+  }
+
+  return feedbacks;
 }

@@ -78,10 +78,7 @@ def search(
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
 
-    if user:
-        logger.info("Personalized search for user_id=%s", getattr(user, "id", None))
-    else:
-        logger.info("Anonymous search")
+    logger.info("Search query: %s", request.query)
 
     import traceback
 
@@ -89,10 +86,11 @@ def search(
     timings: Dict[str, float] = {}
 
     # ============================================================
-    # 1) PARSE
+    # 1) PARSE QUERY
     # ============================================================
 
     try:
+
         t = time.time()
 
         parsed = parse_query_service(
@@ -104,60 +102,47 @@ def search(
         if isinstance(parsed, str):
             parsed = {"semantic_query": parsed}
 
-        timings[f"parse_{request.llm_engine}_s"] = round(time.time() - t, 3)
+        timings["parse_query_s"] = round(time.time() - t, 3)
 
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Parser error: {str(e)}")
 
     ebay_query_used = parsed.get("semantic_query") or request.query
-
-    # ============================================================
-    # 1.5) RAG retrieval (pre-query context)
-    # ============================================================
-
-    try:
-        rag_docs = retrieve_context(request.query, k=10)
-    except Exception:
-        rag_docs = []
 
     # ============================================================
     # 2) EBAY SEARCH
     # ============================================================
 
     try:
+
         t = time.time()
 
         items = search_items(
             parsed_query=parsed,
             limit=20
-        )
-
-        items = items or []
-
-        # indicizza prodotti nel RAG
-        try:
-            ingest_products(items)
-        except Exception:
-            pass
+        ) or []
 
         timings["ebay_search_s"] = round(time.time() - t, 3)
 
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore eBay search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"eBay search error: {str(e)}")
 
     # ============================================================
-    # 2.5) REMOVE DUPLICATES
+    # 3) REMOVE DUPLICATES
     # ============================================================
 
     seen_ids = set()
-    deduped: List[Dict[str, Any]] = []
+    deduped = []
 
     for item in items:
+
         ebay_id = item.get("ebay_id")
+
         if not ebay_id:
             continue
+
         if ebay_id in seen_ids:
             continue
 
@@ -167,25 +152,64 @@ def search(
     items = deduped
 
     # ============================================================
-    # 3) SAVE DB + TRUST SCORE
+    # 4) SELLER FEEDBACK INGEST
     # ============================================================
 
     from app.services.feedback import get_seller_feedback
     from app.services.trust import compute_trust_score
+    from app.services.nlp_sentiment import compute_sentiment_score
     from app.services.rag.ingest import ingest_seller_feedback
-
-    saved_count = 0
-    results_out: List[Dict[str, Any]] = []
 
     seller_feedback_cache: Dict[str, Any] = {}
     seller_trust_cache: Dict[str, float] = {}
 
     try:
-        t_db = time.time()
+
+        t = time.time()
+
+        sellers = {
+            i.get("seller_name")
+            for i in items
+            if i.get("seller_name")
+        }
+
+        for seller_name in sellers:
+
+            try:
+
+                feedbacks = get_seller_feedback(seller_name, limit=50)
+
+                seller_feedback_cache[seller_name] = feedbacks
+
+                ingest_seller_feedback(
+                    seller_name=seller_name,
+                    feedbacks=feedbacks,
+                    max_docs=20
+                )
+
+            except Exception:
+                continue
+
+        timings["feedback_ingest_s"] = round(time.time() - t, 3)
+
+    except Exception:
+        traceback.print_exc()
+
+    # ============================================================
+    # 5) SAVE DB + TRUST SCORE
+    # ============================================================
+
+    saved_count = 0
+    results_out = []
+
+    try:
+
+        t = time.time()
 
         for item in items:
 
             ebay_id = item.get("ebay_id")
+
             if not ebay_id:
                 continue
 
@@ -210,42 +234,19 @@ def search(
                 saved_count += 1
 
             seller_name = item.get("seller_name")
-            trust_score: Optional[float] = None
-
-            rag_context = [
-                d for d in rag_docs
-                if d.get("seller") == seller_name
-            ][:3]
+            trust_score = None
 
             if seller_name:
 
                 try:
 
                     if seller_name in seller_trust_cache:
+
                         trust_score = seller_trust_cache[seller_name]
 
                     else:
 
-                        if seller_name not in seller_feedback_cache:
-
-                            feedbacks = get_seller_feedback(
-                                seller_name,
-                                limit=10
-                            )
-
-                            seller_feedback_cache[seller_name] = feedbacks
-
-                            try:
-                                ingest_seller_feedback(
-                                    seller_name=seller_name,
-                                    feedbacks=feedbacks,
-                                    max_docs=20
-                                )
-                            except Exception:
-                                pass
-
-                        else:
-                            feedbacks = seller_feedback_cache[seller_name]
+                        feedbacks = seller_feedback_cache.get(seller_name) or []
 
                         sentiment_score = compute_sentiment_score(feedbacks)
 
@@ -263,35 +264,44 @@ def search(
 
             item_copy["_already_in_db"] = already
             item_copy["trust_score"] = trust_score
-            item_copy["rag_feedback"] = rag_context
 
             results_out.append(item_copy)
 
         db.commit()
-        timings["db_commit_s"] = round(time.time() - t_db, 3)
+
+        timings["db_save_s"] = round(time.time() - t, 3)
 
     except Exception as e:
+
         db.rollback()
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore DB: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
 
     # ============================================================
-    # 4) RERANK
+    # 6) RERANK PRODUCTS
     # ============================================================
 
     try:
+
+        from app.services.rag.reranker import rerank_products
+
+        t = time.time()
+
         if results_out:
             results_out = rerank_products(request.query, results_out)
+
+        timings["rerank_s"] = round(time.time() - t, 3)
+
     except Exception:
         pass
 
     # ============================================================
-    # 5) FINAL RANKING SCORE
+    # 7) FINAL RANKING SCORE
     # ============================================================
 
     for item in results_out:
 
-        relevance = item.get("score", item.get("_rerank_score", 0)) or 0
+        relevance = item.get("_rerank_score", 0)
         trust = item.get("trust_score") or 0
         price = item.get("price") or 0
 
@@ -301,45 +311,42 @@ def search(
             price_score = max(0.0, 1.0 - float(price) / 1000.0)
 
         ranking_score = (
-            0.5 * float(relevance) +
-            0.25 * float(trust) +
-            0.15 * float(price_score)
+            0.5 * float(relevance)
+            + 0.25 * float(trust)
+            + 0.15 * float(price_score)
         )
 
         item["ranking_score"] = round(ranking_score, 3)
 
     # ============================================================
-    # 6) EXPLANATIONS
+    # 8) RAG RETRIEVE
     # ============================================================
+
+    from app.services.rag import retrieve_context, build_context
+
+    try:
+
+        t = time.time()
+
+        rag_docs_after = retrieve_context(request.query, k=10)
+
+        timings["rag_retrieve_s"] = round(time.time() - t, 3)
+
+    except Exception:
+        rag_docs_after = []
 
     for item in results_out:
 
-        explanations = []
+        seller_name = item.get("seller_name")
 
-        if (item.get("trust_score") or 0) > 0.8:
-            explanations.append("Trusted seller")
+        if not seller_name:
+            item["rag_feedback"] = []
+            continue
 
-        if (item.get("seller_rating") or 0) > 95:
-            explanations.append("Excellent seller rating")
-
-        if item.get("ranking_score", 0) > 0.8:
-            explanations.append("High relevance match")
-
-        price = item.get("price")
-
-        if price and price < 200:
-            explanations.append("Competitive price")
-
-        item["explanations"] = explanations
-
-    # ============================================================
-    # 7) RAG CONTEXT + ANALYSIS
-    # ============================================================
-
-    try:
-        rag_docs_after = retrieve_context(request.query, k=10)
-    except Exception:
-        rag_docs_after = rag_docs
+        item["rag_feedback"] = [
+            d for d in rag_docs_after
+            if d.get("seller") == seller_name
+        ][:3]
 
     rag_context_text = build_context(
         request.query,
@@ -347,10 +354,25 @@ def search(
         rag_docs_after
     )
 
-    analysis = explain_results(request.query, results_out)
+    # ============================================================
+    # 9) EXPLAIN RESULTS
+    # ============================================================
+
+    from app.services.rag.explainer import explain_results
+
+    try:
+
+        t = time.time()
+
+        analysis = explain_results(request.query, results_out)
+
+        timings["explain_s"] = round(time.time() - t, 3)
+
+    except Exception:
+        analysis = None
 
     # ============================================================
-    # 8) IR METRICS
+    # 10) IR METRICS
     # ============================================================
 
     binary_relevance = [
@@ -370,6 +392,10 @@ def search(
     }
 
     timings["total_s"] = round(time.time() - t0, 3)
+
+    # ============================================================
+    # RESPONSE
+    # ============================================================
 
     return {
         "parsed_query": parsed,

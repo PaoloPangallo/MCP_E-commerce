@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { Box, CircularProgress } from "@mui/material";
+import { useState, useRef, useEffect } from "react"
+import { Box } from "@mui/material"
 
-import ChatLayout from "./component/ChatLayout";
-import ChatInput from "./component/ChatInput";
-import MessageBubble from "./component/MessageBubble";
-import SearchResultList from "./component/SearchResultList";
-import AIAnalysisCard from "./component/AIAnalysisCard";
+import ChatLayout from "./component/ChatLayout"
+import ChatInput from "./component/ChatInput"
+import MessageBubble from "./component/MessageBubble"
+import SearchResultList from "./component/SearchResultList"
+import AIAnalysisCard from "./component/AIAnalysisCard"
+import AIThinkingPipeline from "./component/AIThinkingPipeline"
 
 
 // --------------------------------------------------
@@ -48,6 +49,7 @@ interface SearchBlock {
   analysis: string | null
   metrics?: IRMetrics
   rag_context?: string
+  timings?: Record<string, number>
 }
 
 
@@ -72,9 +74,13 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
 
+  // --------------------------------------------------
+  // AUTO SCROLL
+  // --------------------------------------------------
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, searches])
+  }, [messages, searches, loading])
 
 
   // --------------------------------------------------
@@ -83,23 +89,32 @@ export default function App() {
 
   const saveSearch = (query: string, resultsCount: number = 0) => {
 
-    const history = JSON.parse(
-      localStorage.getItem("search_history") || "[]"
-    )
+    try {
 
-    const updated = [
-      { query, results: resultsCount },
-      ...history.filter((h: any) => h.query !== query)
-    ]
+      const history = JSON.parse(
+        localStorage.getItem("search_history") || "[]"
+      )
 
-    const newHistory = updated.slice(0, 20)
+      const updated = [
+        { query, results: resultsCount },
+        ...history.filter((h: any) => h.query !== query)
+      ]
 
-    localStorage.setItem(
-      "search_history",
-      JSON.stringify(newHistory)
-    )
+      const newHistory = updated.slice(0, 20)
 
-    window.dispatchEvent(new Event("search_history_updated"))
+      localStorage.setItem(
+        "search_history",
+        JSON.stringify(newHistory)
+      )
+
+      window.dispatchEvent(new Event("search_history_updated"))
+
+    } catch (err) {
+
+      console.error("History save error:", err)
+
+    }
+
   }
 
 
@@ -138,7 +153,6 @@ export default function App() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
-
       setSearches(prev => [...prev, cached])
 
       return
@@ -161,16 +175,16 @@ export default function App() {
       })
 
       if (!res.ok) {
-        throw new Error("Backend error")
+        throw new Error(`Backend error: ${res.status}`)
       }
 
       const data = await res.json()
 
       const newResults: SearchItem[] = data.results || []
       const newAnalysis: string | null = data.analysis || null
-
       const newMetrics: IRMetrics | undefined = data.metrics || undefined
       const newRagContext: string | undefined = data.rag_context || undefined
+      const newTimings: Record<string, number> | undefined = data._timings || undefined
 
 
       const newSearch: SearchBlock = {
@@ -178,7 +192,8 @@ export default function App() {
         results: newResults,
         analysis: newAnalysis,
         metrics: newMetrics,
-        rag_context: newRagContext
+        rag_context: newRagContext,
+        timings: newTimings
       }
 
 
@@ -205,7 +220,6 @@ export default function App() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
-
       setSearches(prev => [...prev, newSearch])
 
     }
@@ -215,14 +229,16 @@ export default function App() {
 
       const errorMessage: Message = {
         role: "assistant",
-        content: "Errore durante la ricerca."
+        content: "Errore durante la ricerca. Riprova tra poco."
       }
 
       setMessages(prev => [...prev, errorMessage])
 
     }
     finally {
+
       setLoading(false)
+
     }
 
   }
@@ -245,8 +261,7 @@ export default function App() {
           alignItems: "flex-start",
           width: "100%",
           px: 4,
-          py: 4,
-          position: "relative"
+          py: 4
         }}
       >
 
@@ -266,6 +281,17 @@ export default function App() {
           ))}
 
 
+          {/* THINKING PIPELINE */}
+
+          {loading && (
+
+            <AIThinkingPipeline
+              loading={true}
+            />
+
+          )}
+
+
           {/* SEARCH RESULTS */}
 
           {searches.map((search, i) => (
@@ -274,11 +300,18 @@ export default function App() {
 
               {search.analysis && (
 
-                <AIAnalysisCard
-                  text={search.analysis}
-                  metrics={search.metrics}
-                  rag_context={search.rag_context}
-                />
+                <>
+                  <AIThinkingPipeline
+                    loading={false}
+                    timings={search.timings}
+                  />
+
+                  <AIAnalysisCard
+                    text={search.analysis}
+                    metrics={search.metrics}
+                    rag_context={search.rag_context}
+                  />
+                </>
 
               )}
 
@@ -298,22 +331,6 @@ export default function App() {
           <div ref={bottomRef} />
 
         </Box>
-
-
-        {loading && (
-
-          <Box
-            sx={{
-              position: "fixed",
-              top: 20,
-              right: 20,
-              zIndex: 1000
-            }}
-          >
-            <CircularProgress size={24} />
-          </Box>
-
-        )}
 
       </Box>
 
