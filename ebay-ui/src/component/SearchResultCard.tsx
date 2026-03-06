@@ -15,7 +15,20 @@ import { useState } from "react";
 import SellerFeedbackList from "./SellerFeedbackList";
 import SellerTrustGauge from "./SellerTrustGauge";
 
-export default function SearchResultCard({ item }: { item: any }) {
+interface SearchItem {
+  title?: string
+  price?: number
+  currency?: string
+  image_url?: string
+  url?: string
+  seller_name?: string
+  seller_rating?: number
+  trust_score?: number
+  ranking_score?: number
+  explanations?: string[]
+}
+
+export default function SearchResultCard({ item }: { item: SearchItem }) {
 
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [open, setOpen] = useState(false);

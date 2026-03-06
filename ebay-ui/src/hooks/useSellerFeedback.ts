@@ -1,55 +1,49 @@
-import { useState, useRef } from "react"
-import { type Feedback, fetchSellerFeedback } from "../api/sellerApi"
+import { useState } from "react"
 
-export function useSellerFeedback() {
+export interface SellerFeedback {
+  comment: string
+  sentiment_score?: number
+  date?: string
+}
 
+export function useSellerFeedback(seller?: string) {
+
+  const [feedbacks, setFeedbacks] = useState<SellerFeedback[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // cache feedback per seller
-  const cache = useRef<Record<string, Feedback[]>>({})
+  const loadFeedback = async () => {
 
-  const getFeedback = async (seller: string): Promise<Feedback[]> => {
+    if (!seller) return
 
-    if (!seller) return []
-
-    // cache hit
-    if (cache.current[seller]) {
-      return cache.current[seller]
-    }
-
-    setLoading(true)
-    setError(null)
+    if (feedbacks.length > 0) return
 
     try {
 
-      const res = await fetchSellerFeedback(seller)
+      setLoading(true)
 
-      const data: Feedback[] = res.feedbacks ?? []
+      const res = await fetch(
+        `http://127.0.0.1:8030/seller/${encodeURIComponent(seller)}/feedback`
+      )
 
-      cache.current[seller] = data
+      const data = await res.json()
 
-      return data
+      setFeedbacks(data.feedbacks || [])
 
     } catch (err) {
 
-      console.error("Feedback fetch error:", err)
-
-      setError("Errore nel caricamento feedback")
-
-      return []
+      console.error("Feedback load error", err)
 
     } finally {
 
       setLoading(false)
 
     }
+
   }
 
   return {
-    getFeedback,
+    feedbacks,
     loading,
-    error
+    loadFeedback
   }
-
 }
