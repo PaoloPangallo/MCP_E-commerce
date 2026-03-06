@@ -1,40 +1,50 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Box,
   Typography,
   CircularProgress,
   Collapse,
   IconButton,
-  Chip
+  Chip,
+  Divider
 } from "@mui/material"
 
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 
-
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
-
-interface IRMetrics {
-  "precision@5"?: number
-  "precision@10"?: number
-  "recall@10"?: number
-  "ndcg@10"?: number
-}
+import type { IRMetrics, RagContext } from "../component/searchTypes.ts"
 
 interface Props {
   text?: string
   loading?: boolean
   metrics?: IRMetrics
-  rag_context?: string
+  rag_context?: RagContext
 }
 
+function normalizeEvidence(value?: RagContext): string[] {
+  if (!value) {
+    return []
+  }
 
-// --------------------------------------------------
-// COMPONENT
-// --------------------------------------------------
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).slice(0, 6)
+  }
+
+  return value
+    .split(/\n|•|- /g)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+}
+
+function formatMetric(label: string, value?: number) {
+  if (value === undefined || Number.isNaN(value)) {
+    return null
+  }
+
+  return `${label} ${value.toFixed(2)}`
+}
 
 export default function AIAnalysisCard({
   text,
@@ -42,230 +52,125 @@ export default function AIAnalysisCard({
   metrics,
   rag_context
 }: Props) {
-
   const [expanded, setExpanded] = useState(false)
 
-  if (!text && !loading) return null
+  const evidence = useMemo(() => normalizeEvidence(rag_context), [rag_context])
 
+  const metricLabels = [
+    formatMetric("Precision@5", metrics?.["precision@5"]),
+    formatMetric("Precision@10", metrics?.["precision@10"]),
+    formatMetric("Recall@10", metrics?.["recall@10"]),
+    formatMetric("NDCG@10", metrics?.["ndcg@10"]),
+  ].filter(Boolean) as string[]
+
+  const hasExtraDetails = metricLabels.length > 0 || evidence.length > 0
+
+  if (!text && !loading && !hasExtraDetails) {
+    return null
+  }
 
   return (
-
     <Box
       sx={{
-        p: 2.5,
+        p: 3,
         mb: 3,
         borderRadius: "16px",
-        bgcolor: "#f6f6f7",
-        border: "1px solid #e5e5e5"
+        bgcolor: "#ffffff",
+        border: "1px solid #e5e5e5",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
       }}
     >
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+        <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+          <AutoAwesomeIcon sx={{ fontSize: 18, color: "#10a37f" }} />
 
-      {/* HEADER */}
-
-      <Box
-        display="flex"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={1.5}
-      >
-
-        <Box display="flex" alignItems="center" gap={1}>
-
-          <AutoAwesomeIcon
-            sx={{
-              fontSize: 18,
-              color: "#10a37f"
-            }}
-          />
-
-          <Typography
-            fontWeight={600}
-            fontSize={14}
-          >
+          <Typography fontWeight={600} fontSize={14}>
             AI Analysis
           </Typography>
 
-          {metrics && (
+          {hasExtraDetails && (
             <Chip
-              label="AI Ranked"
+              label="Explainable AI"
               size="small"
               sx={{
                 fontSize: 11,
-                bgcolor: "#e8f5f0",
-                color: "#0a7a5a"
+                bgcolor: "#eef3ff",
+                color: "#3b5ccc"
               }}
             />
           )}
-
         </Box>
 
-        {(metrics || rag_context) && (
+        {hasExtraDetails && (
           <IconButton
             size="small"
-            onClick={() => setExpanded(!expanded)}
+            aria-label={expanded ? "Nascondi dettagli" : "Mostra dettagli"}
+            onClick={() => setExpanded(prev => !prev)}
           >
             {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
           </IconButton>
         )}
-
       </Box>
 
-
-      {/* LOADING */}
-
       {loading && (
-
-        <Box display="flex" alignItems="center" gap={1}>
-
+        <Box display="flex" alignItems="center" gap={1} mb={text ? 2 : 0}>
           <CircularProgress size={16} />
-
-          <Typography
-            sx={{
-              fontSize: 13,
-              color: "#777"
-            }}
-          >
-            Generazione analisi...
+          <Typography sx={{ fontSize: 13, color: "#777" }}>
+            Generazione analisi AI...
           </Typography>
-
         </Box>
-
       )}
-
-
-      {/* MAIN ANALYSIS */}
 
       {text && (
-
-        <Typography
-          sx={{
-            fontSize: 15,
-            lineHeight: 1.65,
-            whiteSpace: "pre-line",
-            color: "#333"
-          }}
-        >
-          {text}
-        </Typography>
-
+        <Box mb={hasExtraDetails ? 1 : 0}>
+          <Typography sx={{ fontSize: 15, lineHeight: 1.7, color: "#333" }}>
+            {text}
+          </Typography>
+        </Box>
       )}
 
-
-      {/* EXPANDABLE SECTION */}
-
       <Collapse in={expanded}>
+        <Divider sx={{ my: 2 }} />
 
-        {/* METRICS */}
-
-        {metrics && (
-
-          <Box mt={2}>
-
-            <Typography
-              sx={{
-                fontSize: 13,
-                fontWeight: 600,
-                mb: 1
-              }}
-            >
+        {metricLabels.length > 0 && (
+          <Box mb={evidence.length > 0 ? 2 : 0}>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1 }}>
               Ranking Metrics
             </Typography>
 
-            <Box
-              sx={{
-                display: "flex",
-                gap: 1,
-                flexWrap: "wrap"
-              }}
-            >
-
-              {metrics["precision@5"] !== undefined && (
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+              {metricLabels.map(metric => (
                 <Chip
+                  key={metric}
                   size="small"
-                  label={`Precision@5: ${metrics["precision@5"].toFixed(2)}`}
+                  label={metric}
+                  sx={{
+                    bgcolor: "#fafafa",
+                    border: "1px solid #e5e5e5",
+                    fontSize: 11
+                  }}
                 />
-              )}
-
-              {metrics["precision@10"] !== undefined && (
-                <Chip
-                  size="small"
-                  label={`Precision@10: ${metrics["precision@10"].toFixed(2)}`}
-                />
-              )}
-
-              {metrics["recall@10"] !== undefined && (
-                <Chip
-                  size="small"
-                  label={`Recall@10: ${metrics["recall@10"].toFixed(2)}`}
-                />
-              )}
-
-              {metrics["ndcg@10"] !== undefined && (
-                <Chip
-                  size="small"
-                  label={`NDCG@10: ${metrics["ndcg@10"].toFixed(2)}`}
-                />
-              )}
-
+              ))}
             </Box>
-
           </Box>
-
         )}
 
-
-        {/* RAG CONTEXT */}
-
-        {rag_context && (
-
-          <Box mt={2}>
-
-            <Typography
-              sx={{
-                fontSize: 13,
-                fontWeight: 600,
-                mb: 1
-              }}
-            >
+        {evidence.length > 0 && (
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1 }}>
               Retrieved Evidence
             </Typography>
 
-            <Typography
-              component="div"
-              sx={{
-                fontSize: 13,
-                color: "#666",
-                lineHeight: 1.6,
-                maxHeight: 120,
-                overflow: "hidden",
-                textOverflow: "ellipsis"
-              }}
-            >
-              {rag_context
-                ?.split(" - ")
-                .slice(0,5)
-                .map((e,i) => (
-                  <Typography
-                    key={i}
-                    sx={{
-                      fontSize: 13,
-                      color: "#666",
-                      lineHeight: 1.6
-                    }}
-                  >
-                    • {e}
-                  </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.8 }}>
+              {evidence.map(item => (
+                <Typography key={item} sx={{ fontSize: 13, color: "#666", lineHeight: 1.6 }}>
+                  • {item}
+                </Typography>
               ))}
-            </Typography>
-
+            </Box>
           </Box>
-
         )}
-
       </Collapse>
-
     </Box>
-
   )
-
 }

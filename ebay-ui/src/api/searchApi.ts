@@ -2,24 +2,7 @@ import { apiFetch } from "./apiClient"
 
 
 // ============================================================
-// FEEDBACK TYPES
-// ============================================================
-
-export type Feedback = {
-  user: string
-  rating: number
-  comment: string
-  time: string
-}
-
-export interface SellerFeedbackResponse {
-  seller: string
-  feedbacks: Feedback[]
-}
-
-
-// ============================================================
-// SEARCH TYPES
+// TYPES
 // ============================================================
 
 export interface ParsedQuery {
@@ -52,10 +35,10 @@ export interface SearchItem {
 }
 
 export interface IRMetrics {
-  "precision@5": number
-  "precision@10": number
-  "recall@10": number
-  "ndcg@10": number
+  "precision@5"?: number
+  "precision@10"?: number
+  "recall@10"?: number
+  "ndcg@10"?: number
 }
 
 export interface SearchResponse {
@@ -72,7 +55,7 @@ export interface SearchResponse {
 
   analysis?: string
 
-  rag_context?: string
+  rag_context?: string[]
 
   metrics?: IRMetrics
 
@@ -81,35 +64,18 @@ export interface SearchResponse {
 
 
 // ============================================================
-// API CALLS
+// API
 // ============================================================
-
-export async function fetchSellerFeedback(
-  seller: string,
-  page = 1,
-  limit = 10
-): Promise<SellerFeedbackResponse> {
-
-  const safeSeller = encodeURIComponent(seller)
-
-  return apiFetch(
-    `/seller/${safeSeller}/feedback?page=${page}&limit=${limit}`
-  )
-}
-
 
 export async function searchProducts(
   query: string
 ): Promise<SearchResponse> {
 
-  return apiFetch("/search", {
-
+  return apiFetch<SearchResponse>("/search", {
     method: "POST",
-
     body: JSON.stringify({
       query,
-      llm_engine: "ollama",
+      llm_engine: "ollama"
     })
-
   })
 }

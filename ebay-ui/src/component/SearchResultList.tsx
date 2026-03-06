@@ -1,140 +1,55 @@
-import { Box, Typography, Divider, Chip } from "@mui/material";
-import SearchResultCard from "./SearchResultCard";
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import { useEffect, useMemo, useState } from "react"
+import { Box, Button, Chip, Divider, Typography } from "@mui/material"
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents"
 
+import SearchResultCard from "./SearchResultCard"
+import type { SearchItem } from "../component/searchTypes.ts"
 
-// ----------------------------------------------------
-// TYPES
-// ----------------------------------------------------
-
-interface SearchItem {
-  ebay_id?: string
-  title?: string
-  price?: number
-  currency?: string
-  image_url?: string
-  url?: string
-
-  seller_name?: string
-  seller_rating?: number
-
-  trust_score?: number
-  ranking_score?: number
-
-  explanations?: string[]
-  rag_feedback?: any[]
-
-  _already_in_db?: boolean
+interface Props {
+  results?: SearchItem[]
 }
 
+export default function SearchResultList({ results = [] }: Props) {
+  const [visibleCount, setVisibleCount] = useState(6)
 
-// ----------------------------------------------------
-// COMPONENT
-// ----------------------------------------------------
+  const safeResults = useMemo(() => results.filter(Boolean), [results])
 
-export default function SearchResultList({
-  results = [],
-}: {
-  results?: SearchItem[]
-}) {
+  useEffect(() => {
+    setVisibleCount(6)
+  }, [safeResults])
 
-  // ----------------------------------------------------
-  // EMPTY STATE
-  // ----------------------------------------------------
+  const visibleResults = safeResults.slice(0, visibleCount)
 
-  if (!results || results.length === 0) {
+  if (safeResults.length === 0) {
     return (
-      <Box
-        sx={{
-          mt: 8,
-          textAlign: "center",
-          color: "#6e6e80",
-        }}
-      >
-        <Typography
-          sx={{
-            fontSize: 16,
-            fontWeight: 500,
-          }}
-        >
+      <Box sx={{ mt: 8, textAlign: "center", color: "#6e6e80" }}>
+        <Typography sx={{ fontSize: 16, fontWeight: 500 }}>
           Nessun risultato trovato
         </Typography>
 
-        <Typography
-          variant="caption"
-          sx={{
-            mt: 1,
-            display: "block",
-            color: "#8e8ea0",
-          }}
-        >
-          Prova a modificare la ricerca
+        <Typography variant="caption" sx={{ mt: 1, display: "block", color: "#8e8ea0" }}>
+          Prova a cambiare brand, fascia di prezzo o parole chiave.
         </Typography>
       </Box>
     )
   }
 
-
-  // ----------------------------------------------------
-  // UI
-  // ----------------------------------------------------
-
   return (
-
-    <Box
-      sx={{
-        mt: 3,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-
-      {/* HEADER */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          mb: 3,
-        }}
-      >
-
-        <Typography
-          sx={{
-            fontSize: 14,
-            color: "#6e6e80",
-            fontWeight: 500,
-          }}
-        >
-          {results.length} {results.length === 1 ? "risultato" : "risultati"} · ordinati per AI relevance
+    <Box sx={{ mt: 3, display: "flex", flexDirection: "column" }}>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
+        <Typography sx={{ fontSize: 14, color: "#6e6e80", fontWeight: 500 }}>
+          {safeResults.length} {safeResults.length === 1 ? "risultato" : "risultati"} · ordinati per AI relevance
         </Typography>
-
       </Box>
 
-
-      {/* LIST */}
-      {results.map((item, index) => {
-
+      {visibleResults.map((item, index) => {
         const key = item.ebay_id ?? `${index}-${item.title}`
-
         const ranking = item.ranking_score ?? 0
 
         return (
-
           <Box key={key} sx={{ position: "relative" }}>
-
-            {/* AI BEST MATCH */}
             {index === 0 && ranking > 0.7 && (
-
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: -12,
-                  left: 16,
-                  zIndex: 1,
-                }}
-              >
-
+              <Box sx={{ position: "absolute", top: -12, left: 16, zIndex: 1 }}>
                 <Chip
                   icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
                   label="AI Best Match"
@@ -146,67 +61,38 @@ export default function SearchResultList({
                     fontSize: 11,
                     height: 24,
                     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-
-                    "& .MuiChip-icon": {
-                      color: "#856404",
-                    },
+                    "& .MuiChip-icon": { color: "#856404" }
                   }}
                 />
-
               </Box>
-
             )}
 
-            <SearchResultCard
-              item={item}
-            />
+            <SearchResultCard item={item} />
 
-            {/* DIVIDER EVERY 3 */}
-            {index < results.length - 1 && (index + 1) % 3 === 0 && (
-
-              <Divider
-                sx={{
-                  my: 3,
-                  borderColor: "#ececf1",
-                }}
-              />
-
-            )}
-
+            {index < visibleResults.length - 1 && <Divider sx={{ my: 1.5, borderColor: "#ececf1" }} />}
           </Box>
-
         )
-
       })}
 
-
-      {/* FOOTER */}
-      {results.length > 5 && (
-
-        <Box
-          sx={{
-            mt: 4,
-            pt: 3,
-            borderTop: "1px solid #ececf1",
-            textAlign: "center",
-          }}
-        >
-
-          <Typography
-            sx={{
-              fontSize: 13,
-              color: "#8e8ea0",
-            }}
+      {visibleCount < safeResults.length && (
+        <Box sx={{ textAlign: "center", mt: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setVisibleCount(prev => Math.min(prev + 6, safeResults.length))}
+            sx={{ textTransform: "none", borderRadius: 999 }}
           >
-            Fine risultati · {results.length} articoli analizzati
-          </Typography>
-
+            Mostra altri risultati
+          </Button>
         </Box>
-
       )}
 
+      {safeResults.length > 5 && (
+        <Box sx={{ mt: 4, pt: 3, borderTop: "1px solid #ececf1", textAlign: "center" }}>
+          <Typography sx={{ fontSize: 13, color: "#8e8ea0" }}>
+            Mostrati {Math.min(visibleCount, safeResults.length)} di {safeResults.length} articoli analizzati
+          </Typography>
+        </Box>
+      )}
     </Box>
-
   )
-
 }

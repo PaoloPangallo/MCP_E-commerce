@@ -2,12 +2,22 @@ import { getToken } from "../auth/authStore"
 
 const API_BASE = "http://localhost:8030"
 
-export async function apiFetch(
+type ApiOptions = RequestInit & {
+  timeout?: number
+}
+
+export async function apiFetch<T = any>(
   path: string,
-  options: RequestInit = {}
-) {
+  options: ApiOptions = {}
+): Promise<T> {
 
   const token = getToken()
+
+  const controller = new AbortController()
+
+  const timeout = options.timeout ?? 20000
+
+  const id = setTimeout(() => controller.abort(), timeout)
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -18,22 +28,41 @@ export async function apiFetch(
     headers["Authorization"] = `Bearer ${token}`
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers
-  })
+  try {
 
-  if (!res.ok) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal
+    })
 
-    let message = "API error"
+    if (!res.ok) {
 
-    try {
-      const data = await res.json()
-      message = data.detail || message
-    } catch {}
+      let message = "API error"
 
-    throw new Error(message)
+      try {
+        const data = await res.json()
+        message = data.detail || message
+      } catch {}
+
+      if (res.status === 401) {
+        console.warn("Unauthorized - token expired?")
+      }
+
+      throw new Error(message)
+    }
+
+    return await res.json()
+
+  } catch (err: any) {
+
+    if (err.name === "AbortError") {
+      throw new Error("Request timeout")
+    }
+
+    throw err
+
+  } finally {
+    clearTimeout(id)
   }
-
-  return res.json()
 }

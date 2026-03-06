@@ -1,21 +1,31 @@
-import { Box, Avatar, Typography } from "@mui/material";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import { Box, Avatar, Typography } from "@mui/material"
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 
 interface MessageBubbleProps {
-  role: "user" | "assistant";
-  children: React.ReactNode;
-  timestamp?: string;
-  isTyping?: boolean;
+  role: "user" | "assistant"
+  children: React.ReactNode
+  timestamp?: string
+  isTyping?: boolean
 }
+
 
 // -----------------------------
 // Typing indicator
 // -----------------------------
 
 function TypingIndicator() {
+
   return (
-    <Box display="flex" gap={0.75} alignItems="center" height={24}>
+
+    <Box
+      display="flex"
+      alignItems="center"
+      gap={0.8}
+      height={24}
+    >
+
       {[0, 0.2, 0.4].map((delay, i) => (
+
         <Box
           key={i}
           sx={{
@@ -27,25 +37,45 @@ function TypingIndicator() {
             animationDelay: `${delay}s`,
             "@keyframes bubble": {
               "0%, 80%, 100%": { transform: "scale(0)" },
-              "40%": { transform: "scale(1)" },
-            },
+              "40%": { transform: "scale(1)" }
+            }
           }}
         />
+
       ))}
+
+      <Typography
+        sx={{
+          fontSize: 12,
+          color: "#888",
+          ml: 1
+        }}
+      >
+        AI is thinking...
+      </Typography>
+
     </Box>
-  );
+
+  )
+
 }
+
+
+// -----------------------------
+// Component
+// -----------------------------
 
 export default function MessageBubble({
   role,
   children,
   timestamp,
-  isTyping = false,
+  isTyping = false
 }: MessageBubbleProps) {
 
-  const isUser = role === "user";
+  const isUser = role === "user"
 
   return (
+
     <Box
       sx={{
         width: "100%",
@@ -53,11 +83,14 @@ export default function MessageBubble({
         justifyContent: isUser ? "flex-end" : "flex-start",
         gap: 2,
         px: 2,
-        mb: 3,
+        mb: 3
       }}
     >
-      {/* Assistant Avatar */}
+
+      {/* ASSISTANT AVATAR */}
+
       {!isUser && (
+
         <Avatar
           sx={{
             width: 30,
@@ -66,83 +99,64 @@ export default function MessageBubble({
             border: "1px solid #e5e5e5",
             color: "#000",
             flexShrink: 0,
+            mt: 0.5
           }}
         >
           <AutoAwesomeIcon sx={{ fontSize: 18 }} />
         </Avatar>
+
       )}
 
-      {/* Message block */}
+      {/* MESSAGE CONTENT */}
+
       <Box
         sx={{
           maxWidth: isUser ? "70%" : "calc(100% - 46px)",
           display: "flex",
           flexDirection: "column",
-          alignItems: isUser ? "flex-end" : "flex-start",
+          alignItems: isUser ? "flex-end" : "flex-start"
         }}
       >
-        {/* Bubble */}
+
+        {/* BUBBLE */}
+
         <Box
           sx={{
-            px: isUser ? 2 : 0,
-            py: isUser ? 1.5 : 0.5,
+            px: isUser ? 2.2 : 0,
+            py: isUser ? 1.6 : 0.5,
             bgcolor: isUser ? "#f4f4f4" : "transparent",
-            color: "#202123",
             borderRadius: isUser ? "24px" : 0,
+            maxWidth: "100%"
           }}
         >
-          {isTyping ? (
-            <TypingIndicator />
-          ) : (
-            <Box
-              sx={{
-                fontSize: 16,
-                lineHeight: 1.6,
 
-                "& p": {
-                  m: 0,
-                  mb: 1.5,
-                  "&:last-child": { mb: 0 },
-                },
+          {isTyping
+            ? <TypingIndicator />
+            : children}
 
-                "& pre": {
-                  bgcolor: "#f4f4f4",
-                  p: 2,
-                  borderRadius: 2,
-                  overflow: "auto",
-                  fontSize: 14,
-                  my: 1.5,
-                },
-
-                "& code": {
-                  bgcolor: "rgba(0,0,0,0.05)",
-                  px: 0.75,
-                  py: 0.25,
-                  borderRadius: 1,
-                  fontSize: 14,
-                  fontFamily: "monospace",
-                },
-              }}
-            >
-              {children}
-            </Box>
-          )}
         </Box>
 
-        {/* Timestamp */}
+        {/* TIMESTAMP */}
+
         {timestamp && (
+
           <Typography
             variant="caption"
             sx={{
-              mt: 0.5,
+              mt: 0.6,
               color: "#8e8ea0",
-              fontSize: 11,
+              fontSize: 11
             }}
           >
             {timestamp}
           </Typography>
+
         )}
+
       </Box>
+
     </Box>
-  );
+
+  )
+
 }

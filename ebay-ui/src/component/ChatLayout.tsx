@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Box,
   Drawer,
@@ -13,142 +13,84 @@ import {
 } from "@mui/material"
 
 import AddIcon from "@mui/icons-material/Add"
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import DeleteIcon from "@mui/icons-material/Delete"
 import StarIcon from "@mui/icons-material/Star"
-import {useAuth} from "../auth/useAuth.ts";
-import AuthPanel from "../auth/ui/AuthPanel.tsx";
+import PushPinIcon from "@mui/icons-material/PushPin"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 
+import { useAuth } from "../auth/useAuth.ts"
+import AuthPanel from "../auth/ui/AuthPanel.tsx"
 
 interface HistoryItem {
   query: string
   results: number
 }
 
-export default function ChatLayout({
-  children,
-  onSearch
-}: {
+interface Props {
   children: React.ReactNode
-  onSearch: (q: string) => void
-}) {
+  onSearch: (query: string) => void
+  onNewChat: () => void
+}
 
+const HISTORY_KEY = "search_history"
+const PINNED_KEY = "pinned_searches"
 
+function readArray<T>(key: string): T[] {
+  try {
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export default function ChatLayout({ children, onSearch, onNewChat }: Props) {
   const { user } = useAuth()
-
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [pinned, setPinned] = useState<string[]>([])
 
-  // -------------------------
-  // LOAD DATA
-  // -------------------------
-
   useEffect(() => {
-
-    const loadHistory = () => {
-
-      const h = JSON.parse(
-        localStorage.getItem("search_history") || "[]"
-      )
-
-      setHistory(h)
-
+    const syncSidebar = () => {
+      setHistory(readArray<HistoryItem>(HISTORY_KEY).filter(item => typeof item?.query === "string"))
+      setPinned(readArray<string>(PINNED_KEY).filter(item => typeof item === "string"))
     }
 
-    const loadPinned = () => {
+    syncSidebar()
+    window.addEventListener("search_history_updated", syncSidebar)
 
-      const p = JSON.parse(
-        localStorage.getItem("pinned_searches") || "[]"
-      )
-
-      setPinned(p)
-
-    }
-
-    loadHistory()
-    loadPinned()
-
-    window.addEventListener(
-      "search_history_updated",
-      loadHistory
-    )
-
-    return () => {
-
-      window.removeEventListener(
-        "search_history_updated",
-        loadHistory
-      )
-
-    }
-
+    return () => window.removeEventListener("search_history_updated", syncSidebar)
   }, [])
 
-  // -------------------------
-  // CLEAR HISTORY
-  // -------------------------
-
   const clearHistory = () => {
-
-    localStorage.removeItem("search_history")
-
+    localStorage.removeItem(HISTORY_KEY)
     setHistory([])
-
+    window.dispatchEvent(new Event("search_history_updated"))
   }
-
-  // -------------------------
-  // PIN SEARCH
-  // -------------------------
 
   const pinSearch = (query: string) => {
-
-    const updated = [query, ...pinned.filter(p => p !== query)]
-
-    const trimmed = updated.slice(0, 10)
-
-    localStorage.setItem(
-      "pinned_searches",
-      JSON.stringify(trimmed)
-    )
-
-    setPinned(trimmed)
-
+    const updated = [query, ...pinned.filter(item => item !== query)].slice(0, 10)
+    localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
+    setPinned(updated)
   }
-
-  // -------------------------
-  // REMOVE PIN
-  // -------------------------
 
   const unpinSearch = (query: string) => {
-
-    const updated = pinned.filter(p => p !== query)
-
-    localStorage.setItem(
-      "pinned_searches",
-      JSON.stringify(updated)
-    )
-
+    const updated = pinned.filter(item => item !== query)
+    localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
     setPinned(updated)
-
   }
 
-  // -------------------------
-  // UI
-  // -------------------------
+  const visibleHistory = useMemo(() => history.slice(0, 20), [history])
 
   return (
-
     <Box display="flex" height="100vh" bgcolor="#fff">
-
-      {/* SIDEBAR */}
-
       <Drawer
         variant="permanent"
         sx={{
-          width: 260,
+          width: 280,
+          flexShrink: 0,
           "& .MuiDrawer-paper": {
-            width: 260,
+            width: 280,
             bgcolor: "#f9f9f9",
             borderRight: "1px solid #ececec",
             display: "flex",
@@ -156,331 +98,187 @@ export default function ChatLayout({
           }
         }}
       >
+        <Box sx={{ display: "flex", flexDirection: "column", p: 2, borderBottom: "1px solid #eee" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.2, mb: 1 }}>
+            <Box
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: "8px",
+                bgcolor: "#10a37f",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 14
+              }}
+            >
+              AI
+            </Box>
 
-        {/* HEADER */}
-
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            p: 2,
-            borderBottom: "1px solid #eee"
-          }}
-        >
-
-          <Box
-  sx={{
-    display: "flex",
-    alignItems: "center",
-    gap: 1.2,
-    mb: 1
-  }}
->
-
-  <Box
-    sx={{
-      width: 26,
-      height: 26,
-      borderRadius: "6px",
-      bgcolor: "#10a37f",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: "#fff",
-      fontWeight: 700,
-      fontSize: 14
-    }}
-  >
-    AI
-        </Box>
-
-        <Typography
-          sx={{
-            fontWeight: 600,
-            fontSize: 14
-          }}
-        >
-          eBay AI Search
-        </Typography>
-
-      </Box>
-
-          {/* AUTH PANEL */}
+            <Box>
+              <Typography sx={{ fontWeight: 700, fontSize: 14 }}>eBay AI Search</Typography>
+              <Typography sx={{ fontSize: 12, color: "#8e8ea0" }}>
+                chat, ranking, seller trust
+              </Typography>
+            </Box>
+          </Box>
 
           <Box mt={1}>
             <AuthPanel />
           </Box>
 
-          {/* USER PREFERENCES */}
-
           {user && (
-
-            <Box mt={1} display="flex" gap={1} flexWrap="wrap">
-
+            <Box mt={1.5} display="flex" gap={1} flexWrap="wrap">
               {user.favorite_brands && (
-
                 <Chip
                   label={`Brand: ${user.favorite_brands}`}
                   size="small"
-                  sx={{
-                    fontSize: 11,
-                    bgcolor: "#eef3ff",
-                    color: "#3b5ccc"
-                  }}
+                  sx={{ fontSize: 11, bgcolor: "#eef3ff", color: "#3b5ccc" }}
                 />
-
               )}
 
               {user.price_preference && (
-
                 <Chip
                   label={`Budget: ${user.price_preference}`}
                   size="small"
-                  sx={{
-                    fontSize: 11,
-                    bgcolor: "#f4f4f4"
-                  }}
+                  sx={{ fontSize: 11, bgcolor: "#f4f4f4" }}
                 />
-
               )}
-
             </Box>
-
           )}
-
         </Box>
 
-
-        {/* NEW CHAT */}
-
         <Box p={2}>
-
           <ListItemButton
-                  onClick={() => window.location.reload()}
-                  sx={{
-                    borderRadius: 2,
-                    border: "1px solid #e5e5e5",
-                    bgcolor: "#fff",
-
-                    "&:hover": {
-                      bgcolor: "#f4f4f4"
-                    }
-                  }}
-                >
-
+            onClick={onNewChat}
+            sx={{
+              borderRadius: 2,
+              border: "1px solid #e5e5e5",
+              bgcolor: "#fff",
+              "&:hover": { bgcolor: "#f4f4f4" }
+            }}
+          >
             <AddIcon sx={{ mr: 1 }} />
-
             <ListItemText primary="Nuova chat" />
-
           </ListItemButton>
-
         </Box>
 
         <Divider />
 
-
-        {/* PINNED SEARCHES */}
-
         {pinned.length > 0 && (
-
           <>
-
-            <Typography
-              variant="caption"
-              sx={{
-                px: 2,
-                pt: 2,
-                color: "#8e8ea0",
-                fontWeight: 600
-              }}
-            >
+            <Typography variant="caption" sx={{ px: 2, pt: 2, color: "#8e8ea0", fontWeight: 700 }}>
               Salvati
             </Typography>
 
-            <List>
-
-              {pinned.map((q, i) => (
-
-                <ListItem key={i} disablePadding>
-
-                  <ListItemButton
-                    onClick={() => onSearch(q)}
-                  >
-
-                    <StarIcon
-                      sx={{ fontSize: 16, mr: 1 }}
-                    />
+            <List dense>
+              {pinned.map(query => (
+                <ListItem key={query} disablePadding>
+                  <ListItemButton onClick={() => onSearch(query)}>
+                    <PushPinIcon sx={{ fontSize: 16, mr: 1, color: "#777" }} />
 
                     <ListItemText
-                      primary={q}
+                      primary={query}
                       primaryTypographyProps={{
-                      fontSize: 13,
-                      noWrap: true,
-                      sx: {
-                        maxWidth: 180
-                      }
-                    }}
+                        fontSize: 13,
+                        noWrap: true,
+                        sx: { maxWidth: 170 }
+                      }}
                     />
 
                     <IconButton
                       size="small"
-                      onClick={(e) => {
-
-                        e.stopPropagation()
-
-                        unpinSearch(q)
-
+                      aria-label="Rimuovi ricerca salvata"
+                      onClick={event => {
+                        event.stopPropagation()
+                        unpinSearch(query)
                       }}
                     >
-
                       <DeleteIcon fontSize="small" />
-
                     </IconButton>
-
                   </ListItemButton>
-
                 </ListItem>
-
               ))}
-
             </List>
 
             <Divider />
-
           </>
-
         )}
 
-
-        {/* HISTORY */}
-
         <Box flex={1} overflow="auto">
-
-          <Typography
-            variant="caption"
-            sx={{
-              px: 2,
-              pt: 2,
-              color: "#8e8ea0",
-              fontWeight: 600
-            }}
-          >
+          <Typography variant="caption" sx={{ px: 2, pt: 2, color: "#8e8ea0", fontWeight: 700 }}>
             Cronologia
           </Typography>
 
-          <List>
-
-            {history.map((item, i) => (
-
-              <ListItem key={i} disablePadding>
-
-                <ListItemButton
-                  onClick={() => onSearch(item.query)}
-                >
-
-                  <ListItemText
-
-                    primary={item.query}
-                    secondary={`${item.results ?? 0} risultati`}
-                    primaryTypographyProps={{
-                      fontSize: 13
-                    }}
-                    secondaryTypographyProps={{
-                      fontSize: 11
-                    }}
-
-                  />
+          {visibleHistory.length === 0 ? (
+            <Typography sx={{ px: 2, py: 2, fontSize: 13, color: "#8e8ea0" }}>
+              Le tue ricerche recenti compariranno qui.
+            </Typography>
+          ) : (
+            <List dense>
+              {visibleHistory.map(item => (
+                <ListItem key={`${item.query}-${item.results}`} disablePadding>
+                  <ListItemButton onClick={() => onSearch(item.query)}>
                     <ChatBubbleOutlineIcon sx={{ fontSize: 16, mr: 1, color: "#777" }} />
 
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
+                    <ListItemText
+                      primary={item.query}
+                      secondary={`${item.results ?? 0} risultati`}
+                      primaryTypographyProps={{ fontSize: 13, noWrap: true }}
+                      secondaryTypographyProps={{ fontSize: 11 }}
+                    />
 
-                      e.stopPropagation()
-
-                      pinSearch(item.query)
-
-                    }}
-                  >
-
-                    <MoreHorizIcon fontSize="small" />
-
-                  </IconButton>
-
-                </ListItemButton>
-
-              </ListItem>
-
-            ))}
-
-          </List>
-
+                    <IconButton
+                      size="small"
+                      aria-label="Salva ricerca"
+                      onClick={event => {
+                        event.stopPropagation()
+                        pinSearch(item.query)
+                      }}
+                    >
+                      <StarIcon fontSize="small" />
+                    </IconButton>
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
         </Box>
-
-
-        {/* CLEAR HISTORY */}
 
         <Box p={2} borderTop="1px solid #ececec">
+          {user && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+              <Box
+                sx={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  bgcolor: "#10a37f",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 600
+                }}
+              >
+                {user.email?.charAt(0).toUpperCase()}
+              </Box>
 
-            {user && (
+              <Typography sx={{ fontSize: 13, color: "#444" }} noWrap>
+                {user.email}
+              </Typography>
+            </Box>
+          )}
 
-  <Box
-    sx={{
-      display: "flex",
-      alignItems: "center",
-      gap: 1,
-      mt: 2
-    }}
-  >
-
-    <Box
-      sx={{
-        width: 28,
-        height: 28,
-        borderRadius: "50%",
-        bgcolor: "#10a37f",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#fff",
-        fontSize: 12,
-        fontWeight: 600
-      }}
-    >
-      {user.email?.charAt(0).toUpperCase()}
-    </Box>
-
-    <Typography
-      sx={{
-        fontSize: 13,
-        color: "#444"
-      }}
-    >
-      {user.email}
-    </Typography>
-
-  </Box>
-
-)}
-          <ListItemButton
-            onClick={clearHistory}
-            sx={{ borderRadius: 2 }}
-          >
-
+          <ListItemButton onClick={clearHistory} sx={{ borderRadius: 2 }}>
             <DeleteIcon sx={{ mr: 1 }} />
-
-            <ListItemText
-              primary="Cancella cronologia"
-            />
-
+            <ListItemText primary="Cancella cronologia" />
           </ListItemButton>
-
         </Box>
-
       </Drawer>
-
-
-      {/* MAIN AREA */}
 
       <Box
         component="main"
@@ -488,16 +286,12 @@ export default function ChatLayout({
           flexGrow: 1,
           display: "flex",
           flexDirection: "column",
-          height: "100vh"
+          height: "100vh",
+          minWidth: 0
         }}
       >
-
         {children}
-
       </Box>
-
     </Box>
-
   )
-
 }

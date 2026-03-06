@@ -1,127 +1,110 @@
-import { useState, useRef, useEffect } from "react";
-import { Box } from "@mui/material";
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Box, Typography } from "@mui/material"
 
-import ChatLayout from "./component/ChatLayout";
-import ChatInput from "./component/ChatInput";
-import MessageBubble from "./component/MessageBubble";
-import SearchResultList from "./component/SearchResultList";
-import AIAnalysisCard from "./component/AIAnalysisCard";
-import AIThinkingPipeline from "./component/AIThinkingPipeline";
+import ChatLayout from "./component/ChatLayout"
+import ChatInput from "./component/ChatInput"
+import MessageBubble from "./component/MessageBubble"
+import SearchResultList from "./component/SearchResultList"
+import AIAnalysisCard from "./component/AIAnalysisCard"
+import AIThinkingPipeline from "./component/AIThinkingPipeline"
+import type {
+  ChatEntry,
+  Message,
+  SearchBlock,
+  SearchItem,
+  IRMetrics,
+  RagContext
+} from "./component/searchTypes"
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8030"
+const HISTORY_KEY = "search_history"
 
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
-
-interface Message {
-  role: "user" | "assistant"
-  content: string
+function getWelcomeMessage(): ChatEntry {
+  return {
+    type: "message",
+    msg: {
+      role: "assistant",
+      content: "Ciao! Dimmi cosa vuoi cercare su eBay e ti aiuto a trovare i risultati migliori."
+    }
+  }
 }
 
-interface SearchItem {
-  ebay_id?: string
-  title?: string
-  price?: number
-  currency?: string
-  condition?: string
-  seller_name?: string
-  seller_rating?: number
-  url?: string
-  image_url?: string
+function safeParseHistory(): Array<{ query: string; results: number }> {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
 
-  trust_score?: number
-  ranking_score?: number
-  explanations?: string[]
+    if (!Array.isArray(parsed)) {
+      return []
+    }
 
-  _already_in_db?: boolean
+    return parsed.filter(item => typeof item?.query === "string")
+  } catch {
+    return []
+  }
 }
 
-interface IRMetrics {
-  "precision@5"?: number
-  "precision@10"?: number
-  "recall@10"?: number
-  "ndcg@10"?: number
+function saveSearchHistory(query: string, resultsCount = 0) {
+  const history = safeParseHistory()
+
+  const updated = [
+    { query, results: resultsCount },
+    ...history.filter(item => item.query.toLowerCase() !== query.toLowerCase())
+  ].slice(0, 20)
+
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
+  window.dispatchEvent(new Event("search_history_updated"))
 }
 
-interface SearchBlock {
-  query: string
-  results: SearchItem[]
-  analysis: string | null
-  metrics?: IRMetrics
-  rag_context?: string
-  timings?: Record<string, number>
-}
-
-
-// --------------------------------------------------
-// CHAT ENTRY
-// --------------------------------------------------
-
-type ChatEntry =
-  | { type: "message", msg: Message }
-  | { type: "search", search: SearchBlock }
-
-
-// --------------------------------------------------
-// APP
-// --------------------------------------------------
-
-export default function App() {
-
-  const [chat, setChat] = useState<ChatEntry[]>([
-    { type: "message", msg: { role: "assistant", content: "Ciao! Dimmi cosa vuoi cercare su eBay." } }
-  ])
-
-  const [loading, setLoading] = useState(false)
-  const [timings, setTimings] = useState<Record<string, number> | null>(null)
-
-  const [cache, setCache] = useState<Record<string, SearchBlock>>({})
-
-  const bottomRef = useRef<HTMLDivElement | null>(null)
-
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [chat, loading])
-
-
-  // --------------------------------------------------
-  // SAVE SEARCH HISTORY
-  // --------------------------------------------------
-
-  const saveSearch = (query: string, resultsCount: number = 0) => {
-
-    const history = JSON.parse(
-      localStorage.getItem("search_history") || "[]"
-    )
-
-    const updated = [
-      { query, results: resultsCount },
-      ...history.filter((h: any) => h.query !== query)
-    ]
-
-    const newHistory = updated.slice(0, 20)
-
-    localStorage.setItem(
-      "search_history",
-      JSON.stringify(newHistory)
-    )
-
-    window.dispatchEvent(new Event("search_history_updated"))
+function normalizeRagContext(value: unknown): RagContext {
+  if (Array.isArray(value)) {
+    return value.filter(item => typeof item === "string") as string[]
   }
 
+  if (typeof value === "string") {
+    return value
+  }
 
-  // --------------------------------------------------
-  // HANDLE SEARCH
-  // --------------------------------------------------
+  return undefined
+}
+
+function normalizeMetrics(value: unknown): IRMetrics | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  return value as IRMetrics
+}
+
+export default function App() {
+  const [chat, setChat] = useState<ChatEntry[]>([getWelcomeMessage()])
+  const [loading, setLoading] = useState(false)
+  const [loadingQuery, setLoadingQuery] = useState<string | null>(null)
+  const [cache, setCache] = useState<Record<string, SearchBlock>>({})
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+  }, [chat, loading])
+
+  const hasSearches = useMemo(
+    () => chat.some(entry => entry.type === "search"),
+    [chat]
+  )
+
+  const resetChat = () => {
+    setChat([getWelcomeMessage()])
+    setLoading(false)
+    setLoadingQuery(null)
+  }
 
   const handleSend = async (text: string) => {
-
-    if (loading) return
-    if (!text || !text.trim()) return
+    if (loading || !text.trim()) {
+      return
+    }
 
     const query = text.trim()
-    const key = query.toLowerCase()
+    const cacheKey = query.toLowerCase()
 
     const userMessage: Message = {
       role: "user",
@@ -130,40 +113,31 @@ export default function App() {
 
     setChat(prev => [...prev, { type: "message", msg: userMessage }])
 
-
-    // --------------------------------------------------
-    // CACHE HIT
-    // --------------------------------------------------
-
-    if (cache[key]) {
-
-      const cached = cache[key]
-
-      saveSearch(query, cached.results.length)
-
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: `Ho trovato ${cached.results.length} risultati per "${query}" (cache).`
-      }
+    if (cache[cacheKey]) {
+      const cachedSearch = cache[cacheKey]
+      saveSearchHistory(query, cachedSearch.results.length)
 
       setChat(prev => [
         ...prev,
-        { type: "message", msg: assistantMessage },
-        { type: "search", search: cached }
+        {
+          type: "message",
+          msg: {
+            role: "assistant",
+            content: `Ho recuperato ${cachedSearch.results.length} risultati dalla cache per \"${query}\".`
+          }
+        },
+        { type: "search", search: cachedSearch }
       ])
-
       return
     }
 
-
     setLoading(true)
-    setTimings(null)
+    setLoadingQuery(query)
 
     try {
-
       const token = localStorage.getItem("token")
 
-      const res = await fetch("http://127.0.0.1:8030/search", {
+      const res = await fetch(`${API_BASE_URL}/search`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -176,81 +150,67 @@ export default function App() {
       })
 
       if (!res.ok) {
-        throw new Error("Backend error")
+        throw new Error(`Backend error ${res.status}`)
       }
 
       const data = await res.json()
 
-      const newResults: SearchItem[] = data.results || []
-      const newAnalysis: string | null = data.analysis || null
-
-      const newMetrics: IRMetrics | undefined = data.metrics || undefined
-      const newRagContext: string | undefined = data.rag_context || undefined
-      const newTimings: Record<string, number> | undefined = data._timings || undefined
-
+      const results: SearchItem[] = Array.isArray(data.results) ? data.results : []
+      const analysis: string | null = typeof data.analysis === "string" ? data.analysis : null
+      const metrics = normalizeMetrics(data.metrics)
+      const ragContext = normalizeRagContext(data.rag_context)
+      const timings = data._timings && typeof data._timings === "object"
+        ? data._timings as Record<string, number>
+        : undefined
 
       const newSearch: SearchBlock = {
         query,
-        results: newResults,
-        analysis: newAnalysis,
-        metrics: newMetrics,
-        rag_context: newRagContext,
-        timings: newTimings
+        results,
+        analysis,
+        metrics,
+        rag_context: ragContext,
+        timings
       }
-
-
-      // CACHE
 
       setCache(prev => ({
         ...prev,
-        [key]: newSearch
+        [cacheKey]: newSearch
       }))
 
-
-      saveSearch(query, newResults.length)
-
-
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: `Ho trovato ${data.results_count || newResults.length} risultati per "${query}".`
-      }
+      saveSearchHistory(query, results.length)
 
       setChat(prev => [
         ...prev,
-        { type: "message", msg: assistantMessage },
+        {
+          type: "message",
+          msg: {
+            role: "assistant",
+            content: `Ho trovato ${data.results_count ?? results.length} risultati per \"${query}\".`
+          }
+        },
         { type: "search", search: newSearch }
       ])
+    } catch (error) {
+      console.error("Search error:", error)
 
-      setTimings(newTimings || null)
-
-    }
-    catch (err) {
-
-      console.error("Search error:", err)
-
-      const errorMessage: Message = {
-        role: "assistant",
-        content: "Errore durante la ricerca."
-      }
-
-      setChat(prev => [...prev, { type: "message", msg: errorMessage }])
-
-    }
-    finally {
+      setChat(prev => [
+        ...prev,
+        {
+          type: "message",
+          msg: {
+            role: "assistant",
+            content: "C'è stato un errore durante la ricerca. Controlla backend e endpoint, poi riprova."
+          }
+        }
+      ])
+    } finally {
       setLoading(false)
+      setLoadingQuery(null)
     }
-
   }
 
-
-  // --------------------------------------------------
-  // RENDER
-  // --------------------------------------------------
-
   return (
-
-    <ChatLayout onSearch={handleSend}>
-
+    <ChatLayout onSearch={handleSend} onNewChat={resetChat}>
       <Box
         sx={{
           flex: 1,
@@ -259,98 +219,64 @@ export default function App() {
           justifyContent: "center",
           alignItems: "flex-start",
           width: "100%",
-          px: 4,
+          px: { xs: 2, md: 4 },
           py: 4,
           position: "relative"
         }}
       >
-
         <Box sx={{ width: "100%", maxWidth: 1000 }}>
+          {!hasSearches && chat.length <= 1 && (
+            <Box sx={{ px: 2, py: 4 }}>
+              <Typography sx={{ fontSize: 28, fontWeight: 700, mb: 1.5, color: "#202123" }}>
+                Ricerca conversazionale per eBay
+              </Typography>
+              <Typography sx={{ color: "#6e6e80", fontSize: 15 }}>
+                Prova con query come “iPhone 13 massimo 700 euro” oppure “notebook Lenovo business con ottima affidabilità”.
+              </Typography>
+            </Box>
+          )}
 
-
-          {/* CHAT THREAD */}
-
-          {chat.map((entry, i) => {
-
+          {chat.map((entry, index) => {
             if (entry.type === "message") {
               return (
-                <Box key={`msg-${i}`} mb={2}>
-                  <MessageBubble role={entry.msg.role}>
+                <Box key={`msg-${index}`} mb={2}>
+                  <MessageBubble role={entry.msg.role} timestamp={entry.msg.timestamp}>
                     {entry.msg.content}
                   </MessageBubble>
                 </Box>
               )
             }
 
-            if (entry.type === "search") {
+            const search = entry.search
 
-              const search = entry.search
+            return (
+              <Box key={`search-${index}`} mt={2} mb={4}>
+                {(search.analysis || search.metrics || search.rag_context) && (
+                  <AIAnalysisCard
+                    text={search.analysis ?? undefined}
+                    metrics={search.metrics}
+                    rag_context={search.rag_context}
+                  />
+                )}
 
-              return (
-
-                <Box key={`search-${i}`} mt={3} mb={4}>
-
-                  {search.analysis && (
-                    <AIAnalysisCard
-                      text={search.analysis}
-                      metrics={search.metrics}
-                      rag_context={search.rag_context}
-                    />
-                  )}
-
-                  {search.results.length > 0 && (
-                    <SearchResultList
-                      results={search.results}
-                    />
-                  )}
-
-                </Box>
-
-              )
-
-            }
-
-            return null
-
+                <SearchResultList results={search.results} />
+              </Box>
+            )
           })}
 
-
-          {/* AI THINKING */}
-
-          {/* AI THINKING MESSAGE */}
-
-{loading && (
-
-  <Box mt={2} mb={3}>
-
-    <MessageBubble role="assistant">
-
-      <AIThinkingPipeline
-        loading={loading}
-        timings={timings || undefined}
-      />
-
-    </MessageBubble>
-
-  </Box>
-
-)}
-
+          {loading && (
+            <Box mt={2} mb={3}>
+              <MessageBubble role="assistant">
+                <AIThinkingPipeline loading query={loadingQuery ?? undefined} />
+              </MessageBubble>
+            </Box>
+          )}
 
           <div ref={bottomRef} />
-
         </Box>
-
       </Box>
 
-
-      <ChatInput
-        onSend={handleSend}
-        disabled={loading}
-      />
-
+      <ChatInput onSend={handleSend} disabled={loading} />
     </ChatLayout>
-
   )
-
 }

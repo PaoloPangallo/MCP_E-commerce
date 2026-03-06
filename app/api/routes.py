@@ -13,6 +13,7 @@ from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.metrics.ir_metrics import precision_at_k, recall_at_k, ndcg_at_k
 from app.services.parser import parse_query_service
+from app.services.user_profiling import update_user_profile
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -103,7 +104,25 @@ def search(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Parser error: {str(e)}")
 
-    ebay_query_used = parsed.get("semantic_query") or request.query
+    product = parsed.get("product")
+    brands = parsed.get("brands") or []
+
+    if product and brands:
+        ebay_query_used = f"{product} {' '.join(brands)}"
+    elif product:
+        ebay_query_used = product
+    else:
+        ebay_query_used = parsed.get("semantic_query") or request.query
+
+    # ============================================================
+    # 1.5) IMPLICIT USER PROFILING
+    # ============================================================
+
+    if user:
+        try:
+            update_user_profile(user, parsed, db)
+        except Exception:
+            logger.warning("User profiling update failed")
 
     # ============================================================
     # 2) EBAY SEARCH
@@ -262,9 +281,7 @@ def search(
 
             results_out.append(item_copy)
 
-        db.commit()
-
-        timings["db_save_s"] = round(time.time() - t, 3)
+        timings["db_prepare_s"] = round(time.time() - t, 3)
 
     except Exception as e:
 
@@ -294,6 +311,14 @@ def search(
     # 7) FINAL RANKING SCORE
     # ============================================================
 
+    # ============================================================
+    # 7) FINAL RANKING SCORE (PERSONALIZED)
+    # ============================================================
+
+    # ============================================================
+    # 7) FINAL RANKING SCORE (PERSONALIZED + EXPLANATIONS)
+    # ============================================================
+
     for item in results_out:
 
         relevance = item.get("_rerank_score", 0)
@@ -305,13 +330,83 @@ def search(
         if price:
             price_score = max(0.0, 1.0 - float(price) / 1000.0)
 
+        # --------------------------------
+        # BASE SCORE
+        # --------------------------------
+
         ranking_score = (
-            0.5 * float(relevance)
-            + 0.25 * float(trust)
-            + 0.15 * float(price_score)
+                0.5 * float(relevance)
+                + 0.25 * float(trust)
+                + 0.15 * float(price_score)
         )
 
+        explanations = []
+
+        # --------------------------------
+        # USER PERSONALIZATION
+        # --------------------------------
+
+        if user:
+
+            # ---- brand preference boost ----
+
+            if user.favorite_brands:
+
+                brands = {
+                    b.strip().lower()
+                    for b in user.favorite_brands.split(",")
+                }
+
+                title = (item.get("title") or "").lower()
+
+                for b in brands:
+                    if b in title:
+                        ranking_score += 0.10
+                        item["brand_match"] = True
+
+                        explanations.append(
+                            f"This item matches your preferred brand '{b}'."
+                        )
+
+                        break
+
+            # ---- price preference boost ----
+
+            if user.price_preference and price:
+
+                try:
+
+                    pref = float(user.price_preference)
+
+                    if price <= pref:
+                        ranking_score += 0.05
+                        item["price_match"] = True
+
+                        explanations.append(
+                            "This product falls within your typical price range."
+                        )
+
+                except Exception:
+                    pass
+
+        # --------------------------------
+        # TRUST EXPLANATION
+        # --------------------------------
+
+        if trust >= 0.8:
+            explanations.append("Seller has very strong feedback and trust score.")
+
+        elif trust >= 0.6:
+            explanations.append("Seller shows generally positive feedback.")
+
+        # --------------------------------
+        # SAVE RESULTS
+        # --------------------------------
+
         item["ranking_score"] = round(ranking_score, 3)
+
+        if explanations:
+            item["explanations"] = explanations
 
     # ============================================================
     # 8) RAG RETRIEVE
@@ -385,6 +480,15 @@ def search(
         ),
         "ndcg@10": ndcg_at_k(binary_relevance, 10),
     }
+
+    # ============================================================
+    # FINAL COMMIT
+    # ============================================================
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     timings["total_s"] = round(time.time() - t0, 3)
 
