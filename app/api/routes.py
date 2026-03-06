@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Literal, Optional, Dict, Any, List
+from typing import Literal, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -12,12 +12,7 @@ from app.db.database import get_db
 from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.metrics.ir_metrics import precision_at_k, recall_at_k, ndcg_at_k
-from app.services.nlp_sentiment import compute_sentiment_score
 from app.services.parser import parse_query_service
-from app.services.rag import retrieve_context, build_context
-from app.services.rag.explainer import explain_results
-from app.services.rag.product_ingest import ingest_products
-from app.services.rag.reranker import rerank_products
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

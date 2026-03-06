@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { Box, CircularProgress } from "@mui/material";
+import { Box } from "@mui/material";
 
 import ChatLayout from "./component/ChatLayout";
 import ChatInput from "./component/ChatInput";
 import MessageBubble from "./component/MessageBubble";
 import SearchResultList from "./component/SearchResultList";
 import AIAnalysisCard from "./component/AIAnalysisCard";
+import AIThinkingPipeline from "./component/AIThinkingPipeline";
 
 
 // --------------------------------------------------
@@ -48,16 +49,22 @@ interface SearchBlock {
   analysis: string | null
   metrics?: IRMetrics
   rag_context?: string
+  timings?: Record<string, number>
 }
 
 
 // --------------------------------------------------
-// APP
+// CHAT ENTRY
 // --------------------------------------------------
 
 type ChatEntry =
   | { type: "message", msg: Message }
   | { type: "search", search: SearchBlock }
+
+
+// --------------------------------------------------
+// APP
+// --------------------------------------------------
 
 export default function App() {
 
@@ -66,6 +73,7 @@ export default function App() {
   ])
 
   const [loading, setLoading] = useState(false)
+  const [timings, setTimings] = useState<Record<string, number> | null>(null)
 
   const [cache, setCache] = useState<Record<string, SearchBlock>>({})
 
@@ -74,7 +82,7 @@ export default function App() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [chat])
+  }, [chat, loading])
 
 
   // --------------------------------------------------
@@ -109,6 +117,7 @@ export default function App() {
 
   const handleSend = async (text: string) => {
 
+    if (loading) return
     if (!text || !text.trim()) return
 
     const query = text.trim()
@@ -148,13 +157,17 @@ export default function App() {
 
 
     setLoading(true)
+    setTimings(null)
 
     try {
+
+      const token = localStorage.getItem("token")
 
       const res = await fetch("http://127.0.0.1:8030/search", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           query,
@@ -173,6 +186,7 @@ export default function App() {
 
       const newMetrics: IRMetrics | undefined = data.metrics || undefined
       const newRagContext: string | undefined = data.rag_context || undefined
+      const newTimings: Record<string, number> | undefined = data._timings || undefined
 
 
       const newSearch: SearchBlock = {
@@ -180,23 +194,18 @@ export default function App() {
         results: newResults,
         analysis: newAnalysis,
         metrics: newMetrics,
-        rag_context: newRagContext
+        rag_context: newRagContext,
+        timings: newTimings
       }
 
 
-      // --------------------------------------------------
       // CACHE
-      // --------------------------------------------------
 
       setCache(prev => ({
         ...prev,
         [key]: newSearch
       }))
 
-
-      // --------------------------------------------------
-      // SAVE HISTORY
-      // --------------------------------------------------
 
       saveSearch(query, newResults.length)
 
@@ -211,6 +220,8 @@ export default function App() {
         { type: "message", msg: assistantMessage },
         { type: "search", search: newSearch }
       ])
+
+      setTimings(newTimings || null)
 
     }
     catch (err) {
@@ -272,8 +283,11 @@ export default function App() {
             }
 
             if (entry.type === "search") {
-              const search = entry.search;
+
+              const search = entry.search
+
               return (
+
                 <Box key={`search-${i}`} mt={3} mb={4}>
 
                   {search.analysis && (
@@ -291,32 +305,41 @@ export default function App() {
                   )}
 
                 </Box>
+
               )
+
             }
 
-            return null;
+            return null
+
           })}
+
+
+          {/* AI THINKING */}
+
+          {/* AI THINKING MESSAGE */}
+
+{loading && (
+
+  <Box mt={2} mb={3}>
+
+    <MessageBubble role="assistant">
+
+      <AIThinkingPipeline
+        loading={loading}
+        timings={timings || undefined}
+      />
+
+    </MessageBubble>
+
+  </Box>
+
+)}
 
 
           <div ref={bottomRef} />
 
         </Box>
-
-
-        {loading && (
-
-          <Box
-            sx={{
-              position: "fixed",
-              top: 20,
-              right: 20,
-              zIndex: 1000
-            }}
-          >
-            <CircularProgress size={24} />
-          </Box>
-
-        )}
 
       </Box>
 

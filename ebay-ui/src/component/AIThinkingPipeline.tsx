@@ -73,15 +73,32 @@ export default function AIThinkingPipeline({ loading, timings }: Props) {
       }}
     >
 
-      <Typography
-        sx={{
-          fontWeight: 600,
-          fontSize: 14,
-          mb: 2
-        }}
-      >
-        AI pipeline
-      </Typography>
+     <Box display="flex" alignItems="center" gap={1} mb={2}>
+
+  {loading && (
+    <AutorenewIcon
+  sx={{
+    fontSize: 18,
+    color: "#10a37f",
+    animation: "spin 1s linear infinite",
+    "@keyframes spin": {
+      from: { transform: "rotate(0deg)" },
+      to: { transform: "rotate(360deg)" }
+    }
+  }}
+/>
+  )}
+
+  <Typography
+    sx={{
+      fontWeight: 600,
+      fontSize: 14
+    }}
+  >
+    {loading ? "Thinking..." : "AI reasoning"}
+  </Typography>
+
+</Box>
 
       {PIPELINE.map((step, i) => {
 
@@ -131,10 +148,11 @@ export default function AIThinkingPipeline({ loading, timings }: Props) {
               sx={{
                 fontSize: 13,
                 color: completed
-                  ? "#000"
-                  : running
-                    ? "#000"
-                    : "#999"
+                ? "#000"
+                : running
+                  ? "#10a37f"
+                  : "#999",
+              fontWeight: running ? 600 : 400
               }}
             >
               {step.label}
@@ -148,12 +166,16 @@ export default function AIThinkingPipeline({ loading, timings }: Props) {
 
       {loading && (
         <LinearProgress
-          sx={{
-            mt: 2,
-            height: 4,
-            borderRadius: 2
-          }}
-        />
+  sx={{
+    mt: 2,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ececec",
+    "& .MuiLinearProgress-bar": {
+      backgroundColor: "#10a37f"
+    }
+  }}
+/>
       )}
 
       {timings && (

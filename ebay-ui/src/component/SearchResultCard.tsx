@@ -68,22 +68,37 @@ export default function SearchResultCard({ item }: { item: any }) {
 
   return (
     <Paper
-      elevation={0}
-      sx={{
-        p: 3,
-        mb: 2,
-        borderRadius: "16px",
-        border: "1px solid #e5e5e5",
-        display: "flex",
-        gap: 3,
-        transition: "all 0.2s",
-        cursor: "pointer",
-        backgroundColor: "#fff",
-        "&:hover": {
-          borderColor: "#a3a3a3",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-        },
-      }}
+  elevation={0}
+  sx={{
+
+    animation: "fadeIn 0.25s ease",
+
+    "@keyframes fadeIn": {
+      from: {
+        opacity: 0,
+        transform: "translateY(6px)"
+      },
+      to: {
+        opacity: 1,
+        transform: "translateY(0)"
+      }
+    },
+
+    p: 3,
+    mb: 2,
+    borderRadius: "16px",
+    border: "1px solid #e5e5e5",
+    display: "flex",
+    gap: 3,
+    transition: "all 0.2s",
+    cursor: "pointer",
+    backgroundColor: "#fff",
+
+    "&:hover": {
+      borderColor: "#a3a3a3",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+    },
+  }}
       onClick={() => item.url && window.open(item.url, "_blank")}
     >
 
@@ -293,7 +308,8 @@ function generateMockFeedbacks(
   sellerRating: number | null | undefined
 ) {
   const trust = trustScore ?? 0.5;
-  const rating = sellerRating ?? 50;
+  const _rating = sellerRating ?? 50;
+
 
   const positiveComments = [
     "Ottimo venditore, prodotto come descritto",

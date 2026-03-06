@@ -18,7 +18,7 @@ import DeleteIcon from "@mui/icons-material/Delete"
 import StarIcon from "@mui/icons-material/Star"
 import {useAuth} from "../auth/useAuth.ts";
 import AuthPanel from "../auth/ui/AuthPanel.tsx";
-
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 
 
 interface HistoryItem {
@@ -168,9 +168,42 @@ export default function ChatLayout({
           }}
         >
 
-          <Typography fontWeight={600}>
-            eBay AI Search
-          </Typography>
+          <Box
+  sx={{
+    display: "flex",
+    alignItems: "center",
+    gap: 1.2,
+    mb: 1
+  }}
+>
+
+  <Box
+    sx={{
+      width: 26,
+      height: 26,
+      borderRadius: "6px",
+      bgcolor: "#10a37f",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "#fff",
+      fontWeight: 700,
+      fontSize: 14
+    }}
+  >
+    AI
+        </Box>
+
+        <Typography
+          sx={{
+            fontWeight: 600,
+            fontSize: 14
+          }}
+        >
+          eBay AI Search
+        </Typography>
+
+      </Box>
 
           {/* AUTH PANEL */}
 
@@ -223,9 +256,17 @@ export default function ChatLayout({
         <Box p={2}>
 
           <ListItemButton
-            onClick={() => window.location.reload()}
-            sx={{ borderRadius: 2 }}
-          >
+                  onClick={() => window.location.reload()}
+                  sx={{
+                    borderRadius: 2,
+                    border: "1px solid #e5e5e5",
+                    bgcolor: "#fff",
+
+                    "&:hover": {
+                      bgcolor: "#f4f4f4"
+                    }
+                  }}
+                >
 
             <AddIcon sx={{ mr: 1 }} />
 
@@ -273,8 +314,12 @@ export default function ChatLayout({
                     <ListItemText
                       primary={q}
                       primaryTypographyProps={{
-                        fontSize: 13
-                      }}
+                      fontSize: 13,
+                      noWrap: true,
+                      sx: {
+                        maxWidth: 180
+                      }
+                    }}
                     />
 
                     <IconButton
@@ -334,6 +379,7 @@ export default function ChatLayout({
                 >
 
                   <ListItemText
+
                     primary={item.query}
                     secondary={`${item.results ?? 0} risultati`}
                     primaryTypographyProps={{
@@ -342,7 +388,9 @@ export default function ChatLayout({
                     secondaryTypographyProps={{
                       fontSize: 11
                     }}
+
                   />
+                    <ChatBubbleOutlineIcon sx={{ fontSize: 16, mr: 1, color: "#777" }} />
 
                   <IconButton
                     size="small"
@@ -374,6 +422,46 @@ export default function ChatLayout({
 
         <Box p={2} borderTop="1px solid #ececec">
 
+            {user && (
+
+  <Box
+    sx={{
+      display: "flex",
+      alignItems: "center",
+      gap: 1,
+      mt: 2
+    }}
+  >
+
+    <Box
+      sx={{
+        width: 28,
+        height: 28,
+        borderRadius: "50%",
+        bgcolor: "#10a37f",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: 600
+      }}
+    >
+      {user.email?.charAt(0).toUpperCase()}
+    </Box>
+
+    <Typography
+      sx={{
+        fontSize: 13,
+        color: "#444"
+      }}
+    >
+      {user.email}
+    </Typography>
+
+  </Box>
+
+)}
           <ListItemButton
             onClick={clearHistory}
             sx={{ borderRadius: 2 }}
