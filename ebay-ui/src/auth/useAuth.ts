@@ -1,31 +1,43 @@
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 
 import {
-  getToken
+  getToken,
+  subscribe
 } from "./authStore"
 
 import {
   login,
   logout,
+  register,
   getCurrentUser
 } from "./authService"
 
+
 export function useAuth() {
 
-  const [tokenState, setTokenState] = useState(getToken())
-
+  const [token, setToken] = useState<string | null>(getToken())
   const [user, setUser] = useState<any>(null)
 
+
+  // sync token
+  useEffect(() => {
+    return subscribe(setToken)
+  }, [])
+
+
+  // load user
   useEffect(() => {
 
-    async function loadUser() {
+    if (!token) {
+      setUser(null)
+      return
+    }
 
-      if (!tokenState) return
+    async function loadUser() {
 
       try {
 
         const data = await getCurrentUser()
-
         setUser(data)
 
       } catch {
@@ -38,36 +50,42 @@ export function useAuth() {
 
     loadUser()
 
-  }, [tokenState])
+  }, [token])
+
 
   async function handleLogin(email: string, password: string) {
 
     const data = await login(email, password)
-
-    setTokenState(data.access_token)
+    setToken(data.access_token)
 
   }
+
+
+  async function handleRegister(email: string, password: string) {
+
+    const data = await register(email, password)
+    setToken(data.access_token)
+
+  }
+
 
   function handleLogout() {
 
     logout()
-
-    setTokenState(null)
-
+    setToken(null)
     setUser(null)
 
   }
 
+
   return {
 
-    token: tokenState,
-
-    loggedIn: !!tokenState,
-
+    token,
+    loggedIn: !!token,
     user,
 
     login: handleLogin,
-
+    register: handleRegister,   // 👈 QUESTA ERA LA COSA MANCANTE
     logout: handleLogout
 
   }

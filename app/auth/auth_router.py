@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
+from typing import Optional, List
 
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
@@ -12,49 +13,68 @@ from app.auth.password import (
     verify_password,
     validate_password_strength,
 )
+
 from app.auth.jwt_handler import create_access_token
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"]
+)
 
 
-# ---------------------------
+# ---------------------------------------------------
 # Schemi
-# ---------------------------
+# ---------------------------------------------------
+
 class RegisterRequest(BaseModel):
+
     email: EmailStr
     password: str
-    favorite_brands: str | None = None
-    price_preference: str | None = None
+
+    favorite_brands: Optional[List[str]] = None
+    price_preference: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+
+    email: EmailStr
+    password: str
+
 
 class AuthResponse(BaseModel):
+
     access_token: str
     token_type: str = "bearer"
     user_id: int
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
 
-
-# ---------------------------
+# ---------------------------------------------------
 # REGISTER
-# ---------------------------
+# ---------------------------------------------------
+
 @router.post("/register", response_model=AuthResponse)
-def register(request: RegisterRequest, db: Session = Depends(get_db)):
+def register(
+    request: RegisterRequest,
+    db: Session = Depends(get_db)
+):
 
-    existing = db.query(User).filter(User.email == request.email).first()
+    email = request.email.lower().strip()
+
+    existing = db.query(User).filter(User.email == email).first()
+
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
 
-    try:
-        validate_password_strength(request.password)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    validate_password_strength(request.password)
 
     user = User(
-        email=request.email,
+        email=email,
         password_hash=hash_password(request.password),
-        favorite_brands=request.favorite_brands,
+        favorite_brands=",".join(request.favorite_brands) if request.favorite_brands else None,
         price_preference=request.price_preference,
     )
 
@@ -64,49 +84,92 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(user.id)
 
-    return AuthResponse(access_token=token, user_id=user.id)
+    return AuthResponse(
+        access_token=token,
+        user_id=user.id
+    )
 
 
-# ---------------------------
-# LOGIN (JSON - per frontend)
-# ---------------------------
+# ---------------------------------------------------
+# LOGIN
+# ---------------------------------------------------
+
 @router.post("/login", response_model=AuthResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
+def login(
+    request: LoginRequest,
+    db: Session = Depends(get_db)
+):
 
-    user = db.query(User).filter(User.email == request.email).first()
+    email = request.email.lower().strip()
+
+    user = db.query(User).filter(User.email == email).first()
+
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
 
-    if not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(
+        request.password,
+        user.password_hash
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
 
     token = create_access_token(user.id)
 
-    return AuthResponse(access_token=token, user_id=user.id)
+    return AuthResponse(
+        access_token=token,
+        user_id=user.id
+    )
 
 
-# ---------------------------
-# TOKEN (FORM - per Swagger OAuth2)
-# ---------------------------
+# ---------------------------------------------------
+# OAUTH TOKEN (Swagger)
+# ---------------------------------------------------
+
 @router.post("/token", response_model=AuthResponse)
-def token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """
-    Standard OAuth2 flow: username/password in form-data.
-    Swagger UI usa questo per il pulsante "Authorize".
-    """
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+def token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
 
-    if not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    email = form_data.username.lower().strip()
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    if not verify_password(
+        form_data.password,
+        user.password_hash
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
 
     token = create_access_token(user.id)
-    return AuthResponse(access_token=token, user_id=user.id)
 
+    return AuthResponse(
+        access_token=token,
+        user_id=user.id
+    )
+
+
+# ---------------------------------------------------
+# ME
+# ---------------------------------------------------
 
 @router.get("/me")
-def get_me(user = Depends(get_current_user)):
+def get_me(user=Depends(get_current_user)):
 
     return {
         "id": user.id,

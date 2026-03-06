@@ -1,12 +1,11 @@
-import { useState, useRef, useEffect } from "react"
-import { Box } from "@mui/material"
+import { useState, useRef, useEffect } from "react";
+import { Box, CircularProgress } from "@mui/material";
 
-import ChatLayout from "./component/ChatLayout"
-import ChatInput from "./component/ChatInput"
-import MessageBubble from "./component/MessageBubble"
-import SearchResultList from "./component/SearchResultList"
-import AIAnalysisCard from "./component/AIAnalysisCard"
-import AIThinkingPipeline from "./component/AIThinkingPipeline"
+import ChatLayout from "./component/ChatLayout";
+import ChatInput from "./component/ChatInput";
+import MessageBubble from "./component/MessageBubble";
+import SearchResultList from "./component/SearchResultList";
+import AIAnalysisCard from "./component/AIAnalysisCard";
 
 
 // --------------------------------------------------
@@ -49,7 +48,6 @@ interface SearchBlock {
   analysis: string | null
   metrics?: IRMetrics
   rag_context?: string
-  timings?: Record<string, number>
 }
 
 
@@ -57,16 +55,16 @@ interface SearchBlock {
 // APP
 // --------------------------------------------------
 
+type ChatEntry =
+  | { type: "message", msg: Message }
+  | { type: "search", search: SearchBlock }
+
 export default function App() {
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Ciao! Dimmi cosa vuoi cercare su eBay."
-    }
+  const [chat, setChat] = useState<ChatEntry[]>([
+    { type: "message", msg: { role: "assistant", content: "Ciao! Dimmi cosa vuoi cercare su eBay." } }
   ])
 
-  const [searches, setSearches] = useState<SearchBlock[]>([])
   const [loading, setLoading] = useState(false)
 
   const [cache, setCache] = useState<Record<string, SearchBlock>>({})
@@ -74,13 +72,9 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
 
-  // --------------------------------------------------
-  // AUTO SCROLL
-  // --------------------------------------------------
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, searches, loading])
+  }, [chat])
 
 
   // --------------------------------------------------
@@ -89,32 +83,23 @@ export default function App() {
 
   const saveSearch = (query: string, resultsCount: number = 0) => {
 
-    try {
+    const history = JSON.parse(
+      localStorage.getItem("search_history") || "[]"
+    )
 
-      const history = JSON.parse(
-        localStorage.getItem("search_history") || "[]"
-      )
+    const updated = [
+      { query, results: resultsCount },
+      ...history.filter((h: any) => h.query !== query)
+    ]
 
-      const updated = [
-        { query, results: resultsCount },
-        ...history.filter((h: any) => h.query !== query)
-      ]
+    const newHistory = updated.slice(0, 20)
 
-      const newHistory = updated.slice(0, 20)
+    localStorage.setItem(
+      "search_history",
+      JSON.stringify(newHistory)
+    )
 
-      localStorage.setItem(
-        "search_history",
-        JSON.stringify(newHistory)
-      )
-
-      window.dispatchEvent(new Event("search_history_updated"))
-
-    } catch (err) {
-
-      console.error("History save error:", err)
-
-    }
-
+    window.dispatchEvent(new Event("search_history_updated"))
   }
 
 
@@ -134,7 +119,7 @@ export default function App() {
       content: query
     }
 
-    setMessages(prev => [...prev, userMessage])
+    setChat(prev => [...prev, { type: "message", msg: userMessage }])
 
 
     // --------------------------------------------------
@@ -152,8 +137,11 @@ export default function App() {
         content: `Ho trovato ${cached.results.length} risultati per "${query}" (cache).`
       }
 
-      setMessages(prev => [...prev, assistantMessage])
-      setSearches(prev => [...prev, cached])
+      setChat(prev => [
+        ...prev,
+        { type: "message", msg: assistantMessage },
+        { type: "search", search: cached }
+      ])
 
       return
     }
@@ -175,16 +163,16 @@ export default function App() {
       })
 
       if (!res.ok) {
-        throw new Error(`Backend error: ${res.status}`)
+        throw new Error("Backend error")
       }
 
       const data = await res.json()
 
       const newResults: SearchItem[] = data.results || []
       const newAnalysis: string | null = data.analysis || null
+
       const newMetrics: IRMetrics | undefined = data.metrics || undefined
       const newRagContext: string | undefined = data.rag_context || undefined
-      const newTimings: Record<string, number> | undefined = data._timings || undefined
 
 
       const newSearch: SearchBlock = {
@@ -192,8 +180,7 @@ export default function App() {
         results: newResults,
         analysis: newAnalysis,
         metrics: newMetrics,
-        rag_context: newRagContext,
-        timings: newTimings
+        rag_context: newRagContext
       }
 
 
@@ -219,8 +206,11 @@ export default function App() {
         content: `Ho trovato ${data.results_count || newResults.length} risultati per "${query}".`
       }
 
-      setMessages(prev => [...prev, assistantMessage])
-      setSearches(prev => [...prev, newSearch])
+      setChat(prev => [
+        ...prev,
+        { type: "message", msg: assistantMessage },
+        { type: "search", search: newSearch }
+      ])
 
     }
     catch (err) {
@@ -229,16 +219,14 @@ export default function App() {
 
       const errorMessage: Message = {
         role: "assistant",
-        content: "Errore durante la ricerca. Riprova tra poco."
+        content: "Errore durante la ricerca."
       }
 
-      setMessages(prev => [...prev, errorMessage])
+      setChat(prev => [...prev, { type: "message", msg: errorMessage }])
 
     }
     finally {
-
       setLoading(false)
-
     }
 
   }
@@ -261,76 +249,74 @@ export default function App() {
           alignItems: "flex-start",
           width: "100%",
           px: 4,
-          py: 4
+          py: 4,
+          position: "relative"
         }}
       >
 
         <Box sx={{ width: "100%", maxWidth: 1000 }}>
 
 
-          {/* CHAT MESSAGES */}
+          {/* CHAT THREAD */}
 
-          {messages.map((msg, i) => (
+          {chat.map((entry, i) => {
 
-            <Box key={i} mb={2}>
-              <MessageBubble role={msg.role}>
-                {msg.content}
-              </MessageBubble>
-            </Box>
+            if (entry.type === "message") {
+              return (
+                <Box key={`msg-${i}`} mb={2}>
+                  <MessageBubble role={entry.msg.role}>
+                    {entry.msg.content}
+                  </MessageBubble>
+                </Box>
+              )
+            }
 
-          ))}
+            if (entry.type === "search") {
+              const search = entry.search;
+              return (
+                <Box key={`search-${i}`} mt={3} mb={4}>
 
+                  {search.analysis && (
+                    <AIAnalysisCard
+                      text={search.analysis}
+                      metrics={search.metrics}
+                      rag_context={search.rag_context}
+                    />
+                  )}
 
-          {/* THINKING PIPELINE */}
+                  {search.results.length > 0 && (
+                    <SearchResultList
+                      results={search.results}
+                    />
+                  )}
 
-          {loading && (
+                </Box>
+              )
+            }
 
-            <AIThinkingPipeline
-              loading={true}
-            />
-
-          )}
-
-
-          {/* SEARCH RESULTS */}
-
-          {searches.map((search, i) => (
-
-            <Box key={search.query + i} mt={3}>
-
-              {search.analysis && (
-
-                <>
-                  <AIThinkingPipeline
-                    loading={false}
-                    timings={search.timings}
-                  />
-
-                  <AIAnalysisCard
-                    text={search.analysis}
-                    metrics={search.metrics}
-                    rag_context={search.rag_context}
-                  />
-                </>
-
-              )}
-
-              {search.results.length > 0 && (
-
-                <SearchResultList
-                  results={search.results}
-                />
-
-              )}
-
-            </Box>
-
-          ))}
+            return null;
+          })}
 
 
           <div ref={bottomRef} />
 
         </Box>
+
+
+        {loading && (
+
+          <Box
+            sx={{
+              position: "fixed",
+              top: 20,
+              right: 20,
+              zIndex: 1000
+            }}
+          >
+            <CircularProgress size={24} />
+          </Box>
+
+        )}
 
       </Box>
 

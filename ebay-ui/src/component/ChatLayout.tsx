@@ -16,9 +16,10 @@ import AddIcon from "@mui/icons-material/Add"
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import DeleteIcon from "@mui/icons-material/Delete"
 import StarIcon from "@mui/icons-material/Star"
+import {useAuth} from "../auth/useAuth.ts";
+import AuthPanel from "../auth/ui/AuthPanel.tsx";
 
-import LoginButton from "../auth/LoginButton"
-import { useAuth } from "../auth/useAuth"
+
 
 interface HistoryItem {
   query: string
@@ -32,6 +33,7 @@ export default function ChatLayout({
   children: React.ReactNode
   onSearch: (q: string) => void
 }) {
+
 
   const { user } = useAuth()
 
@@ -148,7 +150,9 @@ export default function ChatLayout({
           "& .MuiDrawer-paper": {
             width: 260,
             bgcolor: "#f9f9f9",
-            borderRight: "1px solid #ececec"
+            borderRight: "1px solid #ececec",
+            display: "flex",
+            flexDirection: "column"
           }
         }}
       >
@@ -164,20 +168,14 @@ export default function ChatLayout({
           }}
         >
 
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}
-          >
+          <Typography fontWeight={600}>
+            eBay AI Search
+          </Typography>
 
-            <Typography fontWeight={600}>
-              eBay AI Search
-            </Typography>
+          {/* AUTH PANEL */}
 
-            <LoginButton />
-
+          <Box mt={1}>
+            <AuthPanel />
           </Box>
 
           {/* USER PREFERENCES */}
