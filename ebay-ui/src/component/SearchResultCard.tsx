@@ -8,7 +8,7 @@ import SellerInfo from "./SellerInfo"
 import SellerTrustGauge from "./SellerTrustGauge"
 import ExplanationChips from "./ExplanationChips"
 import SellerFeedbackPanel from "./SellerFeedbackPanel"
-import type { SearchItem } from "../component/searchTypes.ts"
+import type { SearchItem } from "../component/searchTypes"
 
 const FALLBACK_IMAGE = "https://via.placeholder.com/120?text=No+Image"
 
@@ -23,13 +23,15 @@ function formatPrice(price?: number, currency?: string) {
 export default function SearchResultCard({ item }: { item: SearchItem }) {
   const [imageError, setImageError] = useState(false)
 
-  const trustPercent = typeof item.trust_score === "number"
-    ? Math.round(item.trust_score * 100)
-    : null
+  const trustPercent =
+    typeof item.trust_score === "number"
+      ? Math.round(item.trust_score * 100)
+      : null
 
-  const rankingPercent = typeof item.ranking_score === "number"
-    ? Math.round(item.ranking_score * 100)
-    : null
+  const rankingPercent =
+    typeof item.ranking_score === "number"
+      ? Math.round(item.ranking_score * 100)
+      : null
 
   const imageProps = useMemo(() => {
     if (!item.url) {
@@ -83,7 +85,12 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           alt={item.title || "Prodotto eBay"}
           loading="lazy"
           onError={() => setImageError(true)}
-          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          sx={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block"
+          }}
         />
       </Box>
 
@@ -117,8 +124,14 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           </Typography>
         )}
 
-        <SellerInfo seller_name={item.seller_name} seller_rating={item.seller_rating} />
-        <SellerTrustGauge trust={item.trust_score} />
+        <SellerInfo
+          seller_name={item.seller_name}
+          seller_rating={item.seller_rating}
+        />
+
+        {typeof item.trust_score === "number" && (
+          <SellerTrustGauge score={item.trust_score} />
+        )}
 
         <Box display="flex" gap={1} mb={1.5} flexWrap="wrap">
           {trustPercent !== null && (

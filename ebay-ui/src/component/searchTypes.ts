@@ -5,11 +5,10 @@ export interface Message {
 }
 
 export interface Feedback {
-  user?: string
-  rating?: "positive" | "neutral" | "negative" | string
-  comment?: string
-  time?: string
-  date?: string
+  user: string
+  rating: "Positive" | "Neutral" | "Negative"
+  comment: string
+  time: string
 }
 
 export interface SearchItem {

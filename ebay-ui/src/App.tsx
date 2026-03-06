@@ -7,16 +7,17 @@ import MessageBubble from "./component/MessageBubble"
 import SearchResultList from "./component/SearchResultList"
 import AIAnalysisCard from "./component/AIAnalysisCard"
 import AIThinkingPipeline from "./component/AIThinkingPipeline"
+
+import { searchProducts } from "./api/searchApi"
+
 import type {
   ChatEntry,
   Message,
   SearchBlock,
-  SearchItem,
   IRMetrics,
   RagContext
 } from "./component/searchTypes"
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8030"
 const HISTORY_KEY = "search_history"
 
 function getWelcomeMessage(): ChatEntry {
@@ -24,7 +25,8 @@ function getWelcomeMessage(): ChatEntry {
     type: "message",
     msg: {
       role: "assistant",
-      content: "Ciao! Dimmi cosa vuoi cercare su eBay e ti aiuto a trovare i risultati migliori."
+      content:
+        "Ciao! Dimmi cosa vuoi cercare su eBay e ti aiuto a trovare i risultati migliori."
     }
   }
 }
@@ -38,7 +40,12 @@ function safeParseHistory(): Array<{ query: string; results: number }> {
       return []
     }
 
-    return parsed.filter(item => typeof item?.query === "string")
+    return parsed.filter(
+      (item) =>
+        item &&
+        typeof item.query === "string" &&
+        typeof item.results === "number"
+    )
   } catch {
     return []
   }
@@ -49,7 +56,9 @@ function saveSearchHistory(query: string, resultsCount = 0) {
 
   const updated = [
     { query, results: resultsCount },
-    ...history.filter(item => item.query.toLowerCase() !== query.toLowerCase())
+    ...history.filter(
+      (item) => item.query.toLowerCase() !== query.toLowerCase()
+    )
   ].slice(0, 20)
 
   localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
@@ -58,7 +67,7 @@ function saveSearchHistory(query: string, resultsCount = 0) {
 
 function normalizeRagContext(value: unknown): RagContext {
   if (Array.isArray(value)) {
-    return value.filter(item => typeof item === "string") as string[]
+    return value.filter((item): item is string => typeof item === "string")
   }
 
   if (typeof value === "string") {
@@ -84,11 +93,14 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end"
+    })
   }, [chat, loading])
 
   const hasSearches = useMemo(
-    () => chat.some(entry => entry.type === "search"),
+    () => chat.some((entry) => entry.type === "search"),
     [chat]
   )
 
@@ -111,23 +123,25 @@ export default function App() {
       content: query
     }
 
-    setChat(prev => [...prev, { type: "message", msg: userMessage }])
+    setChat((prev) => [...prev, { type: "message", msg: userMessage }])
 
     if (cache[cacheKey]) {
       const cachedSearch = cache[cacheKey]
+
       saveSearchHistory(query, cachedSearch.results.length)
 
-      setChat(prev => [
+      setChat((prev) => [
         ...prev,
         {
           type: "message",
           msg: {
             role: "assistant",
-            content: `Ho recuperato ${cachedSearch.results.length} risultati dalla cache per \"${query}\".`
+            content: `Ho recuperato ${cachedSearch.results.length} risultati dalla cache per "${query}".`
           }
         },
         { type: "search", search: cachedSearch }
       ])
+
       return
     }
 
@@ -135,33 +149,17 @@ export default function App() {
     setLoadingQuery(query)
 
     try {
-      const token = localStorage.getItem("token")
+      const data = await searchProducts(query)
 
-      const res = await fetch(`${API_BASE_URL}/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          query,
-          llm_engine: "ollama"
-        })
-      })
-
-      if (!res.ok) {
-        throw new Error(`Backend error ${res.status}`)
-      }
-
-      const data = await res.json()
-
-      const results: SearchItem[] = Array.isArray(data.results) ? data.results : []
-      const analysis: string | null = typeof data.analysis === "string" ? data.analysis : null
+      const results = Array.isArray(data.results) ? data.results : []
+      const analysis =
+        typeof data.analysis === "string" ? data.analysis : null
       const metrics = normalizeMetrics(data.metrics)
       const ragContext = normalizeRagContext(data.rag_context)
-      const timings = data._timings && typeof data._timings === "object"
-        ? data._timings as Record<string, number>
-        : undefined
+      const timings =
+        data._timings && typeof data._timings === "object"
+          ? (data._timings as Record<string, number>)
+          : undefined
 
       const newSearch: SearchBlock = {
         query,
@@ -172,20 +170,20 @@ export default function App() {
         timings
       }
 
-      setCache(prev => ({
+      setCache((prev) => ({
         ...prev,
         [cacheKey]: newSearch
       }))
 
       saveSearchHistory(query, results.length)
 
-      setChat(prev => [
+      setChat((prev) => [
         ...prev,
         {
           type: "message",
           msg: {
             role: "assistant",
-            content: `Ho trovato ${data.results_count ?? results.length} risultati per \"${query}\".`
+            content: `Ho trovato ${data.results_count ?? results.length} risultati per "${query}".`
           }
         },
         { type: "search", search: newSearch }
@@ -193,13 +191,14 @@ export default function App() {
     } catch (error) {
       console.error("Search error:", error)
 
-      setChat(prev => [
+      setChat((prev) => [
         ...prev,
         {
           type: "message",
           msg: {
             role: "assistant",
-            content: "C'è stato un errore durante la ricerca. Controlla backend e endpoint, poi riprova."
+            content:
+              "C'è stato un errore durante la ricerca. Controlla backend e endpoint, poi riprova."
           }
         }
       ])
@@ -227,11 +226,25 @@ export default function App() {
         <Box sx={{ width: "100%", maxWidth: 1000 }}>
           {!hasSearches && chat.length <= 1 && (
             <Box sx={{ px: 2, py: 4 }}>
-              <Typography sx={{ fontSize: 28, fontWeight: 700, mb: 1.5, color: "#202123" }}>
+              <Typography
+                sx={{
+                  fontSize: 28,
+                  fontWeight: 700,
+                  mb: 1.5,
+                  color: "#202123"
+                }}
+              >
                 Ricerca conversazionale per eBay
               </Typography>
-              <Typography sx={{ color: "#6e6e80", fontSize: 15 }}>
-                Prova con query come “iPhone 13 massimo 700 euro” oppure “notebook Lenovo business con ottima affidabilità”.
+
+              <Typography
+                sx={{
+                  color: "#6e6e80",
+                  fontSize: 15
+                }}
+              >
+                Prova con query come “iPhone 13 massimo 700 euro” oppure
+                “notebook Lenovo business con ottima affidabilità”.
               </Typography>
             </Box>
           )}
@@ -240,7 +253,10 @@ export default function App() {
             if (entry.type === "message") {
               return (
                 <Box key={`msg-${index}`} mb={2}>
-                  <MessageBubble role={entry.msg.role} timestamp={entry.msg.timestamp}>
+                  <MessageBubble
+                    role={entry.msg.role}
+                    timestamp={entry.msg.timestamp}
+                  >
                     {entry.msg.content}
                   </MessageBubble>
                 </Box>
@@ -267,7 +283,10 @@ export default function App() {
           {loading && (
             <Box mt={2} mb={3}>
               <MessageBubble role="assistant">
-                <AIThinkingPipeline loading query={loadingQuery ?? undefined} />
+                <AIThinkingPipeline
+                  loading
+                  query={loadingQuery ?? undefined}
+                />
               </MessageBubble>
             </Box>
           )}

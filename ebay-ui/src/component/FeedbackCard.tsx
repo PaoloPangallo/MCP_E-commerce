@@ -1,12 +1,11 @@
 import { Paper, Typography, Box, Chip, Avatar } from "@mui/material"
-import type {Feedback} from "./searchTypes.ts";
+import type { Feedback } from "../api/sellerApi"
 
 interface Props {
   feedback: Feedback
 }
 
 export default function FeedbackCard({ feedback }: Props) {
-
   const ratingColor =
     feedback.rating === "Positive"
       ? "success"
@@ -23,7 +22,6 @@ export default function FeedbackCard({ feedback }: Props) {
     : "—"
 
   return (
-
     <Paper
       elevation={0}
       sx={{
@@ -37,9 +35,7 @@ export default function FeedbackCard({ feedback }: Props) {
         }
       }}
     >
-
       <Box display="flex" alignItems="flex-start" gap={2}>
-
         <Avatar
           sx={{
             width: 36,
@@ -49,28 +45,25 @@ export default function FeedbackCard({ feedback }: Props) {
             fontWeight: 600
           }}
         >
-          {feedback.user?.charAt(0).toUpperCase()}
+          {feedback.user?.charAt(0).toUpperCase() || "U"}
         </Avatar>
 
         <Box flex={1}>
-
           <Box
             display="flex"
             alignItems="center"
             justifyContent="space-between"
             mb={0.5}
           >
-
             <Typography fontWeight={600}>
               {feedback.user}
             </Typography>
 
             <Chip
               label={feedback.rating}
-              color={ratingColor as any}
+              color={ratingColor as "success" | "error" | "default"}
               size="small"
             />
-
           </Box>
 
           <Typography
@@ -83,17 +76,11 @@ export default function FeedbackCard({ feedback }: Props) {
             {feedback.comment}
           </Typography>
 
-          <Typography
-            variant="caption"
-            color="text.secondary"
-          >
+          <Typography variant="caption" color="text.secondary">
             {formattedDate}
           </Typography>
-
         </Box>
-
       </Box>
-
     </Paper>
   )
 }

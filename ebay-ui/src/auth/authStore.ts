@@ -1,13 +1,12 @@
 let token: string | null = localStorage.getItem("token")
 
-const listeners: Function[] = []
+const listeners: Array<(token: string | null) => void> = []
 
 export function getToken(): string | null {
   return token
 }
 
 export function setToken(newToken: string | null) {
-
   token = newToken
 
   if (newToken) {
@@ -16,21 +15,18 @@ export function setToken(newToken: string | null) {
     localStorage.removeItem("token")
   }
 
-  listeners.forEach(l => l(token))
+  listeners.forEach(listener => listener(token))
 }
 
-export function subscribe(callback: Function) {
-
+export function subscribe(callback: (token: string | null) => void) {
   listeners.push(callback)
 
   return () => {
-
     const index = listeners.indexOf(callback)
-
-    if (index >= 0) listeners.splice(index, 1)
-
+    if (index >= 0) {
+      listeners.splice(index, 1)
+    }
   }
-
 }
 
 export function isLoggedIn(): boolean {
