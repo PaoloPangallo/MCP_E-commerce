@@ -13,7 +13,7 @@ export async function apiFetch<T = any>(
   const token = getToken()
 
   const controller = new AbortController()
-  const timeout = options.timeout ?? 90000
+  const timeout = options.timeout ?? 300000
   const id = setTimeout(() => controller.abort(), timeout)
 
   const headers: Record<string, string> = {
@@ -38,7 +38,7 @@ export async function apiFetch<T = any>(
       try {
         const data = await res.json()
         message = data.detail || message
-      } catch {}
+      } catch { }
 
       throw new Error(message)
     }

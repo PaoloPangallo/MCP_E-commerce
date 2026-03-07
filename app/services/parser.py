@@ -328,6 +328,12 @@ EXPLICIT_PRICE_PATTERN = re.compile(
 def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
     """Restituisce (min_price, max_price)."""
     normalized = normalize_for_matching(text)
+    
+    # 🔥 PROTEGGIAMO "Air Max" e "taglia 43" per evitare "Max 270" -> Max Price 270 
+    # o numeri che non sono prezzi
+    normalized = re.sub(r"air\s+max", "AIR_MAX_MODEL", normalized)
+    normalized = re.sub(r"(?:taglia|numero|misura)\s+\d+", "SIZE_OR_NUM", normalized)
+    normalized = re.sub(r"(\d{1,2}|40|41|42|43|44|45|s|m|l|xl|xxl)\s*(?:[.,]\s*)?$", "SIZE_AT_END", normalized) # taglia alla fine
 
     for pattern in PRICE_RANGE_PATTERNS:
         m = pattern.search(normalized)
@@ -355,7 +361,8 @@ def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
             return normalize_float(m.group(1)), None
 
     explicit_prices = [normalize_float(m.group(1)) for m in EXPLICIT_PRICE_PATTERN.finditer(normalized)]
-    explicit_prices = [p for p in explicit_prices if p is not None]
+    # Filter: ignore 0 or near-zero prices as they are usually extraction errors for generic queries
+    explicit_prices = [p for p in explicit_prices if p is not None and p > 0.1]
     if len(explicit_prices) == 1:
         return None, explicit_prices[0]
 
@@ -780,6 +787,13 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
         norm_constraints: List[Dict[str, Any]] = []
         for c in constraints:
             nc = normalize_constraint(c)
+            # Safeguard: No 0 or near-0 price constraints allowed (hallucination or wrong extraction)
+            if nc and nc.get("type") == "price":
+                val = nc.get("value")
+                if nc.get("operator") == "between":
+                   if isinstance(val, list) and max(val) <= 0.1: continue
+                elif isinstance(val, (int, float)) and val <= 0.1:
+                    continue
             if nc is not None:
                 norm_constraints.append(nc)
         result["constraints"] = dedupe_keep_order(norm_constraints)
@@ -840,21 +854,33 @@ No code fences.
 
 Schema:
 {{
-  "semantic_query": "",
-  "product": null,
+  "semantic_query": "", // SEARCH STRING optimized for eBay. MUST include: Brand, Model, specific attributes (e.g. "iPhone 15 Pro Max 128GB Black", "Levi's 501 W36 L32", "Nike Air Jordan EU 42").
+  "product": null,      // Main item type (e.g., "jeans", "scarpe", "iPhone") 
   "brands": [],
-  "compatibilities": {{}},
+  "compatibilities": {{}}, 
   "constraints": [],
-  "preferences": []
+  "preferences": [],
+  "missing_info": []    
 }}
 
+Rules for `semantic_query`:
+- Be extremely precise. Include all user details (color, size, material, capacity).
+- CATEGORY STANDARDIZATION:
+  - CLOTHING (Jeans/Pants): Use "W[number] L[number]" format if both waist and length are provided.
+  - SHOES: Use "EU [number]" for European sizes.
+  - TECH: Use "[number]GB" or "[number]TB" for memory/storage.
+- Clean filler words like "vorrei", "cerco", "un", "il", "li".
+- Keep it in a format that works best for a keyword search engine like eBay.
+- Language: Preserve Italian terms if relevant to the Italian eBay market (e.g. "neri", "usato").
+- If the user provides a size (e.g. "numero 43", "taglia L") or color, it MUST be in the `semantic_query` in its standardized form.
+
 Definitions:
-- semantic_query: short cleaned version of the query useful for semantic retrieval.
-- product: the main item/model explicitly mentioned (e.g. "iPhone 15", "PS5", "MacBook Air M3"). Use null only if no item/model is stated.
-- brands: brands explicitly mentioned.
-- compatibilities: Key-value pairs for item compatibility (e.g., {{"Make": "BMW", "Year": "2018", "Model": "318i", "Memory": "128GB"}}). Used to extract dynamic parameters.
-- constraints: hard filters that restrict search results.
-- preferences: soft wishes that influence ranking but should NOT exclude results.
+- semantic_query: the final string to be sent to the search engine.
+- product: the main item/model (e.g. "jeans", "scarpe", "smartphone").
+- brands: brands mentioned.
+- compatibilities: Parameters like {{"Make": "BMW", "Year": "2018", "Model": "318i", "Memory": "128GB"}}.
+- constraints: mandatory search filters (price, condition).
+- preferences: wishes that shouldn't exclude results.
 
 Allowed constraint/preference item types:
 
@@ -909,8 +935,8 @@ Output: {{"semantic_query":"ciabatte defonseca","product":"ciabatte","brands":["
 Query: "freni per bmw 318i anno 2018"
 Output: {{"semantic_query":"freni bmw 318i 2018","product":"freni","brands":["BMW"],"compatibilities":{{"Make":"BMW","Model":"318i","Year":"2018"}},"constraints":[],"preferences":[]}}
 
-Query: "cintura lacoste per i miei jeans levis skinny"
-Output: {{"semantic_query":"cintura lacoste jeans levis","product":"cintura","brands":["Lacoste","Levi's"],"compatibilities":{{"Apparel":"Jeans skinny"}},"constraints":[],"preferences":[]}}
+Query: "jeans carhartt neri"
+Output: {{"semantic_query":"jeans carhartt neri","product":"jeans","brands":["Carhartt"],"compatibilities":{{}},"constraints":[],"preferences":[]}}
 
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()

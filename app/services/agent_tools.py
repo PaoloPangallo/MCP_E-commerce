@@ -2,6 +2,7 @@ import json
 import logging
 import time
 from typing import Dict, Any, List
+import re
 
 from app.services.parser import parse_query_service
 from app.services.ebay import search_items
@@ -23,8 +24,14 @@ logger = logging.getLogger(__name__)
 # =========================================================
 
 
-def tool_parse_query(query: str, state: Dict[str, Any]) -> str:
+def tool_parse_query(state: Dict[str, Any], **kwargs) -> str:
     """Parse + merge progressivo + user profiling implicito."""
+    # Gestiamo nomi parametri variabili per robustezza (modello potrebbe allucinare 'user_request')
+    query = kwargs.get("query") or kwargs.get("user_request") or kwargs.get("text")
+    
+    if not query:
+        return json.dumps({"error": "No query provided to parse_query"})
+
     parsed = parse_query_service(query, use_llm=True, include_meta=True)
     if isinstance(parsed, str):
         parsed = {"semantic_query": parsed}
@@ -34,13 +41,33 @@ def tool_parse_query(query: str, state: Dict[str, Any]) -> str:
     if not isinstance(current, dict):
         current = {"semantic_query": str(current)}
 
+    # Preserviamo i valori precedenti se i nuovi sono vuoti
     for k, v in parsed.items():
-        if v:
+        if k == "semantic_query":
+            # Per la semantic query, facciamo sempre un merge delle parole uniche
+            # Questo evita di perdere pezzi se l'utente ripete solo una parte (es. da "nike nere 42" a "shox")
+            old_sq = current.get("semantic_query", "").lower()
+            new_sq = str(v or "").lower()
+            
+            # Uniamo le parole mantenendo l'ordine originale dell'anteprima + le nuove
+            words = old_sq.split() + new_sq.split()
+            seen = set()
+            deduped = [w for w in words if w and not (w in seen or seen.add(w))]
+            current[k] = " ".join(deduped)
+            
+        elif k == "compatibilities" and isinstance(v, dict):
+            # Merge dizionario invece di overwrite
+            old_comp = current.get("compatibilities") or {}
+            if not isinstance(old_comp, dict): old_comp = {}
+            old_comp.update(v)
+            current[k] = old_comp
+        elif v:
+            # Overwrite per altri campi (brands, product, etc) solo se present
             current[k] = v
 
     state["parsed_query"] = current
 
-    # ---- User Profiling implicito (era Step 1.5 della pipeline) ----
+    # ---- User Profiling implicito ----
     user = state.get("user_obj")
     db = state.get("db_session")
     if user and db:
@@ -51,35 +78,100 @@ def tool_parse_query(query: str, state: Dict[str, Any]) -> str:
 
     state["thinking_trace"].append("✔ parsed query updated")
 
+    # Costruisci la query finale per search_products combinando brand, prodotto, semantic query e compatibilities
+    brands = " ".join(current.get("brands", []))
+    product = current.get("product", "")
+    sq = current.get("semantic_query", "")
+    comp_values = " ".join([str(val) for val in (current.get("compatibilities") or {}).values()])
+    
+    # Uniamo tutto in una stringa di ricerca potente per eBay
+    search_query_parts = []
+    if brands: search_query_parts.append(brands)
+    if product and product.lower() not in brands.lower(): search_query_parts.append(product)
+    if sq: search_query_parts.append(sq)
+    if comp_values: search_query_parts.append(comp_values)
+    
+    # Deduplica parole nella query finale mantenendo l'ordine e ignorando punteggiatura (es "Levi's" vs "levis")
+    final_words = []
+    seen_words = set()
+    for part in search_query_parts:
+        for word in str(part).split():
+            # Pulizia per confronto (es. levi's -> levis)
+            w_norm = re.sub(r"[^\w]", "", word.lower())
+            if w_norm and w_norm not in seen_words:
+                final_words.append(word)
+                seen_words.add(w_norm)
+    
+    final_search_query = " ".join(final_words).strip()
+    missing = current.get("missing_info", [])
+
     return json.dumps({
-        "status": "success",
-        "current_search_context": current
+        "status": "parsed",
+        "search_query": final_search_query,
+        "missing_info": missing,
+        "next_action": "NOW call search_products OR call request_user_clarification if too many fields are missing.",
     })
 
 
-def tool_search_products(query: str, state: Dict[str, Any], max_price: float = 0) -> str:
+def tool_search_products(state: Dict[str, Any], **kwargs) -> str:
     """
     Pipeline COMPLETA di ricerca, identica alla vecchia routes.py:
     search → dedup → feedback ALL sellers → sentiment → trust →
     RAG ingest → rerank → personalized ranking → RAG retrieve → IR metrics → DB save
     """
+    # Robustezza: cerchiamo la query in vari possibili nomi (hallucination del modello)
+    query = kwargs.get("query") or kwargs.get("search_query") or kwargs.get("product")
+    max_price = kwargs.get("max_price")
+
+    if not query:
+        return json.dumps({"error": "No query provided to search_products"})
+
+    # SAFETY CHECK: Se il modello passa letteralmente il nome del tool o della variabile (allucinazione da prompt)
+    hallucination_literals = ["search_products", "search_query", "query", "product_name", "{search_query}"]
+    is_hallucinated = any(h in str(query).lower() for h in hallucination_literals)
+
     t_start = time.time()
-    parsed = state.get("parsed_query", {"semantic_query": query})
+    # Recuperiamo il parse dallo state, preferendo però i parametri diretti SE presenti
+    parsed = state.get("parsed_query") or {}
+    if not isinstance(parsed, dict):
+        parsed = {"semantic_query": str(parsed)}
+
+    # Se la query è allucinata o assente, usiamo la semantic_query già parsata
+    if is_hallucinated or not query:
+        logger.warning(f"HALLUCINATED QUERY DETECTED: '{query}'. Falling back to parsed semantic_query.")
+        query = parsed.get("semantic_query") or ""
+    elif query and query != parsed.get("semantic_query"):
+        # Se l'agente ha fornito una query valida ma diversa, la usiamo
+        parsed["semantic_query"] = query
+    
+    # Se dopo tutto non abbiamo nulla, errore
+    if not query and not parsed.get("semantic_query"):
+        return json.dumps({"error": "No valid query available for search"})
+
     user = state.get("user_obj")
     db = state.get("db_session")
 
-    if max_price > 0:
-        constraints = parsed.get("constraints", [])
-        constraints.append({"type": "price", "operator": "<=", "value": max_price})
-        parsed["constraints"] = constraints
+    # Applica max_price opzionale se passato esplicitamente come numero valido > 0
+    try:
+        if max_price is not None:
+            f_max = float(max_price)
+            if f_max > 0:
+                constraints = parsed.get("constraints", [])
+                # Evitiamo duplicati se il parser l'aveva già messo
+                if not any(c.get("type") == "price" and c.get("operator") == "<=" for c in constraints):
+                    constraints.append({"type": "price", "operator": "<=", "value": f_max})
+                parsed["constraints"] = constraints
+    except (ValueError, TypeError):
+        pass
 
     # =============================================================
     # STEP 1: eBay Search (limit=20, come pipeline originale)
     # =============================================================
     t = time.time()
     results = search_items(parsed_query=parsed, limit=20) or []
-    state["_timings"]["ebay_search_s"] = round(time.time() - t, 3)
-    state["thinking_trace"].append(f"✔ searched {len(results)} listings from eBay")
+    
+    # LOG DIAGNOSTICO: Vediamo cosa stiamo filtrando effettivamente
+    logger.info(f"PROCESSED SEARCH: query='{query}' constraints={parsed.get('constraints')} found={len(results)}")
 
     # =============================================================
     # STEP 2: Remove Duplicates (per ebay_id)
@@ -177,11 +269,11 @@ def tool_search_products(query: str, state: Dict[str, Any], max_price: float = 0
     state["thinking_trace"].append(f"✔ saved {saved_count} new items to DB")
 
     # =============================================================
-    # STEP 6: Rerank (embedding similarity + trust + price penalty)
+    # STEP 6: Rerank (embedding similarity + trust + price penalty + keyword resonance)
     # =============================================================
     t = time.time()
     if results:
-        results = rerank_products(query, results, user=user)
+        results = rerank_products(query, results, user=user, parsed_query=parsed)
     state["_timings"]["rerank_s"] = round(time.time() - t, 3)
     state["thinking_trace"].append("✔ reranked results")
 
@@ -294,22 +386,15 @@ def tool_search_products(query: str, state: Dict[str, Any], max_price: float = 0
 
     # Restituisce un riassunto compatto all'LLM (non tutti i dati)
     summary = [
-        {
-            "id": r.get("ebay_id"),
-            "title": r.get("title"),
-            "price": r.get("price"),
-            "seller": r.get("seller_name"),
-            "trust": r.get("trust_score"),
-            "ranking": r.get("ranking_score"),
-        }
-        for r in results[:5]
+        {"title": r.get("title"), "price": r.get("price"), "trust": r.get("trust_score")}
+        for r in results[:3]
     ]
 
     return json.dumps({
+        "status": "search_complete",
         "results_count": len(results),
-        "saved_new": saved_count,
         "top_results": summary,
-        "metrics": state["metrics"],
+        "next_action": "NOW call explain_results with query: " + query,
     })
 
 
@@ -317,10 +402,16 @@ def tool_search_products(query: str, state: Dict[str, Any], max_price: float = 0
 # TOOL: Explain Results (usa explainer.py strutturato)
 # =========================================================
 
-def tool_explain_results(query: str, state: Dict[str, Any]) -> str:
-    """Genera spiegazione strutturata usando il modulo explainer.py"""
+def tool_explain_results(state: Dict[str, Any], **kwargs) -> str:
+    """Genera una spiegazione finale (analoga allo step 7 della pipeline)."""
+    query = kwargs.get("query") or ""
     results = state.get("results", [])
-    explanation = generate_explanation(query, results)
+    
+    # Recupera info mancanti dal parser per arricchire la spiegazione
+    parsed = state.get("parsed_query") or {}
+    missing = parsed.get("missing_info", [])
+    
+    explanation = generate_explanation(query, results, missing_info=missing)
 
     # Salva nello state per l'orchestratore
     state["_explanation"] = explanation
@@ -341,13 +432,15 @@ def tool_detect_intent(query: str, state: Dict[str, Any]) -> str:
     return json.dumps({"intent": intent})
 
 
-def tool_expand_product_query(product: str, state: Dict[str, Any]) -> str:
+def tool_expand_product_query(state: Dict[str, Any], **kwargs) -> str:
+    product = kwargs.get("product") or kwargs.get("query") or ""
     expansions = [f"{product} originale", f"{product} nuovo", product]
     state["thinking_trace"].append("✔ query expanded")
     return json.dumps({"query_expansions": expansions})
 
 
-def tool_get_seller_profile(seller_name: str, state: Dict[str, Any]) -> str:
+def tool_get_seller_profile(state: Dict[str, Any], **kwargs) -> str:
+    seller_name = kwargs.get("seller_name") or ""
     state["thinking_trace"].append(f"✔ analyzed seller {seller_name}")
     return json.dumps({
         "seller": seller_name,
@@ -356,8 +449,9 @@ def tool_get_seller_profile(seller_name: str, state: Dict[str, Any]) -> str:
     })
 
 
-def tool_get_seller_feedback(seller_name: str, state: Dict[str, Any]) -> str:
+def tool_get_seller_feedback(state: Dict[str, Any], **kwargs) -> str:
     """Recupera feedback di un singolo venditore (per analisi approfondita)."""
+    seller_name = kwargs.get("seller_name") or ""
     feedbacks = get_seller_feedback(seller_name, limit=50)
     ingest_seller_feedback(
         seller_name=seller_name, feedbacks=feedbacks, max_docs=20
@@ -377,10 +471,10 @@ def tool_get_seller_feedback(seller_name: str, state: Dict[str, Any]) -> str:
     return json.dumps(res)
 
 
-def tool_retrieve_feedback_context(
-    seller_name: str, query: str, state: Dict[str, Any]
-) -> str:
+def tool_retrieve_feedback_context(state: Dict[str, Any], **kwargs) -> str:
     """RAG hybrid retrieval (FAISS + BM25 + RRF) per un venditore."""
+    seller_name = kwargs.get("seller_name") or ""
+    query = kwargs.get("query") or ""
     docs = retrieve_context(f"{seller_name} {query}", k=5)
     state["rag_context"] = build_context(
         query, state.get("results", []), docs
@@ -391,8 +485,9 @@ def tool_retrieve_feedback_context(
     return json.dumps([d.get("text") for d in docs])
 
 
-def tool_compute_seller_trust(seller_name: str, state: Dict[str, Any]) -> str:
+def tool_compute_seller_trust(state: Dict[str, Any], **kwargs) -> str:
     """Calcola trust score per un singolo venditore (per analisi approfondita)."""
+    seller_name = kwargs.get("seller_name") or ""
     feedbacks = state.get("seller_feedbacks", {}).get(seller_name, [])
     if not feedbacks:
         return json.dumps({
@@ -410,15 +505,26 @@ def tool_compute_seller_trust(seller_name: str, state: Dict[str, Any]) -> str:
     return json.dumps({"trust_score": round(trust, 3)})
 
 
-def tool_detect_price_anomaly(
-    product: str, price: float, state: Dict[str, Any]
-) -> str:
+def tool_detect_price_anomaly(state: Dict[str, Any], **kwargs) -> str:
+    product = kwargs.get("product") or ""
+    price = kwargs.get("price") or 0.0
     state["thinking_trace"].append("✔ analyzed price anomalies")
     return json.dumps({"anomaly_score": 0.1, "is_anomalous": False})
 
+def tool_request_user_clarification(state: Dict[str, Any], **kwargs) -> str:
+    """Chiede chiarimenti all'utente."""
+    question = kwargs.get("question") or kwargs.get("clarification") or "Puoi chiarire la tua richiesta?"
+    return json.dumps({"question": question})
 
-def tool_rerank_products(query: str, state: Dict[str, Any]) -> str:
+
+def tool_detect_intent(state: Dict[str, Any], **kwargs) -> str:
+    """Rileva l'intento dell'utente (per routing)."""
+    return json.dumps({"intent": "search"})
+
+
+def tool_rerank_products(state: Dict[str, Any], **kwargs) -> str:
     """Re-rank manuale (se l'LLM vuole riordinare con query diversa)."""
+    query = kwargs.get("query") or ""
     results = state.get("results", [])
     if not results:
         return json.dumps({"error": "No products to rerank."})
@@ -438,19 +544,27 @@ def tool_rerank_products(query: str, state: Dict[str, Any]) -> str:
 # =========================================================
 
 AGENT_TOOLS_SCHEMA = [
+    # ==========================================================
+    # CORE FLOW: parse_query → search_products → explain_results
+    # ==========================================================
     {
         "type": "function",
         "function": {
             "name": "parse_query",
             "description": (
-                "Trasforma la query naturale dell'utente in una struttura "
-                "semantica filtrata (prodotto, brand, prezzo, condizione). "
-                "Esegui SEMPRE come primo step."
+                "STEP 1 — Always call this FIRST. "
+                "Parses the user's natural language into structured filters. "
+                "NEXT: Immediately call search_products.\n"
+                "OUTPUT: JSON with 'status', 'search_query' (string to use in next step), "
+                "and 'next_action' hints."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"}
+                    "query": {
+                        "type": "string",
+                        "description": "The user's original search request",
+                    }
                 },
                 "required": ["query"],
             },
@@ -461,91 +575,23 @@ AGENT_TOOLS_SCHEMA = [
         "function": {
             "name": "search_products",
             "description": (
-                "Cerca prodotti su eBay e esegue automaticamente: "
-                "deduplicazione, analisi feedback di TUTTI i venditori, "
-                "calcolo trust score NLP, salvataggio DB, reranking, "
-                "ranking personalizzato e retrieval RAG. "
-                "Restituisce i migliori risultati con metriche IR."
+                "STEP 2 — Call this AFTER parse_query. "
+                "Searches eBay, analyzes sellers, computes trust, and ranks products. "
+                "NEXT: Call explain_results.\n"
+                "OUTPUT: JSON with 'status', 'results_count', 'top_results' (list of product summaries), "
+                "and 'next_action' directive."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
+                    "query": {
+                        "type": "string",
+                        "description": "The product search query (e.g. 'nike shoes')",
+                    },
                     "max_price": {
                         "type": "number",
-                        "default": 0,
+                        "description": "Optional max price filter in EUR.",
                     },
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_seller_feedback",
-            "description": (
-                "Recupera le recensioni di un venditore specifico. "
-                "OPZIONALE: search_products già analizza tutti i venditori. "
-                "Usa questo tool solo se l'utente chiede dettagli su un venditore."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "seller_name": {"type": "string"}
-                },
-                "required": ["seller_name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "compute_seller_trust",
-            "description": (
-                "Calcola il Trust Score per un singolo venditore. "
-                "OPZIONALE: search_products lo calcola già per tutti."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "seller_name": {"type": "string"}
-                },
-                "required": ["seller_name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "retrieve_feedback_context",
-            "description": (
-                "Cerca nei feedback indicizzati (RAG ibrido FAISS+BM25) "
-                "informazioni rilevanti su un venditore. "
-                "OPZIONALE: utile per rispondere a domande specifiche."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "seller_name": {"type": "string"},
-                    "query": {"type": "string"},
-                },
-                "required": ["seller_name", "query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "rerank_products",
-            "description": (
-                "Riordina i prodotti trovati con una query diversa. "
-                "OPZIONALE: search_products già esegue il rerank."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"}
                 },
                 "required": ["query"],
             },
@@ -556,41 +602,134 @@ AGENT_TOOLS_SCHEMA = [
         "function": {
             "name": "explain_results",
             "description": (
-                "Genera automaticamente una spiegazione strutturata "
-                "dei risultati trovati (trust, prezzo, ranking reasons). "
-                "Usa SOLO ED ESCLUSIVAMENTE ALLA FINE, DOPO search_products."
+                "STEP 3 (FINAL) — Call this AFTER search_products. "
+                "Generates the final natural language response for the user.\n"
+                "OUTPUT: JSON with 'explanation' (Markdown string)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "La query originale dell'utente",
+                        "description": "The user's original search query",
                     }
                 },
                 "required": ["query"],
             },
         },
     },
+    # ==========================================================
+    # CLARIFICATION
+    # ==========================================================
     {
         "type": "function",
         "function": {
             "name": "request_user_clarification",
             "description": (
-                "Interrompe il processo e fa una domanda all'utente. "
-                "Da usare SOLO quando mancano dettagli cruciali "
-                "(taglia scarpe, memoria telefoni, ecc.). "
-                "NON USARE se si è già svolta la ricerca."
+                "Use when the request is too vague to search. "
+                "Do NOT use if search_products has already run.\n"
+                "OUTPUT: JSON with 'question' (string)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "question": {
                         "type": "string",
-                        "description": "La domanda da porre all'utente",
+                        "description": "The question for the user (in Italian)",
                     }
                 },
                 "required": ["question"],
+            },
+        },
+    },
+    # ==========================================================
+    # OPTIONAL DEEP-DIVE TOOLS
+    # ==========================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "get_seller_feedback",
+            "description": (
+                "OPTIONAL — Get detailed reviews for one seller. "
+                "Requires search_products to have run first.\n"
+                "OUTPUT: List of objects with 'rating' and 'comment'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seller_name": {
+                        "type": "string",
+                        "description": "The exact eBay seller username",
+                    }
+                },
+                "required": ["seller_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compute_seller_trust",
+            "description": (
+                "OPTIONAL — Recomputes trust score for one seller. "
+                "Requires get_seller_feedback to have run first for this seller.\n"
+                "OUTPUT: JSON with 'trust_score' (float 0-1)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seller_name": {
+                        "type": "string",
+                        "description": "The exact eBay seller username",
+                    }
+                },
+                "required": ["seller_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "retrieve_feedback_context",
+            "description": (
+                "OPTIONAL — Hybrid RAG search in seller feedback. "
+                "Requires search_products to have run first.\n"
+                "OUTPUT: List of raw text excerpts (strings)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seller_name": {
+                        "type": "string",
+                        "description": "The exact eBay seller username",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "What to search in the feedback",
+                    },
+                },
+                "required": ["seller_name", "query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rerank_products",
+            "description": (
+                "OPTIONAL — Re-sorts found results using a new query. "
+                "Requires search_products to have run first.\n"
+                "OUTPUT: List of objects with 'title' and 'rerank_score'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "New ranking criteria query",
+                    }
+                },
+                "required": ["query"],
             },
         },
     },
@@ -613,7 +752,5 @@ TOOLS_MAP = {
     "detect_price_anomaly": tool_detect_price_anomaly,
     "rerank_products": tool_rerank_products,
     "explain_results": tool_explain_results,
-    "request_user_clarification": lambda question, state: json.dumps(
-        {"question": question}
-    ),
+    "request_user_clarification": tool_request_user_clarification,
 }

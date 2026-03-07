@@ -1,95 +1,57 @@
 from typing import List, Dict
 
 
-def explain_results(query: str, items: List[Dict]) -> str:
+def explain_results(query: str, items: List[Dict], missing_info: List[str] = None) -> str:
 
     if not items:
-        return "Non ho trovato risultati per la tua ricerca."
+        # Se non ci sono risultati, cerchiamo di essere utili
+        msg = f"🔍 **Ricerca per: '{query}'**\n\nPurtroppo non ho trovato risultati che corrispondano esattamente ai tuoi criteri su eBay."
+        if missing_info:
+            readable = ", ".join([f"**{m}**" for m in missing_info])
+            msg += f"\n\n💡 **Suggerimento:** Prova a specificare meglio questi dettagli per aiutarmi a trovare quello che cerchi: {readable}."
+        return msg
 
     best = items[0]
-
-    best_title = best.get("title")
-    best_price = best.get("price")
-    best_seller = best.get("seller_name")
-
-    trust = best.get("trust_score")
-    score = best.get("ranking_score") or best.get("_rerank_score")
-
+    best_title = best.get("title", "Prodotto senza titolo")
+    best_price = best.get("price", "N.D.")
+    best_currency = best.get("currency", "€")
+    best_seller = best.get("seller_name", "Venditore Privato")
+    trust = best.get("trust_score", 0)
+    
     explanation = []
+    explanation.append(f"### 🎯 Risultato consigliato per: *{query}*")
+    explanation.append(f"Ho analizzato **{len(items)}** prodotti e questo è il migliore per te:\n")
+    
+    # Card del prodotto
+    explanation.append(f"**[{best_title}]({best.get('url', '#')})**")
+    explanation.append(f"💰 **Prezzo:** {best_price} {best_currency}")
+    explanation.append(f"👤 **Venditore:** {best_seller} (Affidabilità: **{round(trust * 100)}%**)")
+    explanation.append("")
 
-    # ------------------------------------------------
-    # overview
-    # ------------------------------------------------
-
-    explanation.append(
-        f"Ho trovato {len(items)} risultati per '{query}'."
-    )
-
-    if best_title:
-        explanation.append(
-            f"Il prodotto più rilevante è '{best_title}'."
-        )
-
-    # ------------------------------------------------
-    # trust
-    # ------------------------------------------------
-
-    if trust is not None and best_seller:
-        explanation.append(
-            f"Il venditore {best_seller} ha un trust score di {round(trust * 100)}%."
-        )
-
-    # ------------------------------------------------
-    # prezzo
-    # ------------------------------------------------
-
-    if best_price:
-        explanation.append(
-            f"Il prezzo del prodotto è {best_price}€."
-        )
-
-    # ------------------------------------------------
-    # explainable ranking
-    # ------------------------------------------------
-
+    # Motivazioni del ranking
     reasons = best.get("explanations") or []
-
     if reasons:
+        explanation.append("✨ **Perché lo abbiamo scelto:**")
+        for r in reasons:
+            explanation.append(f"- {r}")
+    else:
+        explanation.append("✨ **Perché lo abbiamo scelto:** Questo prodotto offre il miglior bilanciamento tra pertinenza, prezzo e reputazione del venditore.")
+    
+    explanation.append("")
 
-        readable = ", ".join(reasons)
-
-        explanation.append(
-            f"Questo risultato è stato classificato in alto perché: {readable}."
-        )
-
-    elif score:
-        explanation.append(
-            "Questo prodotto è stato classificato in cima grazie alla combinazione di rilevanza rispetto alla query, affidabilità del venditore e prezzo competitivo."
-        )
-
-    # ------------------------------------------------
-    # RAG feedback
-    # ------------------------------------------------
-
+    # RAG Social Proof
     feedbacks = best.get("rag_feedback") or []
-
     if feedbacks:
-
-        examples = []
-
+        explanation.append("💬 **Cosa dicono gli acquirenti di questo venditore:**")
         for f in feedbacks[:2]:
-
-            text = f.get("text")
-
+            text = f.get("text", "").strip()
             if text:
-                examples.append(text)
+                explanation.append(f"> \"{text}\"")
+        explanation.append("")
 
-        if examples:
+    # Suggerimenti per affinare
+    if missing_info:
+        readable = ", ".join([f"**{m}**" for m in missing_info])
+        explanation.append(f"💡 **Vuoi essere più preciso?** Se mi dici il tuo **{readable}** posso filtrare i risultati ancora meglio.")
 
-            joined = " | ".join(examples)
-
-            explanation.append(
-                f"Alcuni feedback recenti sul venditore indicano: \"{joined}\"."
-            )
-
-    return " ".join(explanation)
+    return "\n".join(explanation)

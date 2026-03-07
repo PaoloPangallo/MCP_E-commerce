@@ -2,6 +2,7 @@
 
 import base64
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -138,15 +139,17 @@ def _build_price_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
                     min_price = min(left, right)
                     max_price = max(left, right)
 
-    if min_price and min_price <= 1:
+    # Sanity check: if prices are near 0, treat as None (no limit)
+    if min_price is not None and min_price <= 0.1:
         min_price = None
+    if max_price is not None and max_price <= 0.1:
+        max_price = None
 
     if min_price is None and max_price is None:
         return None
 
     if min_price is None:
         return f"price:[..{max_price}]"
-
     if max_price is None:
         return f"price:[{min_price}..]"
 
@@ -208,26 +211,90 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
 # ============================================================
 
 def _build_query(parsed: Dict[str, Any]) -> str:
-
     parts = []
-
+    
+    # Extract Data from parsed
     brands = parsed.get("brands") or []
-    product = parsed.get("product")
-    semantic_query = parsed.get("semantic_query")
-
+    product = parsed.get("product", "")
+    semantic = parsed.get("semantic_query", "")
+    sem_parts = str(semantic).split()
+    
+    # Add values from compatibilities (e.g., Size: 42, Color: Black)
+    compatibilities = parsed.get("compatibilities") or {}
+    comp_values = [str(v) for v in compatibilities.values() if v]
+    
+    # Merge Logic: Add parts from brands + product + compatibilities, then add semantic parts
+    raw_parts = []
     if brands:
-        parts.extend(brands)
-
+        if isinstance(brands, list): raw_parts.extend([str(b) for b in brands])
+        else: raw_parts.append(str(brands))
     if product:
-        parts.append(product)
+        if isinstance(product, list): raw_parts.extend([str(p) for p in product])
+        else: raw_parts.append(str(product))
+    if comp_values:
+        raw_parts.extend(comp_values)
+        
+    for item in raw_parts:
+        # Check if this item (as a whole or its words) should be added
+        item_words = str(item).split()
+        for iw in item_words:
+            if not any(iw.lower() == p.lower() for p in parts):
+                parts.append(iw)
 
-    if not parts and semantic_query:
-        parts.append(semantic_query)
+    for sp in sem_parts:
+        if not any(sp.lower() == p.lower() for p in parts):
+            parts.append(sp)
 
-    if not parts:
-        parts.append(parsed.get("original_query", ""))
+    # Stopwords list: generic words that pollute eBay search results
+    stopwords = {
+        "modello", "tipo", "articolo", "cercare", "cerco", "vorrei", "trovami", "oggetto", 
+        "chiesto", "richiesta", "precedente", "quello", "quelli", "stessi", "altri", "altre",
+        "ciao", "grazie", "per", "con", "dei", "delle", "degli", "un", "una", "uno", 
+        "li", "lo", "la", "le", "il", "i", "gli", "da", "di", "a", "in", "su", "nel", "nella", "dai", "dai", "da", "del", "della"
+    }
+    
+    parts = [p for p in parts if p.lower() not in stopwords]
 
-    return " ".join(parts).strip()
+    # Category-Specific Standardization (Safety Layer)
+    query_str = " ".join(parts)
+    product_low = str(product).lower()
+    
+    # 1. Shoes: "taglia 43" -> "EU 43"
+    if any(x in product_low for x in ["scarpe", "sneakers", "stivali", "calzature"]):
+        # Match standalone numbers 35-48 or "taglia/numero 43"
+        query_str = re.sub(r"\b(?:taglia|numero|taglie)\s+(\d{2})\b", r"EU \1", query_str, flags=re.IGNORECASE)
+        # If we see a standalone number that looks like a shoe size and not already part of "EU X"
+        query_str = re.sub(r"\b(?<!EU\s)(\d{2})\b", r"EU \1", query_str) if re.search(r"\b\d{2}\b", query_str) else query_str
+
+    # 2. Jeans/Pants: "taglia X lunghezza Y" -> "WX LY"
+    elif any(x in product_low for x in ["jeans", "pantaloni", "pantalone"]):
+        t_match = re.search(r"taglia\s+(\d+)", query_str, re.IGNORECASE)
+        l_match = re.search(r"lunghezza\s+(\d+)", query_str, re.IGNORECASE)
+        if t_match and l_match:
+            query_str = re.sub(r"taglia\s+\d+", f"W{t_match.group(1)}", query_str, flags=re.IGNORECASE)
+            query_str = re.sub(r"lunghezza\s+\d+", f"L{l_match.group(1)}", query_str, flags=re.IGNORECASE)
+        elif t_match:
+            query_str = re.sub(r"taglia\s+\d+", f"W{t_match.group(1)}", query_str, flags=re.IGNORECASE)
+    
+    # Final cleanup: deduplicate again after regex replacements
+    final_words = []
+    seen = set()
+    for w in query_str.split():
+        # Remove punctuation for comparison (e.g., "Levi's" vs "levis")
+        w_norm = re.sub(r"[^\w]", "", w.lower())
+        if w_norm and w_norm not in seen:
+            final_words.append(w)
+            seen.add(w_norm)
+            
+    final_q = " ".join(final_words).strip()
+    
+    if not final_q:
+        final_q = parsed.get("original_query", "")
+
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Final eBay Query Construction: '{final_q}'")
+    return final_q
 
 
 # ============================================================
@@ -264,23 +331,19 @@ def search_items(
 ) -> List[Dict[str, Any]]:
 
     token = _get_oauth_token()
-
     headers = {
         "Authorization": f"Bearer {token}",
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
 
     query = _build_query(parsed_query)
-
     constraints = parsed_query.get("constraints", [])
-    preferences = parsed_query.get("preferences", [])
-
+    
     items = []
     offset = 0
     page_size = 20
 
     while len(items) < limit:
-
         params = {
             "q": query,
             "limit": page_size,
@@ -288,9 +351,12 @@ def search_items(
         }
 
         filter_string = _build_filter_string(constraints)
-
         if filter_string:
             params["filter"] = filter_string
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"eBay Search Request: URL={SEARCH_URL} PARAMS={params}")
 
         response = requests.get(
             SEARCH_URL,
@@ -299,22 +365,23 @@ def search_items(
             timeout=REQUEST_TIMEOUT,
         )
 
+        logger.info(f"eBay Search Response Status: {response.status_code}")
+
         if response.status_code != 200:
-            raise RuntimeError(
-                f"eBay search error {response.status_code}: {response.text}"
-            )
+            logger.error(f"eBay API error {response.status_code}: {response.text}")
+            break
 
         data = response.json()
-
         page_items = data.get("itemSummaries", [])
+        total = data.get("total", 0)
+
+        logger.info(f"eBay Results: {len(page_items)} items on this page (Total available: {total})")
 
         if not page_items:
             break
 
         items.extend(page_items)
-
         offset += page_size
 
     items = items[:limit]
-
     return [_normalize_item(i) for i in items]
