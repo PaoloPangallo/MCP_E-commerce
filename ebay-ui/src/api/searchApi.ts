@@ -37,17 +37,27 @@ export interface SearchResponse {
   rag_context?: RagContext
   metrics?: IRMetrics
   _timings?: Record<string, number>
+  thinking_trace?: string[]
+}
+
+export interface ChatMessage {
+  role: string
+  content: string
 }
 
 export async function searchProducts(
-  query: string
+  query: string,
+  history: ChatMessage[] = [],
+  context: Record<string, any> = {}
 ): Promise<SearchResponse> {
   return apiFetch<SearchResponse>("/search", {
     method: "POST",
     timeout: 90000,
     body: JSON.stringify({
       query,
-      llm_engine: "ollama"
+      llm_engine: "ollama",
+      history,
+      context
     })
   })
 }

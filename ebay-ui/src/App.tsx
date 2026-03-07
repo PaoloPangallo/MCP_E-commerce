@@ -90,6 +90,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [loadingQuery, setLoadingQuery] = useState<string | null>(null)
   const [cache, setCache] = useState<Record<string, SearchBlock>>({})
+  const [searchContext, setSearchContext] = useState<Record<string, any>>({})
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -106,6 +107,7 @@ export default function App() {
 
   const resetChat = () => {
     setChat([getWelcomeMessage()])
+    setSearchContext({})
     setLoading(false)
     setLoadingQuery(null)
   }
@@ -149,7 +151,22 @@ export default function App() {
     setLoadingQuery(query)
 
     try {
-      const data = await searchProducts(query)
+      const chatHistory = chat
+        .map(entry => {
+          if (entry.type === "message") {
+            return { role: entry.msg.role, content: entry.msg.content };
+          } else if (entry.type === "search" && entry.search.analysis) {
+            return { role: "assistant", content: entry.search.analysis };
+          }
+          return null;
+        })
+        .filter((msg): msg is { role: string, content: string } => msg !== null);
+
+      const data = await searchProducts(query, chatHistory, searchContext)
+
+      if (data.parsed_query) {
+        setSearchContext(data.parsed_query)
+      }
 
       const results = Array.isArray(data.results) ? data.results : []
       const analysis =
@@ -167,7 +184,8 @@ export default function App() {
         analysis,
         metrics,
         rag_context: ragContext,
-        timings
+        timings,
+        thinking_trace: data.thinking_trace
       }
 
       setCache((prev) => ({
@@ -177,17 +195,25 @@ export default function App() {
 
       saveSearchHistory(query, results.length)
 
-      setChat((prev) => [
-        ...prev,
-        {
-          type: "message",
-          msg: {
-            role: "assistant",
-            content: `Ho trovato ${data.results_count ?? results.length} risultati per "${query}".`
+      const isConversational = results.length === 0 && (!data.thinking_trace || data.thinking_trace.length === 0);
+
+      if (isConversational) {
+        setChat((prev) => [
+          ...prev,
+          {
+            type: "message",
+            msg: {
+              role: "assistant",
+              content: analysis || "Nessuna risposta."
+            }
           }
-        },
-        { type: "search", search: newSearch }
-      ])
+        ]);
+      } else {
+        setChat((prev) => [
+          ...prev,
+          { type: "search", search: newSearch }
+        ]);
+      }
     } catch (error) {
       console.error("Search error:", error)
 
@@ -267,6 +293,13 @@ export default function App() {
 
             return (
               <Box key={`search-${index}`} mt={2} mb={4}>
+                {search.thinking_trace && search.thinking_trace.length > 0 && (
+                  <Box mb={2}>
+                    <MessageBubble role="assistant">
+                      <AIThinkingPipeline trace={search.thinking_trace} />
+                    </MessageBubble>
+                  </Box>
+                )}
                 {(search.analysis || search.metrics || search.rag_context) && (
                   <AIAnalysisCard
                     text={search.analysis ?? undefined}
@@ -275,7 +308,9 @@ export default function App() {
                   />
                 )}
 
-                <SearchResultList results={search.results} />
+                {search.results.length > 0 && (
+                  <SearchResultList results={search.results} />
+                )}
               </Box>
             )
           })}

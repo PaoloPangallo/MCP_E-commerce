@@ -44,6 +44,7 @@ export interface SearchBlock {
   metrics?: IRMetrics
   rag_context?: RagContext
   timings?: Record<string, number>
+  thinking_trace?: string[]
 }
 
 export type ChatEntry =
