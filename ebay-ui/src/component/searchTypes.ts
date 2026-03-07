@@ -37,6 +37,27 @@ export interface IRMetrics {
 
 export type RagContext = string | string[] | null | undefined
 
+export interface AgentStep {
+  step?: number
+  type?: string
+
+  thought?: string
+  action?: string
+  action_input?: Record<string, any>
+
+  message?: string
+  observation_summary?: string
+
+  status?: "ok" | "error" | "final"
+}
+
+export interface SellerSummaryBlock {
+  seller_name?: string
+  trust_score?: number
+  sentiment_score?: number
+  count?: number
+}
+
 export interface SearchBlock {
   query: string
   results: SearchItem[]
@@ -44,6 +65,9 @@ export interface SearchBlock {
   metrics?: IRMetrics
   rag_context?: RagContext
   timings?: Record<string, number>
+  agent_trace?: AgentStep[]
+  seller_summary?: SellerSummaryBlock | null
+  final_answer?: string | null
 }
 
 export type ChatEntry =

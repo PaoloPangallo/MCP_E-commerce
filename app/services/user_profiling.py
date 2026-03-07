@@ -1,63 +1,78 @@
-from typing import Dict
+from __future__ import annotations
+
+from typing import Dict, Optional
+
 from sqlalchemy.orm import Session
+
 from app.models.user import User
 
 
-def update_user_profile(user: User, parsed: Dict, db: Session):
-
-    if not user:
-        return
-
-    updated = False
-
-    # -------------------------
-    # BRAND PREFERENCE
-    # -------------------------
-
-    brands = parsed.get("brands") or []
-
-    if brands:
-
-        brand = brands[0]
-
-        if user.favorite_brands != brand:
-            user.favorite_brands = brand
-            updated = True
-
-    # -------------------------
-    # PRICE PREFERENCE
-    # -------------------------
-
+def _extract_price_signal(parsed: Dict) -> Optional[int]:
     constraints = parsed.get("constraints") or []
 
     for c in constraints:
+        if c.get("type") != "price":
+            continue
 
-        if c.get("type") == "price":
+        value = c.get("value")
 
-            value = c.get("value")
+        try:
+            if isinstance(value, (int, float)):
+                return int(value)
 
-            if value:
+            if isinstance(value, list) and len(value) == 2:
+                nums = [int(float(v)) for v in value]
+                return int(sum(nums) / 2)
+        except Exception:
+            continue
 
-                try:
+    return None
 
-                    price = int(value)
 
-                    if not user.price_preference:
-                        user.price_preference = str(price)
+def update_user_profile(user: User, parsed: Dict, db: Session) -> bool:
+    """
+    Update user profile fields in-memory only.
+    NO commit here. Commit is delegated to the outer pipeline.
+    Returns True if something changed.
+    """
+    if not user:
+        return False
 
-                    else:
+    updated = False
 
-                        old = int(user.price_preference)
+    # --------------------------------------------------
+    # BRAND PREFERENCE
+    # --------------------------------------------------
 
-                        # media mobile
-                        new_price = int((old + price) / 2)
+    brands = parsed.get("brands") or []
+    if brands:
+        new_brand = str(brands[0]).strip()
 
-                        user.price_preference = str(new_price)
+        if new_brand and user.favorite_brands != new_brand:
+            user.favorite_brands = new_brand
+            updated = True
 
+    # --------------------------------------------------
+    # PRICE PREFERENCE
+    # --------------------------------------------------
+
+    price_signal = _extract_price_signal(parsed)
+    if price_signal:
+        try:
+            if not user.price_preference:
+                user.price_preference = str(price_signal)
+                updated = True
+            else:
+                old = int(user.price_preference)
+                new_price = int((old + price_signal) / 2)
+
+                if str(new_price) != str(user.price_preference):
+                    user.price_preference = str(new_price)
                     updated = True
-
-                except:
-                    pass
+        except Exception:
+            pass
 
     if updated:
-        db.commit()
+        db.add(user)
+
+    return updated

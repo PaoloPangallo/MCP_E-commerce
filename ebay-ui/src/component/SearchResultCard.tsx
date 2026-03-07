@@ -1,8 +1,18 @@
 import { useMemo, useState } from "react"
-import { Box, Chip, Link, Paper, Typography } from "@mui/material"
+import {
+  Box,
+  Chip,
+  Link,
+  Paper,
+  Typography,
+  Button,
+  Collapse
+} from "@mui/material"
 
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 
 import SellerInfo from "./SellerInfo"
 import SellerTrustGauge from "./SellerTrustGauge"
@@ -22,6 +32,7 @@ function formatPrice(price?: number, currency?: string) {
 
 export default function SearchResultCard({ item }: { item: SearchItem }) {
   const [imageError, setImageError] = useState(false)
+  const [showSellerPanel, setShowSellerPanel] = useState(false)
 
   const trustPercent =
     typeof item.trust_score === "number"
@@ -44,6 +55,13 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
       rel: "noreferrer"
     }
   }, [item.url])
+
+  const ragFeedbackPreview = Array.isArray(item.rag_feedback)
+    ? item.rag_feedback
+        .map((fb) => fb?.comment || "")
+        .filter(Boolean)
+        .slice(0, 2)
+    : []
 
   return (
     <Paper
@@ -174,7 +192,52 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
         </Box>
 
         <ExplanationChips explanations={item.explanations} />
-        <SellerFeedbackPanel seller={item.seller_name} />
+
+        {ragFeedbackPreview.length > 0 && (
+          <Box
+            sx={{
+              mt: 1.5,
+              p: 1.5,
+              borderRadius: 2,
+              bgcolor: "#fafafa",
+              border: "1px solid #ececf1"
+            }}
+          >
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#6e6e80", mb: 0.75 }}>
+              Segnali RAG sul venditore
+            </Typography>
+
+            {ragFeedbackPreview.map((text, index) => (
+              <Typography
+                key={`${item.ebay_id}-rag-${index}`}
+                sx={{ fontSize: 12.5, color: "#4b4b5a", lineHeight: 1.55, mb: index === ragFeedbackPreview.length - 1 ? 0 : 0.5 }}
+              >
+                “{text}”
+              </Typography>
+            ))}
+          </Box>
+        )}
+
+        {item.seller_name && (
+          <Box mt={2}>
+            <Button
+              variant="text"
+              onClick={() => setShowSellerPanel((prev) => !prev)}
+              endIcon={showSellerPanel ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              sx={{
+                px: 0,
+                textTransform: "none",
+                fontWeight: 600
+              }}
+            >
+              {showSellerPanel ? "Nascondi seller deep dive" : "Mostra seller deep dive"}
+            </Button>
+
+            <Collapse in={showSellerPanel} timeout="auto" unmountOnExit>
+              <SellerFeedbackPanel seller={item.seller_name} />
+            </Collapse>
+          </Box>
+        )}
       </Box>
     </Paper>
   )

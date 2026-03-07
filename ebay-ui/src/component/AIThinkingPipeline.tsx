@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, LinearProgress, Typography } from "@mui/material"
+import { Box, Chip, LinearProgress, Typography } from "@mui/material"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
 import AutorenewIcon from "@mui/icons-material/Autorenew"
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
+
+import type { AgentStep } from "../component/searchTypes.ts"
 
 interface Props {
-  loading?: boolean
+  agentTrace?: AgentStep[]
   timings?: Record<string, number>
   query?: string
+  loading?: boolean
 }
 
 interface Step {
@@ -58,12 +62,54 @@ function getCompletedCountFromTimings(timings?: Record<string, number>) {
   ).length
 }
 
-export default function AIThinkingPipeline({ loading = false, timings, query }: Props) {
+function formatActionLabel(action?: string) {
+  switch ((action || "").toLowerCase()) {
+    case "search_pipeline":
+      return "Search pipeline"
+    case "seller_pipeline":
+      return "Seller analysis"
+    case "finish":
+      return "Finalizzazione"
+    default:
+      return action || "Step"
+  }
+}
+
+function formatActionInput(input?: Record<string, unknown>) {
+  if (!input) {
+    return null
+  }
+
+  const query = typeof input.query === "string" ? input.query : null
+  const seller = typeof input.seller_name === "string" ? input.seller_name : null
+
+  if (query) {
+    return `query: ${query}`
+  }
+
+  if (seller) {
+    return `seller: ${seller}`
+  }
+
+  return null
+}
+
+export default function AIThinkingPipeline({
+  loading = false,
+  timings,
+  query,
+  agentTrace
+}: Props) {
   const [simulatedStepIndex, setSimulatedStepIndex] = useState(0)
   const [simulatedProgress, setSimulatedProgress] = useState(8)
 
+  const realTrace = useMemo(
+    () => (Array.isArray(agentTrace) ? agentTrace.filter(Boolean) : []),
+    [agentTrace]
+  )
+
   useEffect(() => {
-    if (!loading || timings) {
+    if (!loading || timings || realTrace.length > 0) {
       return
     }
 
@@ -76,7 +122,7 @@ export default function AIThinkingPipeline({ loading = false, timings, query }: 
     }, 950)
 
     return () => window.clearInterval(interval)
-  }, [loading, timings, query])
+  }, [loading, timings, query, realTrace.length])
 
   const completedCount = useMemo(
     () => getCompletedCountFromTimings(timings),
@@ -89,8 +135,107 @@ export default function AIThinkingPipeline({ loading = false, timings, query }: 
       ? simulatedProgress
       : 0
 
-  if (!loading && !timings) {
+  if (!loading && !timings && realTrace.length === 0) {
     return null
+  }
+
+  if (realTrace.length > 0) {
+    const totalTime = timings?.total_s
+
+    return (
+      <Box
+        sx={{
+          minWidth: 320,
+          p: 2.5,
+          mb: 3,
+          borderRadius: 3,
+          bgcolor: "#ffffff",
+          border: "1px solid #e5e5e5"
+        }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 2,
+            mb: 1
+          }}
+        >
+          <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
+            Agent trace
+          </Typography>
+
+          {typeof totalTime === "number" && (
+            <Chip
+              size="small"
+              label={`Total ${totalTime.toFixed(2)}s`}
+              sx={{
+                bgcolor: "#f5f5f5",
+                border: "1px solid #e5e5e5",
+                fontSize: 11
+              }}
+            />
+          )}
+        </Box>
+
+        <Typography sx={{ fontSize: 12, color: "#8e8ea0", mb: 2 }}>
+          Step reali eseguiti dal backend agentico.
+        </Typography>
+
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+          {realTrace.map(step => {
+            const isError = step.status === "error"
+            const isFinal = step.status === "final"
+            const accent = isError ? "#d14343" : isFinal ? "#3b5ccc" : "#10a37f"
+            const inputLabel = formatActionInput(step.action_input)
+
+            return (
+              <Box
+                key={`${step.step}-${step.action}-${step.observation_summary}`}
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  border: "1px solid #ececf1",
+                  borderLeft: `4px solid ${accent}`,
+                  bgcolor: "#fcfcfc"
+                }}
+              >
+                <Box display="flex" alignItems="center" gap={1} mb={0.75}>
+                  {isError ? (
+                    <ErrorOutlineIcon sx={{ fontSize: 18, color: accent }} />
+                  ) : (
+                    <CheckCircleIcon sx={{ fontSize: 18, color: accent }} />
+                  )}
+
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#202123" }}>
+                    Step {step.step} · {formatActionLabel(step.action)}
+                  </Typography>
+                </Box>
+
+                {step.thought && (
+                  <Typography sx={{ fontSize: 13, color: "#4b4b5a", lineHeight: 1.6, mb: 0.75 }}>
+                    {step.thought}
+                  </Typography>
+                )}
+
+                {inputLabel && (
+                  <Typography sx={{ fontSize: 12, color: "#7a7a8c", mb: 0.5 }}>
+                    {inputLabel}
+                  </Typography>
+                )}
+
+                {step.observation_summary && (
+                  <Typography sx={{ fontSize: 12.5, color: "#666", lineHeight: 1.6 }}>
+                    {step.observation_summary}
+                  </Typography>
+                )}
+              </Box>
+            )
+          })}
+        </Box>
+      </Box>
+    )
   }
 
   return (
@@ -109,8 +254,8 @@ export default function AIThinkingPipeline({ loading = false, timings, query }: 
 
       <Typography sx={{ fontSize: 12, color: "#8e8ea0", mb: 2 }}>
         {loading && !timings
-          ? "Visualizzazione dello stato frontend in attesa della risposta finale del backend."
-          : "Step confermati dai timing restituiti dalla route search."}
+          ? "Visualizzazione temporanea mentre il backend agentico completa il loop ReAct."
+          : "Step stimati dai timing della search pipeline."}
       </Typography>
 
       {PIPELINE.map((step, index) => {

@@ -1,5 +1,11 @@
 import { apiFetch } from "./apiClient"
-import type { IRMetrics, RagContext } from "../component/searchTypes"
+import type {
+  AgentStep,
+  IRMetrics,
+  RagContext,
+  SearchItem,
+  SellerSummaryBlock
+} from "../component/searchTypes"
 
 export interface ParsedQuery {
   semantic_query?: string
@@ -10,24 +16,7 @@ export interface ParsedQuery {
   compatibilities?: Record<string, string>
 }
 
-export interface SearchItem {
-  ebay_id: string
-  title: string
-  price: number
-  currency: string
-  condition: string
-  seller_name: string
-  seller_rating: number
-  url: string
-  image_url: string
-  trust_score?: number
-  ranking_score?: number
-  explanations?: string[]
-  rag_feedback?: any[]
-  _already_in_db?: boolean
-}
-
-export interface SearchResponse {
+export interface SearchPipelineResponse {
   parsed_query?: ParsedQuery
   ebay_query_used?: string
   results: SearchItem[]
@@ -39,15 +28,37 @@ export interface SearchResponse {
   _timings?: Record<string, number>
 }
 
+export interface SellerPipelineResponse extends SellerSummaryBlock {
+  page?: number
+  limit?: number
+  feedbacks?: any[]
+}
+
+export interface AgentResponse {
+  user_query: string
+  final_answer: string
+  agent_trace?: AgentStep[]
+  final_data?: {
+    search?: SearchPipelineResponse
+    seller?: SellerPipelineResponse
+    top_result?: SearchItem | null
+    last_seller_name?: string | null
+    errors?: string[]
+  }
+  steps_used?: number
+}
+
 export async function searchProducts(
   query: string
-): Promise<SearchResponse> {
-  return apiFetch<SearchResponse>("/search", {
+): Promise<AgentResponse> {
+  return apiFetch<AgentResponse>("/agent", {
     method: "POST",
-    timeout: 90000,
+    timeout: 120000,
     body: JSON.stringify({
       query,
-      llm_engine: "ollama"
+      llm_engine: "ollama",
+      max_steps: 4,
+      return_trace: true
     })
   })
 }

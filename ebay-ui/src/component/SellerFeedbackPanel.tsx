@@ -31,31 +31,44 @@ export default function SellerFeedbackPanel({ seller }: Props) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null)
 
   const loadFeedback = async (pageToLoad: number) => {
-    if (!seller) return
+    if (!seller) {
+      return
+    }
 
     try {
       setLoading(true)
 
-      const data: SellerFeedbackResponse =
-        await fetchSellerFeedback(seller, pageToLoad, PAGE_SIZE)
+      const data: SellerFeedbackResponse = await fetchSellerFeedback(
+        seller,
+        pageToLoad,
+        PAGE_SIZE
+      )
 
       const newFeedbacks: Feedback[] = data.feedbacks ?? []
 
-      setTrustScore(data.trust_score)
-      setSentimentScore(data.sentiment_score)
+      setTrustScore(
+        typeof data.trust_score === "number" ? data.trust_score : null
+      )
+      setSentimentScore(
+        typeof data.sentiment_score === "number" ? data.sentiment_score : null
+      )
 
       if (pageToLoad === 1) {
         setFeedbacks(newFeedbacks)
       } else {
-        setFeedbacks(prev => [...prev, ...newFeedbacks])
+        setFeedbacks((prev) => [...prev, ...newFeedbacks])
       }
 
       setHasMore(newFeedbacks.length === PAGE_SIZE)
     } catch (err) {
       console.error("Feedback load error:", err)
+
       if (pageToLoad === 1) {
         setFeedbacks([])
+        setTrustScore(null)
+        setSentimentScore(null)
       }
+
       setHasMore(false)
     } finally {
       setLoading(false)
@@ -67,10 +80,14 @@ export default function SellerFeedbackPanel({ seller }: Props) {
       setFeedbacks([])
       setTrustScore(null)
       setSentimentScore(null)
+      setPage(1)
       setHasMore(false)
       return
     }
 
+    setFeedbacks([])
+    setTrustScore(null)
+    setSentimentScore(null)
     setPage(1)
     setHasMore(true)
     loadFeedback(1)
@@ -83,20 +100,22 @@ export default function SellerFeedbackPanel({ seller }: Props) {
   }
 
   return (
-    <Box mt={3}>
+    <Box mt={2}>
       <Typography variant="h6" fontWeight={600} mb={2}>
         Seller analysis
       </Typography>
 
-      {trustScore !== null && (
-        <SellerTrustGauge score={trustScore} />
-      )}
+      {trustScore !== null && <SellerTrustGauge score={trustScore} />}
 
       {sentimentScore !== null && (
         <Box mt={1} mb={2}>
           <Chip
             label={`Sentiment score: ${sentimentScore.toFixed(2)}`}
             size="small"
+            sx={{
+              bgcolor: "#f5f5f5",
+              border: "1px solid #e5e5e5"
+            }}
           />
         </Box>
       )}
@@ -113,20 +132,24 @@ export default function SellerFeedbackPanel({ seller }: Props) {
         </Typography>
       )}
 
-      {feedbacks.map((fb, i) => (
-        <Box key={`${fb.user}-${fb.time}-${i}`} mb={2}>
+      {feedbacks.map((fb, index) => (
+        <Box key={`${fb.user}-${fb.time}-${index}`} mb={2}>
           <FeedbackCard feedback={fb} />
-          {i !== feedbacks.length - 1 && (
-            <Divider sx={{ mt: 2 }} />
-          )}
+          {index !== feedbacks.length - 1 && <Divider sx={{ mt: 2 }} />}
         </Box>
       ))}
 
       {hasMore && !loading && feedbacks.length > 0 && (
         <Box mt={2} textAlign="center">
-          <Button variant="outlined" onClick={loadMore}>
+          <Button variant="outlined" onClick={loadMore} sx={{ borderRadius: 999 }}>
             Carica altri feedback
           </Button>
+        </Box>
+      )}
+
+      {loading && feedbacks.length > 0 && (
+        <Box mt={2} textAlign="center">
+          <CircularProgress size={22} />
         </Box>
       )}
     </Box>

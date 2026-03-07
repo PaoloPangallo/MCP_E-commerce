@@ -8,26 +8,12 @@ interface MessageBubbleProps {
   isTyping?: boolean
 }
 
-
-// -----------------------------
-// Typing indicator
-// -----------------------------
-
 function TypingIndicator() {
-
   return (
-
-    <Box
-      display="flex"
-      alignItems="center"
-      gap={0.8}
-      height={24}
-    >
-
-      {[0, 0.2, 0.4].map((delay, i) => (
-
+    <Box display="flex" alignItems="center" gap={0.8} height={24}>
+      {[0, 0.2, 0.4].map((delay, index) => (
         <Box
-          key={i}
+          key={index}
           sx={{
             width: 6,
             height: 6,
@@ -41,7 +27,6 @@ function TypingIndicator() {
             }
           }}
         />
-
       ))}
 
       <Typography
@@ -51,19 +36,11 @@ function TypingIndicator() {
           ml: 1
         }}
       >
-        AI is thinking...
+        L’agente sta ragionando…
       </Typography>
-
     </Box>
-
   )
-
 }
-
-
-// -----------------------------
-// Component
-// -----------------------------
 
 export default function MessageBubble({
   role,
@@ -71,11 +48,9 @@ export default function MessageBubble({
   timestamp,
   isTyping = false
 }: MessageBubbleProps) {
-
   const isUser = role === "user"
 
   return (
-
     <Box
       sx={{
         width: "100%",
@@ -86,11 +61,7 @@ export default function MessageBubble({
         mb: 3
       }}
     >
-
-      {/* ASSISTANT AVATAR */}
-
       {!isUser && (
-
         <Avatar
           sx={{
             width: 30,
@@ -104,10 +75,7 @@ export default function MessageBubble({
         >
           <AutoAwesomeIcon sx={{ fontSize: 18 }} />
         </Avatar>
-
       )}
-
-      {/* MESSAGE CONTENT */}
 
       <Box
         sx={{
@@ -117,9 +85,6 @@ export default function MessageBubble({
           alignItems: isUser ? "flex-end" : "flex-start"
         }}
       >
-
-        {/* BUBBLE */}
-
         <Box
           sx={{
             px: isUser ? 2.2 : 0,
@@ -129,17 +94,10 @@ export default function MessageBubble({
             maxWidth: "100%"
           }}
         >
-
-          {isTyping
-            ? <TypingIndicator />
-            : children}
-
+          {isTyping ? <TypingIndicator /> : children}
         </Box>
 
-        {/* TIMESTAMP */}
-
         {timestamp && (
-
           <Typography
             variant="caption"
             sx={{
@@ -150,13 +108,8 @@ export default function MessageBubble({
           >
             {timestamp}
           </Typography>
-
         )}
-
       </Box>
-
     </Box>
-
   )
-
 }

@@ -7,9 +7,9 @@ import {
   ListItemButton,
   ListItemText,
   Typography,
-  IconButton,
   Divider,
-  Button
+  Button,
+  IconButton
 } from "@mui/material"
 
 import AddIcon from "@mui/icons-material/Add"
@@ -20,8 +20,6 @@ import SearchIcon from "@mui/icons-material/Search"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import {useAuth} from "../auth/useAuth.ts";
 import AuthPanel from "../auth/ui/AuthPanel.tsx";
-
-
 
 interface HistoryItem {
   query: string
@@ -61,16 +59,16 @@ export default function ChatLayout({
     const syncSidebar = () => {
       setHistory(
         readArray<HistoryItem>(HISTORY_KEY).filter(
-          item =>
+          (item) =>
             item &&
-            typeof item.query === "string" &&
-            typeof item.results === "number"
+            true &&
+            true
         )
       )
 
       setPinned(
         readArray<string>(PINNED_KEY).filter(
-          item => typeof item === "string" && item.trim().length > 0
+          (item) => typeof item === "string" && item.trim().length > 0
         )
       )
     }
@@ -78,8 +76,9 @@ export default function ChatLayout({
     syncSidebar()
     window.addEventListener("search_history_updated", syncSidebar)
 
-    return () =>
+    return () => {
       window.removeEventListener("search_history_updated", syncSidebar)
+    }
   }, [])
 
   const clearHistory = () => {
@@ -89,15 +88,17 @@ export default function ChatLayout({
   }
 
   const pinSearch = (query: string) => {
-    const updated = [query, ...pinned.filter(item => item !== query)].slice(0, 10)
+    const updated = [query, ...pinned.filter((item) => item !== query)].slice(0, 10)
     localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
     setPinned(updated)
+    window.dispatchEvent(new Event("search_history_updated"))
   }
 
   const unpinSearch = (query: string) => {
-    const updated = pinned.filter(item => item !== query)
+    const updated = pinned.filter((item) => item !== query)
     localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
     setPinned(updated)
+    window.dispatchEvent(new Event("search_history_updated"))
   }
 
   const visibleHistory = useMemo(() => history.slice(0, 20), [history])
@@ -118,7 +119,6 @@ export default function ChatLayout({
           }
         }}
       >
-        {/* Header brand */}
         <Box
           sx={{
             px: 2,
@@ -159,7 +159,7 @@ export default function ChatLayout({
                   lineHeight: 1.2
                 }}
               >
-                eBay AI Search
+                ebayGPT
               </Typography>
 
               <Typography
@@ -169,13 +169,12 @@ export default function ChatLayout({
                   lineHeight: 1.2
                 }}
               >
-                chat, ranking, seller trust
+                agent search · ranking · seller trust
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        {/* New chat */}
         <Box px={2} pb={1.5}>
           <Button
             fullWidth
@@ -201,211 +200,168 @@ export default function ChatLayout({
           </Button>
         </Box>
 
-        {/* Auth block */}
-        <Box px={2} pb={2}>
-          <AuthPanel />
-        </Box>
+        {!loggedIn && (
+          <Box px={2} pb={1.5}>
+            <AuthPanel />
+          </Box>
+        )}
 
-        <Divider />
-
-        {/* Saved */}
         {pinned.length > 0 && (
           <>
-            <Box
-              sx={{
-                px: 2,
-                pt: 2,
-                pb: 0.75,
-                display: "flex",
-                alignItems: "center",
-                gap: 1
-              }}
-            >
-              <PushPinIcon sx={{ fontSize: 15, color: "#8e8ea0" }} />
+            <Box px={2} pb={1}>
               <Typography
                 sx={{
                   fontSize: 12,
                   fontWeight: 700,
-                  letterSpacing: 0.3,
+                  color: "#6e6e80",
                   textTransform: "uppercase",
-                  color: "#8e8ea0"
+                  letterSpacing: 0.4
                 }}
               >
-                Salvati
+                Pinned
               </Typography>
             </Box>
 
-            <List dense sx={{ px: 1 }}>
-              {pinned.map(query => (
-                <ListItem key={query} disablePadding sx={{ mb: 0.5 }}>
+            <List dense sx={{ px: 1, pb: 1 }}>
+              {pinned.map((query) => (
+                <ListItem
+                  key={`pinned-${query}`}
+                  disablePadding
+                  secondaryAction={
+                    <IconButton edge="end" size="small" onClick={() => unpinSearch(query)}>
+                      <PushPinIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  }
+                >
                   <ListItemButton
                     onClick={() => onSearch(query)}
                     sx={{
                       borderRadius: 2,
-                      minHeight: 42,
-                      "&:hover": {
-                        bgcolor: "#ececf1"
-                      }
+                      mx: 1,
+                      py: 1
                     }}
                   >
-                    <PushPinIcon sx={{ fontSize: 16, mr: 1.2, color: "#777" }} />
-
+                    <SearchIcon sx={{ fontSize: 16, color: "#6e6e80", mr: 1.2 }} />
                     <ListItemText
                       primary={query}
                       primaryTypographyProps={{
                         fontSize: 13,
-                        noWrap: true,
-                        sx: { maxWidth: 160, color: "#202123" }
+                        noWrap: true
                       }}
                     />
-
-                    <IconButton
-                      size="small"
-                      aria-label="Rimuovi ricerca salvata"
-                      onClick={event => {
-                        event.stopPropagation()
-                        unpinSearch(query)
-                      }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
                   </ListItemButton>
                 </ListItem>
               ))}
             </List>
 
-            <Divider sx={{ mt: 1 }} />
+            <Divider sx={{ mx: 2, mb: 1.5 }} />
           </>
         )}
 
-        {/* History */}
-        <Box flex={1} overflow="auto">
-          <Box
+        <Box
+          sx={{
+            px: 2,
+            pb: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}
+        >
+          <Typography
             sx={{
-              px: 2,
-              pt: 2,
-              pb: 0.75,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between"
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#6e6e80",
+              textTransform: "uppercase",
+              letterSpacing: 0.4
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <SearchIcon sx={{ fontSize: 15, color: "#8e8ea0" }} />
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  textTransform: "uppercase",
-                  color: "#8e8ea0"
-                }}
-              >
-                Cronologia
-              </Typography>
-            </Box>
+            Recenti
+          </Typography>
 
-            {visibleHistory.length > 0 && (
-              <Button
-                size="small"
-                onClick={clearHistory}
-                sx={{
-                  minWidth: 0,
-                  px: 0.5,
-                  textTransform: "none",
-                  fontSize: 11,
-                  color: "#8e8ea0"
-                }}
-              >
-                Pulisci
-              </Button>
-            )}
-          </Box>
-
-          {visibleHistory.length === 0 ? (
-            <Typography
-              sx={{
-                px: 2,
-                py: 2,
-                fontSize: 13,
-                color: "#8e8ea0",
-                lineHeight: 1.5
-              }}
-            >
-              {loggedIn
-                ? "Le tue ricerche recenti compariranno qui."
-                : "Inizia una ricerca per vedere qui la cronologia recente."}
-            </Typography>
-          ) : (
-            <List dense sx={{ px: 1 }}>
-              {visibleHistory.map(item => {
-                const isPinned = pinned.includes(item.query)
-
-                return (
-                  <ListItem key={item.query} disablePadding sx={{ mb: 0.5 }}>
-                    <ListItemButton
-                      onClick={() => onSearch(item.query)}
-                      sx={{
-                        borderRadius: 2,
-                        alignItems: "flex-start",
-                        py: 1,
-                        "&:hover": {
-                          bgcolor: "#ececf1"
-                        }
-                      }}
-                    >
-                      <ChatBubbleOutlineIcon
-                        sx={{
-                          fontSize: 16,
-                          mr: 1.2,
-                          mt: 0.2,
-                          color: "#777"
-                        }}
-                      />
-
-                      <ListItemText
-                        primary={item.query}
-                        secondary={`${item.results} risultati`}
-                        primaryTypographyProps={{
-                          fontSize: 13,
-                          sx: {
-                            maxWidth: 160,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            color: "#202123"
-                          }
-                        }}
-                        secondaryTypographyProps={{
-                          fontSize: 11,
-                          color: "#8e8ea0"
-                        }}
-                      />
-
-                      <IconButton
-                        size="small"
-                        aria-label={
-                          isPinned ? "Già salvata" : "Salva ricerca"
-                        }
-                        onClick={event => {
-                          event.stopPropagation()
-                          pinSearch(item.query)
-                        }}
-                      >
-                        <PushPinIcon
-                          fontSize="small"
-                          sx={{
-                            color: isPinned ? "#202123" : "#a8a8b3"
-                          }}
-                        />
-                      </IconButton>
-                    </ListItemButton>
-                  </ListItem>
-                )
-              })}
-            </List>
+          {visibleHistory.length > 0 && (
+            <IconButton size="small" onClick={clearHistory}>
+              <DeleteIcon sx={{ fontSize: 16 }} />
+            </IconButton>
           )}
         </Box>
+
+        <List
+          dense
+          sx={{
+            px: 1,
+            overflowY: "auto",
+            flex: 1
+          }}
+        >
+          {visibleHistory.length === 0 ? (
+            <Box px={2} py={2}>
+              <Typography sx={{ fontSize: 13, color: "#8e8ea0", lineHeight: 1.5 }}>
+                Nessuna cronologia ancora. Avvia una ricerca agentica per vedere qui le ultime chat.
+              </Typography>
+            </Box>
+          ) : (
+            visibleHistory.map((item) => {
+              const isPinned = pinned.includes(item.query)
+
+              return (
+                <ListItem
+                  key={`${item.query}-${item.results}`}
+                  disablePadding
+                  secondaryAction={
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={() =>
+                        isPinned ? unpinSearch(item.query) : pinSearch(item.query)
+                      }
+                    >
+                      <PushPinIcon
+                        sx={{
+                          fontSize: 16,
+                          color: isPinned ? "#202123" : "#b5b5c3"
+                        }}
+                      />
+                    </IconButton>
+                  }
+                >
+                  <ListItemButton
+                    onClick={() => onSearch(item.query)}
+                    sx={{
+                      borderRadius: 2,
+                      mx: 1,
+                      py: 1.1,
+                      alignItems: "flex-start"
+                    }}
+                  >
+                    <ChatBubbleOutlineIcon
+                      sx={{
+                        fontSize: 16,
+                        color: "#6e6e80",
+                        mr: 1.2,
+                        mt: 0.15
+                      }}
+                    />
+
+                    <ListItemText
+                      primary={item.query}
+                      secondary={`${item.results} risultati`}
+                      primaryTypographyProps={{
+                        fontSize: 13,
+                        noWrap: true,
+                        color: "#202123"
+                      }}
+                      secondaryTypographyProps={{
+                        fontSize: 11.5,
+                        color: "#8e8ea0"
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              )
+            })
+          )}
+        </List>
       </Drawer>
 
       <Box

@@ -1,12 +1,12 @@
 import { getToken } from "../auth/authStore"
 
-const API_BASE = "http://localhost:8030"
+const API_BASE = "http://localhost:8040"
 
 type ApiOptions = RequestInit & {
   timeout?: number
 }
 
-export async function apiFetch<T = any>(
+export async function apiFetch<T = unknown>(
   path: string,
   options: ApiOptions = {}
 ): Promise<T> {
@@ -14,43 +14,45 @@ export async function apiFetch<T = any>(
 
   const controller = new AbortController()
   const timeout = options.timeout ?? 90000
-  const id = setTimeout(() => controller.abort(), timeout)
+  const timeoutId = window.setTimeout(() => controller.abort(), timeout)
 
-  const headers: Record<string, string> = {
+  const mergedHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {})
   }
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`
+    mergedHeaders.Authorization = `Bearer ${token}`
   }
 
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers,
+      headers: mergedHeaders,
       signal: controller.signal
     })
 
-    if (!res.ok) {
+    if (!response.ok) {
       let message = "API error"
 
       try {
-        const data = await res.json()
+        const data = await response.json()
         message = data.detail || message
-      } catch {}
+      } catch {
+        // ignore invalid json body
+      }
 
       throw new Error(message)
     }
 
-    return await res.json()
+    return (await response.json()) as T
   } catch (err: any) {
-    if (err.name === "AbortError") {
+    if (err?.name === "AbortError") {
       throw new Error("Request timeout")
     }
 
     throw err
   } finally {
-    clearTimeout(id)
+    clearTimeout(timeoutId)
   }
 }

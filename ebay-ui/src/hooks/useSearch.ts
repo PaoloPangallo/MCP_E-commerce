@@ -1,51 +1,46 @@
-import { useState } from "react";
-import { searchProducts, type SearchItem } from "../api/searchApi";
+import { useState } from "react"
+import { searchProducts } from "../api/searchApi"
 
-interface SearchResponse {
-  results: SearchItem[];
-  analysis: string | null;
-}
+import type {
+  SearchItem
+} from "../component/searchTypes"
 
 export function useSearch() {
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<SearchItem[]>([])
+  const [analysis, setAnalysis] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  const search = async (query: string): Promise<SearchResponse> => {
+  async function runSearch(query: string) {
 
-    setLoading(true);
-    setError(null);
+    setLoading(true)
 
     try {
 
-      const data = await searchProducts(query);
+      const data = await searchProducts(query)
 
-      return {
-        results: data.results ?? [],
-        analysis: data.analysis ?? null
-      };
+      const search = data.final_data?.search
+
+      setResults(search?.results || [])
+      setAnalysis(search?.analysis || null)
 
     } catch (err) {
 
-      console.error("Search error:", err);
-
-      setError("Errore durante la ricerca");
-
-      return {
-        results: [],
-        analysis: null
-      };
+      console.error("Search error", err)
 
     } finally {
 
-      setLoading(false);
+      setLoading(false)
 
     }
-  };
+
+  }
 
   return {
-    search,
+    results,
+    analysis,
     loading,
-    error
-  };
+    runSearch
+  }
+
 }

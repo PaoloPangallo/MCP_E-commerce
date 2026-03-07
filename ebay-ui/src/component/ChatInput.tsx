@@ -58,7 +58,7 @@ export default function ChatInput({ onSend, disabled = false }: Props) {
             value={value}
             onChange={event => setValue(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Scrivi una richiesta, ad esempio: iPhone 13 massimo 700 euro"
+            placeholder='Scrivi una richiesta, ad esempio: "iPhone 13 massimo 700 euro e controlla il venditore"'
             disabled={disabled}
             variant="standard"
             InputProps={{

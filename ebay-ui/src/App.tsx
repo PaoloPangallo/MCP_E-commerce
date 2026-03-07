@@ -7,15 +7,14 @@ import MessageBubble from "./component/MessageBubble"
 import SearchResultList from "./component/SearchResultList"
 import AIAnalysisCard from "./component/AIAnalysisCard"
 import AIThinkingPipeline from "./component/AIThinkingPipeline"
+import SellerFeedbackPanel from "./component/SellerFeedbackPanel"
 
-import { searchProducts } from "./api/searchApi"
+import { useAgentStream } from "./hooks/useAgentStream"
 
 import type {
   ChatEntry,
   Message,
-  SearchBlock,
-  IRMetrics,
-  RagContext
+  SearchBlock
 } from "./component/searchTypes"
 
 const HISTORY_KEY = "search_history"
@@ -26,7 +25,7 @@ function getWelcomeMessage(): ChatEntry {
     msg: {
       role: "assistant",
       content:
-        "Ciao! Dimmi cosa vuoi cercare su eBay e ti aiuto a trovare i risultati migliori."
+        "Ciao! Sono ebayGPT. Posso cercare prodotti, spiegarti il ranking e controllare se il venditore del risultato migliore è affidabile."
     }
   }
 }
@@ -36,9 +35,7 @@ function safeParseHistory(): Array<{ query: string; results: number }> {
     const raw = localStorage.getItem(HISTORY_KEY)
     const parsed = raw ? JSON.parse(raw) : []
 
-    if (!Array.isArray(parsed)) {
-      return []
-    }
+    if (!Array.isArray(parsed)) return []
 
     return parsed.filter(
       (item) =>
@@ -65,39 +62,26 @@ function saveSearchHistory(query: string, resultsCount = 0) {
   window.dispatchEvent(new Event("search_history_updated"))
 }
 
-function normalizeRagContext(value: unknown): RagContext {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string")
-  }
-
-  if (typeof value === "string") {
-    return value
-  }
-
-  return undefined
-}
-
-function normalizeMetrics(value: unknown): IRMetrics | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined
-  }
-
-  return value as IRMetrics
-}
-
 export default function App() {
   const [chat, setChat] = useState<ChatEntry[]>([getWelcomeMessage()])
-  const [loading, setLoading] = useState(false)
   const [loadingQuery, setLoadingQuery] = useState<string | null>(null)
   const [cache, setCache] = useState<Record<string, SearchBlock>>({})
+
   const bottomRef = useRef<HTMLDivElement | null>(null)
+
+  const {
+    steps,
+    results,
+    running,
+    run
+  } = useAgentStream()
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "end"
     })
-  }, [chat, loading])
+  }, [chat, steps])
 
   const hasSearches = useMemo(
     () => chat.some((entry) => entry.type === "search"),
@@ -106,14 +90,12 @@ export default function App() {
 
   const resetChat = () => {
     setChat([getWelcomeMessage()])
-    setLoading(false)
     setLoadingQuery(null)
   }
 
   const handleSend = async (text: string) => {
-    if (loading || !text.trim()) {
-      return
-    }
+
+    if (!text.trim()) return
 
     const query = text.trim()
     const cacheKey = query.toLowerCase()
@@ -126,9 +108,10 @@ export default function App() {
     setChat((prev) => [...prev, { type: "message", msg: userMessage }])
 
     if (cache[cacheKey]) {
-      const cachedSearch = cache[cacheKey]
 
-      saveSearchHistory(query, cachedSearch.results.length)
+      const cached = cache[cacheKey]
+
+      saveSearchHistory(query, cached.results.length)
 
       setChat((prev) => [
         ...prev,
@@ -136,77 +119,63 @@ export default function App() {
           type: "message",
           msg: {
             role: "assistant",
-            content: `Ho recuperato ${cachedSearch.results.length} risultati dalla cache per "${query}".`
+            content: cached.final_answer || "Risultati recuperati dalla cache."
           }
         },
-        { type: "search", search: cachedSearch }
+        { type: "search", search: cached }
       ])
 
       return
     }
 
-    setLoading(true)
     setLoadingQuery(query)
 
-    try {
-      const data = await searchProducts(query)
-
-      const results = Array.isArray(data.results) ? data.results : []
-      const analysis =
-        typeof data.analysis === "string" ? data.analysis : null
-      const metrics = normalizeMetrics(data.metrics)
-      const ragContext = normalizeRagContext(data.rag_context)
-      const timings =
-        data._timings && typeof data._timings === "object"
-          ? (data._timings as Record<string, number>)
-          : undefined
-
-      const newSearch: SearchBlock = {
-        query,
-        results,
-        analysis,
-        metrics,
-        rag_context: ragContext,
-        timings
-      }
-
-      setCache((prev) => ({
-        ...prev,
-        [cacheKey]: newSearch
-      }))
-
-      saveSearchHistory(query, results.length)
-
-      setChat((prev) => [
-        ...prev,
-        {
-          type: "message",
-          msg: {
-            role: "assistant",
-            content: `Ho trovato ${data.results_count ?? results.length} risultati per "${query}".`
-          }
-        },
-        { type: "search", search: newSearch }
-      ])
-    } catch (error) {
-      console.error("Search error:", error)
-
-      setChat((prev) => [
-        ...prev,
-        {
-          type: "message",
-          msg: {
-            role: "assistant",
-            content:
-              "C'è stato un errore durante la ricerca. Controlla backend e endpoint, poi riprova."
-          }
-        }
-      ])
-    } finally {
-      setLoading(false)
-      setLoadingQuery(null)
-    }
+    run(query)
   }
+
+  /**
+   * Quando arrivano risultati finali dallo stream
+   */
+
+  useEffect(() => {
+
+    if (!results || results.length === 0) return
+
+    const query = loadingQuery || "query"
+    const cacheKey = query.toLowerCase()
+
+    const newSearch: SearchBlock = {
+      query,
+      results,
+      analysis: null,
+      metrics: undefined,
+      rag_context: undefined,
+      timings: undefined,
+      agent_trace: steps,
+      seller_summary: null,
+      final_answer: `Ho trovato ${results.length} risultati per "${query}".`
+    }
+
+    setCache((prev) => ({
+      ...prev,
+      [cacheKey]: newSearch
+    }))
+
+    saveSearchHistory(query, results.length)
+
+    setChat((prev) => [
+      ...prev,
+      {
+        type: "message",
+        msg: {
+          role: "assistant",
+          content: newSearch.final_answer ?? ""
+        }
+      },
+      { type: "search", search: newSearch }
+    ])
+
+  }, [results])
 
   return (
     <ChatLayout onSearch={handleSend} onNewChat={resetChat}>
@@ -219,11 +188,11 @@ export default function App() {
           alignItems: "flex-start",
           width: "100%",
           px: { xs: 2, md: 4 },
-          py: 4,
-          position: "relative"
+          py: 4
         }}
       >
         <Box sx={{ width: "100%", maxWidth: 1000 }}>
+
           {!hasSearches && chat.length <= 1 && (
             <Box sx={{ px: 2, py: 4 }}>
               <Typography
@@ -234,29 +203,21 @@ export default function App() {
                   color: "#202123"
                 }}
               >
-                Ricerca conversazionale per eBay
+                ebayGPT · ricerca conversazionale agentica
               </Typography>
 
-              <Typography
-                sx={{
-                  color: "#6e6e80",
-                  fontSize: 15
-                }}
-              >
-                Prova con query come “iPhone 13 massimo 700 euro” oppure
-                “notebook Lenovo business con ottima affidabilità”.
+              <Typography sx={{ color: "#6e6e80", fontSize: 15 }}>
+                Prova con query come “iPhone 13 massimo 700 euro e controlla il venditore”.
               </Typography>
             </Box>
           )}
 
           {chat.map((entry, index) => {
+
             if (entry.type === "message") {
               return (
                 <Box key={`msg-${index}`} mb={2}>
-                  <MessageBubble
-                    role={entry.msg.role}
-                    timestamp={entry.msg.timestamp}
-                  >
+                  <MessageBubble role={entry.msg.role}>
                     {entry.msg.content}
                   </MessageBubble>
                 </Box>
@@ -267,24 +228,51 @@ export default function App() {
 
             return (
               <Box key={`search-${index}`} mt={2} mb={4}>
-                {(search.analysis || search.metrics || search.rag_context) && (
-                  <AIAnalysisCard
-                    text={search.analysis ?? undefined}
-                    metrics={search.metrics}
-                    rag_context={search.rag_context}
+
+                {search.agent_trace?.length ? (
+                  <AIThinkingPipeline
+                    agentTrace={search.agent_trace}
+                    query={search.query}
                   />
+                ) : null}
+
+                {search.analysis && (
+                  <AIAnalysisCard text={search.analysis} />
                 )}
 
-                <SearchResultList results={search.results} />
+                {search.results.length > 0 ? (
+                  <SearchResultList results={search.results} />
+                ) : null}
+
+                {search.seller_summary?.seller_name && (
+                  <Box
+                    sx={{
+                      mt: 3,
+                      p: 3,
+                      borderRadius: "16px",
+                      bgcolor: "#fff",
+                      border: "1px solid #e5e5e5"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 16, fontWeight: 700 }}>
+                      Seller deep dive
+                    </Typography>
+
+                    <SellerFeedbackPanel
+                      seller={search.seller_summary.seller_name}
+                    />
+                  </Box>
+                )}
+
               </Box>
             )
           })}
 
-          {loading && (
+          {running && (
             <Box mt={2} mb={3}>
               <MessageBubble role="assistant">
                 <AIThinkingPipeline
-                  loading
+                  agentTrace={steps}
                   query={loadingQuery ?? undefined}
                 />
               </MessageBubble>
@@ -295,7 +283,7 @@ export default function App() {
         </Box>
       </Box>
 
-      <ChatInput onSend={handleSend} disabled={loading} />
+      <ChatInput onSend={handleSend} disabled={running} />
     </ChatLayout>
   )
 }
