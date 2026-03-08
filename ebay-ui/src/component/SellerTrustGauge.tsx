@@ -1,39 +1,51 @@
-import { Box, LinearProgress, Typography } from "@mui/material"
+import { Box, Typography } from "@mui/material"
 
-export default function SellerTrustGauge({
-  score
-}: {
+interface Props {
   score: number
-}) {
+}
 
-  const percentage = Math.round(score * 100)
+export default function SellerTrustGauge({ score }: Props) {
 
-  const color =
-    percentage > 85
-      ? "success"
-      : percentage > 70
-      ? "warning"
-      : "error"
+  const percent = Math.round(score * 100)
 
   return (
-
-    <Box mb={2}>
-
-      <Typography variant="body2" mb={1}>
-        Seller Trust {percentage}%
+    <Box mt={1}>
+      <Typography
+        sx={{
+          fontSize: 13,
+          color: "#6b7280",
+          mb: 0.5
+        }}
+      >
+        Seller trust
       </Typography>
 
-      <LinearProgress
-        variant="determinate"
-        value={percentage}
-        color={color as any}
+      <Box
         sx={{
-          height: 8,
-          borderRadius: 4
+          height: 6,
+          borderRadius: 999,
+          background: "#e5e7eb",
+          overflow: "hidden"
         }}
-      />
+      >
+        <Box
+          sx={{
+            width: `${percent}%`,
+            height: "100%",
+            background: percent > 70 ? "#22c55e" : "#f59e0b"
+          }}
+        />
+      </Box>
 
+      <Typography
+        sx={{
+          fontSize: 12,
+          color: "#6b7280",
+          mt: 0.5
+        }}
+      >
+        {percent}% reliability
+      </Typography>
     </Box>
-
   )
 }

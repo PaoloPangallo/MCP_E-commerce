@@ -1,30 +1,37 @@
 import { useState } from "react"
-import { Box, TextField, IconButton, Paper, Typography } from "@mui/material"
+import {
+  Box,
+  IconButton,
+  InputBase,
+  Paper,
+  Typography
+} from "@mui/material"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 
 interface Props {
   onSend: (value: string) => void
   disabled?: boolean
+  placeholder?: string
 }
 
-export default function ChatInput({ onSend, disabled = false }: Props) {
+export default function ChatInput({
+  onSend,
+  disabled = false,
+  placeholder = 'Scrivi una richiesta, ad esempio: "iPhone 13 massimo 700 euro e controlla il venditore"'
+}: Props) {
   const [value, setValue] = useState("")
 
   const handleSend = () => {
     const nextValue = value.trim()
 
-    if (!nextValue || disabled) {
-      return
-    }
+    if (!nextValue || disabled) return
 
     onSend(nextValue)
     setValue("")
   }
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (disabled) {
-      return
-    }
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
@@ -33,40 +40,51 @@ export default function ChatInput({ onSend, disabled = false }: Props) {
   }
 
   return (
-    <Box sx={{ p: 3, pb: 4, borderTop: "1px solid #ececf1", bgcolor: "#fff" }}>
-      <Box sx={{ maxWidth: 768, mx: "auto" }}>
+    <Box
+      sx={{
+        px: { xs: 1.5, md: 2.5 },
+        pb: { xs: 1.5, md: 2.5 },
+        pt: 1.5
+      }}
+    >
+      <Box sx={{ maxWidth: 880, mx: "auto" }}>
         <Paper
           elevation={0}
           sx={{
             display: "flex",
             alignItems: "flex-end",
-            borderRadius: "24px",
-            bgcolor: "#f4f4f4",
-            border: "1px solid transparent",
-            transition: "all 0.15s ease",
-            "&:hover": { bgcolor: "#efefef" },
+            gap: 1,
+            px: 1.25,
+            py: 1,
+            borderRadius: "28px",
+            bgcolor: "#ffffff",
+            border: "1px solid #e5e7eb",
+            boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
+            transition: "border-color 0.15s ease, box-shadow 0.15s ease",
             "&:focus-within": {
-              bgcolor: "#fff",
-              border: "1px solid #d1d1d6"
+              borderColor: "#cbd5e1",
+              boxShadow: "0 12px 34px rgba(15, 23, 42, 0.08)"
             }
           }}
         >
-          <TextField
+          <InputBase
             fullWidth
             multiline
             maxRows={8}
             value={value}
-            onChange={event => setValue(event.target.value)}
+            onChange={(event) => setValue(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='Scrivi una richiesta, ad esempio: "iPhone 13 massimo 700 euro e controlla il venditore"'
+            placeholder={placeholder}
             disabled={disabled}
-            variant="standard"
-            InputProps={{
-              disableUnderline: true,
-              sx: {
-                px: 3,
-                py: 2.25,
-                fontSize: 15
+            sx={{
+              px: 1.25,
+              py: 0.8,
+              alignItems: "flex-start",
+              fontSize: 15,
+              lineHeight: 1.7,
+              color: "#111827",
+              "& textarea": {
+                resize: "none"
               }
             }}
           />
@@ -76,14 +94,17 @@ export default function ChatInput({ onSend, disabled = false }: Props) {
             onClick={handleSend}
             disabled={disabled || !value.trim()}
             sx={{
-              mb: 1.25,
-              mr: 1.25,
-              bgcolor: value.trim() && !disabled ? "#0d0d0d" : "transparent",
-              color: value.trim() && !disabled ? "#fff" : "#b4b4b4",
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
+              mb: 0.2,
+              bgcolor:
+                value.trim() && !disabled ? "#111827" : "transparent",
+              color:
+                value.trim() && !disabled ? "#ffffff" : "#9ca3af",
+              transition: "all 0.15s ease",
               "&:hover": {
-                bgcolor: value.trim() && !disabled ? "#202123" : "transparent"
+                bgcolor:
+                  value.trim() && !disabled ? "#0b1220" : "transparent"
               }
             }}
           >
@@ -91,8 +112,15 @@ export default function ChatInput({ onSend, disabled = false }: Props) {
           </IconButton>
         </Paper>
 
-        <Typography sx={{ mt: 1, ml: 1, fontSize: 12, color: "#8e8ea0" }}>
-          Invio con Enter · nuova riga con Shift + Enter
+        <Typography
+          sx={{
+            mt: 1,
+            px: 1.5,
+            fontSize: 12,
+            color: "#6b7280"
+          }}
+        >
+          Enter per inviare · Shift + Enter per andare a capo
         </Typography>
       </Box>
     </Box>

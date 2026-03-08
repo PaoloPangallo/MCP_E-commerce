@@ -1,3 +1,5 @@
+import { API_BASE } from "./apiClient"
+
 export interface AgentEvent {
   type:
     | "start"
@@ -29,20 +31,26 @@ export interface AgentEvent {
 
 export function streamAgent(
   query: string,
-  onEvent: (event: AgentEvent) => void
+  onEvent: (event: AgentEvent) => void,
+  llmEngine = "ollama"
 ) {
-
   const url =
-    `http://localhost:8040/agent/stream?query=${encodeURIComponent(query)}&llm_engine=ollama`
+    `${API_BASE}/agent/stream?query=${encodeURIComponent(query)}&llm_engine=${encodeURIComponent(llmEngine)}`
 
   const source = new EventSource(url)
 
-  source.onmessage = (event) => {
+  let closed = false
 
+  const closeOnce = () => {
+    if (closed) return
+    closed = true
+    source.close()
+  }
+
+  source.onmessage = (event) => {
     if (!event.data) return
 
     try {
-
       const data: AgentEvent = JSON.parse(event.data)
 
       onEvent(data)
@@ -52,23 +60,29 @@ export function streamAgent(
         data.type === "done" ||
         data.type === "error"
       ) {
-        source.close()
+        closeOnce()
       }
-
     } catch (err) {
-
       console.error("SSE parse error", err)
 
-    }
+      onEvent({
+        type: "error",
+        message: "Errore nel parsing dello stream SSE."
+      })
 
+      closeOnce()
+    }
   }
 
   source.onerror = (err) => {
-
     console.error("SSE error", err)
 
-    source.close()
+    onEvent({
+      type: "error",
+      message: "Connessione SSE interrotta o non disponibile."
+    })
 
+    closeOnce()
   }
 
   return source

@@ -1,33 +1,79 @@
-import { Paper, Typography, Box, Chip, Avatar } from "@mui/material"
-import type { Feedback } from "../api/sellerApi"
+import { Avatar, Box, Chip, Paper, Rating, Typography } from "@mui/material"
+import type { Feedback } from "../types"
 
-interface Props {
-  feedback: Feedback
+function normalizeRating(rating?: number) {
+  if (rating === undefined) return "neutral"
+
+  if (rating >= 4) return "positive"
+  if (rating <= 2) return "negative"
+
+  return "neutral"
 }
 
-export default function FeedbackCard({ feedback }: Props) {
-  const ratingColor =
-    feedback.rating === "Positive"
-      ? "success"
-      : feedback.rating === "Negative"
-      ? "error"
-      : "default"
+function ratingToStars(type: string) {
+  switch (type) {
+    case "positive":
+      return 5
+    case "neutral":
+      return 3
+    case "negative":
+      return 1
+    default:
+      return 3
+  }
+}
 
-  const formattedDate = feedback.time
-    ? new Date(feedback.time).toLocaleDateString("it-IT", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      })
-    : "—"
+function ratingColor(type: string) {
+  switch (type) {
+    case "positive":
+      return "#10a37f"
+    case "neutral":
+      return "#f59e0b"
+    case "negative":
+      return "#ef4444"
+    default:
+      return "#9ca3af"
+  }
+}
+
+function formatDate(value?: string | number) {
+  if (!value) {
+    return "Data non disponibile"
+  }
+
+  const parsed =
+    typeof value === "number"
+      ? new Date(value)
+      : new Date(String(value))
+
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value)
+  }
+
+  return parsed.toLocaleDateString("it-IT", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  })
+}
+
+export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
+  const type = normalizeRating(feedback.rating)
+  const stars = ratingToStars(type)
+  const color = ratingColor(type)
+
+  const initial = feedback.user?.charAt(0).toUpperCase() || "U"
+
+  const dateValue = feedback.time ?? feedback.date
 
   return (
     <Paper
       elevation={0}
       sx={{
-        p: 2,
+        p: 3,
+        borderRadius: 3,
         border: "1px solid #e5e5e5",
-        borderRadius: 2,
+        bgcolor: "#fff",
         transition: "all 0.2s",
         "&:hover": {
           borderColor: "#d1d1d1",
@@ -35,52 +81,78 @@ export default function FeedbackCard({ feedback }: Props) {
         }
       }}
     >
-      <Box display="flex" alignItems="flex-start" gap={2}>
+      <Box display="flex" alignItems="flex-start" gap={2} mb={2}>
         <Avatar
           sx={{
-            width: 36,
-            height: 36,
-            bgcolor: "#10a37f",
-            fontSize: 14,
+            width: 40,
+            height: 40,
+            bgcolor: color,
+            fontSize: 16,
             fontWeight: 600
           }}
         >
-          {feedback.user?.charAt(0).toUpperCase() || "U"}
+          {initial}
         </Avatar>
 
         <Box flex={1}>
+          <Typography
+            sx={{
+              fontWeight: 600,
+              fontSize: 14,
+              color: "#202123"
+            }}
+          >
+            {feedback.user || "Utente"}
+          </Typography>
+
           <Box
             display="flex"
             alignItems="center"
-            justifyContent="space-between"
-            mb={0.5}
+            gap={1}
+            mt={0.3}
+            flexWrap="wrap"
           >
-            <Typography fontWeight={600}>
-              {feedback.user}
-            </Typography>
+            <Rating
+              value={stars}
+              readOnly
+              size="small"
+              sx={{ color }}
+            />
 
             <Chip
-              label={feedback.rating}
-              color={ratingColor as "success" | "error" | "default"}
+              label={type}
               size="small"
+              sx={{
+                bgcolor: "#f4f4f4",
+                fontSize: 11,
+                textTransform: "capitalize"
+              }}
             />
           </Box>
 
           <Typography
-            variant="body2"
+            variant="caption"
             sx={{
-              mb: 1,
-              lineHeight: 1.5
+              color: "#6e6e80",
+              fontSize: 12,
+              display: "block",
+              mt: 0.5
             }}
           >
-            {feedback.comment}
-          </Typography>
-
-          <Typography variant="caption" color="text.secondary">
-            {formattedDate}
+            {formatDate(dateValue)}
           </Typography>
         </Box>
       </Box>
+
+      <Typography
+        sx={{
+          color: "#202123",
+          fontSize: 15,
+          lineHeight: 1.6
+        }}
+      >
+        {feedback.comment || "Nessun commento disponibile"}
+      </Typography>
     </Paper>
   )
 }

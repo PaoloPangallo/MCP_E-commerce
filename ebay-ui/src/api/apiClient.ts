@@ -1,9 +1,27 @@
 import { getToken } from "../auth/authStore"
 
-const API_BASE = "http://localhost:8040"
+export const API_BASE =
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8040"
 
 type ApiOptions = RequestInit & {
   timeout?: number
+}
+
+function buildHeaders(
+  token: string | null,
+  headers?: HeadersInit
+): HeadersInit {
+  const merged = new Headers(headers || {})
+
+  if (!merged.has("Content-Type")) {
+    merged.set("Content-Type", "application/json")
+  }
+
+  if (token) {
+    merged.set("Authorization", `Bearer ${token}`)
+  }
+
+  return merged
 }
 
 export async function apiFetch<T = unknown>(
@@ -11,24 +29,17 @@ export async function apiFetch<T = unknown>(
   options: ApiOptions = {}
 ): Promise<T> {
   const token = getToken()
-
   const controller = new AbortController()
   const timeout = options.timeout ?? 90000
-  const timeoutId = window.setTimeout(() => controller.abort(), timeout)
 
-  const mergedHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...((options.headers as Record<string, string>) || {})
-  }
-
-  if (token) {
-    mergedHeaders.Authorization = `Bearer ${token}`
-  }
+  const timeoutId = window.setTimeout(() => {
+    controller.abort()
+  }, timeout)
 
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers: mergedHeaders,
+      headers: buildHeaders(token, options.headers),
       signal: controller.signal
     })
 
@@ -37,12 +48,18 @@ export async function apiFetch<T = unknown>(
 
       try {
         const data = await response.json()
-        message = data.detail || message
+        message = data?.detail || data?.message || message
       } catch {
-        // ignore invalid json body
+        // ignore non-json body
       }
 
       throw new Error(message)
+    }
+
+    const contentType = response.headers.get("content-type") || ""
+
+    if (!contentType.includes("application/json")) {
+      return undefined as T
     }
 
     return (await response.json()) as T

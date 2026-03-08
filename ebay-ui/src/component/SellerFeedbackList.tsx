@@ -1,98 +1,91 @@
-import { useEffect, useMemo, useState } from "react"
-import { Box, Button, Chip, Divider, Typography } from "@mui/material"
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents"
+import { useEffect, useState } from "react"
+import { Box, Typography, CircularProgress, Chip, Button } from "@mui/material"
 
-import SearchResultCard from "./SearchResultCard"
-import type { SearchItem } from "../component/searchTypes.ts"
+import FeedbackCard from "./FeedbackCard.tsx";
+import type {Feedback} from "../types";
 
 interface Props {
-  results?: SearchItem[]
+  feedbacks?: Feedback[]
+  loading?: boolean
+  error?: string | null
+  initialLimit?: number
+  title?: string
 }
 
-export default function SearchResultList({ results = [] }: Props) {
-  const [visibleCount, setVisibleCount] = useState(6)
-
-  const safeResults = useMemo(() => results.filter(Boolean), [results])
+export default function SellerFeedbackList({
+  feedbacks = [],
+  loading = false,
+  error = null,
+  initialLimit = 6,
+  title = "Feedback venditore"
+}: Props) {
+  const safeFeedbacks = Array.isArray(feedbacks) ? feedbacks : []
+  const [visibleCount, setVisibleCount] = useState(initialLimit)
 
   useEffect(() => {
-    setVisibleCount(6)
-  }, [safeResults])
+    setVisibleCount(initialLimit)
+  }, [safeFeedbacks, initialLimit])
 
-  const visibleResults = safeResults.slice(0, visibleCount)
-
-  if (safeResults.length === 0) {
+  if (loading) {
     return (
-      <Box sx={{ mt: 8, textAlign: "center", color: "#6e6e80" }}>
-        <Typography sx={{ fontSize: 16, fontWeight: 500 }}>
-          Nessun risultato trovato
-        </Typography>
-
-        <Typography variant="caption" sx={{ mt: 1, display: "block", color: "#8e8ea0" }}>
-          Prova a cambiare brand, fascia di prezzo o parole chiave.
+      <Box display="flex" alignItems="center" gap={1} mt={1}>
+        <CircularProgress size={16} />
+        <Typography sx={{ color: "#666", fontSize: 13 }}>
+          Caricamento feedback venditore...
         </Typography>
       </Box>
     )
   }
 
+  if (error) {
+    return (
+      <Typography sx={{ mt: 1, color: "#c62828", fontSize: 13 }}>
+        {error}
+      </Typography>
+    )
+  }
+
+  if (safeFeedbacks.length === 0) {
+    return (
+      <Typography sx={{ mt: 1, color: "#666", fontSize: 13 }}>
+        Nessun feedback disponibile
+      </Typography>
+    )
+  }
+
+  const visibleFeedbacks = safeFeedbacks.slice(0, visibleCount)
+
   return (
-    <Box sx={{ mt: 3, display: "flex", flexDirection: "column" }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
-        <Typography sx={{ fontSize: 14, color: "#6e6e80", fontWeight: 500 }}>
-          {safeResults.length} {safeResults.length === 1 ? "risultato" : "risultati"} · ordinati per AI relevance
+    <Box mt={1} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <Box display="flex" alignItems="center" justifyContent="space-between" gap={2}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#444" }}>
+          {title}
         </Typography>
+
+        <Chip label={`${safeFeedbacks.length} recensioni`} size="small" sx={{ fontSize: 11, bgcolor: "#f4f4f4" }} />
       </Box>
 
-      {visibleResults.map((item, index) => {
-        const key = item.ebay_id ?? `${index}-${item.title}`
-        const ranking = item.ranking_score ?? 0
-
-        return (
-          <Box key={key} sx={{ position: "relative" }}>
-            {index === 0 && ranking > 0.7 && (
-              <Box sx={{ position: "absolute", top: -12, left: 16, zIndex: 1 }}>
-                <Chip
-                  icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
-                  label="AI Best Match"
-                  size="small"
-                  sx={{
-                    bgcolor: "#ffd700",
-                    color: "#856404",
-                    fontWeight: 700,
-                    fontSize: 11,
-                    height: 24,
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                    "& .MuiChip-icon": { color: "#856404" }
-                  }}
-                />
-              </Box>
-            )}
-
-            <SearchResultCard item={item} />
-
-            {index < visibleResults.length - 1 && <Divider sx={{ my: 1.5, borderColor: "#ececf1" }} />}
-          </Box>
-        )
+      {visibleFeedbacks.map((feedback, index) => {
+        const key = feedback.user ? `${feedback.user}-${feedback.date ?? feedback.time ?? index}` : `feedback-${index}`
+        return <FeedbackCard key={key} feedback={feedback} />
       })}
 
-      {visibleCount < safeResults.length && (
-        <Box sx={{ textAlign: "center", mt: 2 }}>
+      {visibleCount < safeFeedbacks.length && (
+        <Box mt={1} textAlign="center">
           <Button
+            size="small"
             variant="outlined"
-            onClick={() => setVisibleCount(prev => Math.min(prev + 6, safeResults.length))}
-            sx={{ textTransform: "none", borderRadius: 999 }}
+            onClick={() => setVisibleCount(prev => Math.min(prev + initialLimit, safeFeedbacks.length))}
+            sx={{ textTransform: "none", borderRadius: "16px" }}
           >
-            Mostra altri risultati
+            Mostra altri feedback
           </Button>
         </Box>
       )}
 
-      {safeResults.length > 5 && (
-        <Box sx={{ mt: 4, pt: 3, borderTop: "1px solid #ececf1", textAlign: "center" }}>
-          <Typography sx={{ fontSize: 13, color: "#8e8ea0" }}>
-            Mostrati {Math.min(visibleCount, safeResults.length)} di {safeResults.length} articoli analizzati
-          </Typography>
-        </Box>
-      )}
+      <Typography sx={{ fontSize: 12, color: "#888", textAlign: "center", mt: 0.5 }}>
+        Mostrati {Math.min(visibleCount, safeFeedbacks.length)} di {safeFeedbacks.length} feedback
+      </Typography>
     </Box>
   )
 }

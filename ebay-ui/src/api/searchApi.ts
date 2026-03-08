@@ -49,15 +49,16 @@ export interface AgentResponse {
 }
 
 export async function searchProducts(
-  query: string
+  query: string,
+  llmEngine = "ollama"
 ): Promise<AgentResponse> {
   return apiFetch<AgentResponse>("/agent", {
     method: "POST",
     timeout: 120000,
     body: JSON.stringify({
       query,
-      llm_engine: "ollama",
-      max_steps: 4,
+      llm_engine: llmEngine,
+      max_steps: 6,
       return_trace: true
     })
   })
