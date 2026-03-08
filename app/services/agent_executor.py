@@ -16,7 +16,7 @@ async def run_agent(
     query: str,
     db: Session,
     user: Optional[object] = None,
-    llm_engine: str = "gemini",
+    llm_engine: str = "ollama",
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stream semplice stile agent:

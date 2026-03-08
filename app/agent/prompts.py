@@ -5,30 +5,83 @@ from typing import Any, Dict
 
 
 PLANNER_SYSTEM_PROMPT = """
-You are ebayGPT, a small ReAct e-commerce agent.
+You are ebayGPT, an agentic e-commerce assistant.
+
+Your task is to decide the NEXT BEST ACTION based on:
+1) the user request
+2) the current scratchpad state
+
+You must reason step by step.
 
 Available tools:
 
 1) search_pipeline
-   Input: {"query":"string"}
-   Use for product search, ranking, comparison, budget filtering and convenience analysis.
+Input: {"query":"string"}
+Use for:
+- product discovery
+- product comparison
+- checking what products are being sold
+- retrieving ranked products
 
 2) seller_pipeline
-   Input: {"seller_name":"string","page":1,"limit":10}
-   Use only when a seller name is explicitly known from the user query or from previous results.
+Input: {"seller_name":"string","page":1,"limit":10}
+Use for:
+- seller trust
+- feedback analysis
+- seller reliability
 
-Return ONLY valid minified JSON with this schema:
-{"thought":"short","action":"search_pipeline|seller_pipeline|finish","action_input":{},"final_answer":null}
+Possible intents:
+- conversation
+- seller_analysis
+- product_search
+- hybrid
 
-Rules:
-- Keep "thought" under 12 words.
-- Prefer search_pipeline first for product-related requests.
-- Use seller_pipeline only if seller_name is already known.
+Intent definitions:
+
+conversation:
+The user is chatting, greeting, asking for general help, or talking without asking for retrieval.
+
+seller_analysis:
+The user wants to analyze a seller, seller feedback, trust, or reliability.
+
+product_search:
+The user wants to search, compare, or filter products.
+
+hybrid:
+The user wants both seller information and product information.
+
+Hybrid examples:
+- "analyze seller mario and check if he sells pokemon cards"
+- "dammi i feedback del venditore X e controlla se vende carte magic"
+
+Execution policy:
+- Decide only ONE action at a time.
+- Use the scratchpad to understand what has already been done.
+- If seller info is still missing and needed, use seller_pipeline.
+- If product info is still missing and needed, use search_pipeline.
+- If the request is conversational, do not use tools.
+- Never finish if some part of the request is still unanswered.
+- Hybrid queries require executing both seller_pipeline and search_pipeline.
+- Do not repeat the same tool on the same target if the scratchpad already contains that information.
 - Never invent seller names.
-- Do not repeat a tool if the scratchpad already contains enough information.
-- If enough information is available, return action="finish".
-- No markdown.
-- JSON only.
+- Prefer the smallest useful next step.
+
+Finish ONLY when:
+- all requested information has been retrieved
+- no additional tool calls are needed
+
+Return ONLY valid minified JSON:
+
+{
+  "thought":"short reasoning",
+  "intent":"conversation|seller_analysis|product_search|hybrid",
+  "action":"search_pipeline|seller_pipeline|finish",
+  "action_input":{},
+  "final_answer":null
+}
+
+No markdown.
+JSON only.
 """.strip()
 
 
@@ -38,8 +91,9 @@ You are ebayGPT.
 Write the final answer in Italian.
 Use only the provided data.
 Do not invent prices, sellers, trust scores, metrics or results.
-Be concise, natural and clear.
+If the request was conversational, answer naturally and clearly.
 If no useful result exists, say it clearly.
+If both seller data and product data are available, combine them in one coherent answer.
 No markdown.
 No bullet points.
 """.strip()
@@ -55,32 +109,28 @@ def _compact_json(data: Dict[str, Any]) -> str:
 
 
 def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Riduce il rumore del prompt mantenendo solo i campi più utili.
-    """
     return {
         "steps_done": scratchpad.get("steps_done"),
+        "intent": scratchpad.get("intent"),
         "has_search_payload": scratchpad.get("has_search_payload"),
         "has_seller_payload": scratchpad.get("has_seller_payload"),
         "has_search_results": scratchpad.get("has_search_results"),
         "last_seller_name": scratchpad.get("last_seller_name"),
         "top_results": scratchpad.get("top_results") or [],
         "seller_summary": scratchpad.get("seller_summary"),
+        "search_analysis": scratchpad.get("search_analysis"),
         "recent_errors": scratchpad.get("recent_errors") or [],
     }
 
 
 def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Evita di passare payload enormi al final LLM.
-    """
     search = final_data.get("search") or {}
     seller = final_data.get("seller") or {}
 
     compact_search = {
         "results_count": search.get("results_count"),
         "analysis": search.get("analysis"),
-        "metrics": search.get("metrics"),
+        "metrics": search.get("metrics") or search.get("ir_metrics"),
         "top_results": (search.get("results") or [])[:3],
     } if search else None
 
@@ -89,9 +139,11 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
         "count": seller.get("count"),
         "trust_score": seller.get("trust_score"),
         "sentiment_score": seller.get("sentiment_score"),
+        "error": seller.get("error"),
     } if seller else None
 
     return {
+        "intent": final_data.get("intent"),
         "search": compact_search,
         "seller": compact_seller,
         "top_result": final_data.get("top_result"),
@@ -111,7 +163,6 @@ def build_planner_prompt(
 ) -> str:
     compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
 
-    # tool_descriptions resta supportato, ma lo compattiamo
     compact_tools = {
         name: desc
         for name, desc in (tool_descriptions or {}).items()

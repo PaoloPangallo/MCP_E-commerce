@@ -47,7 +47,7 @@ SPACY_MODEL = "it_core_news_sm"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
 LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "12"))
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -485,7 +485,9 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 # ============================================================
 
 def call_ollama(prompt: str) -> Optional[str]:
+
     try:
+
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
@@ -493,8 +495,14 @@ def call_ollama(prompt: str) -> Optional[str]:
                 "prompt": prompt,
                 "stream": False,
                 "options": {
+
                     "temperature": 0,
-                    "num_predict": 220,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1,
+
+                    "num_predict": 256,
+                    "num_ctx": 8192,
+
                 },
             },
             timeout=OLLAMA_TIMEOUT,
@@ -505,9 +513,16 @@ def call_ollama(prompt: str) -> Optional[str]:
             return None
 
         data = response.json()
-        return data.get("response", "").strip() or None
+
+        text = data.get("response", "").strip()
+
+        if not text:
+            return None
+
+        return text
 
     except Exception as e:
+
         logger.warning("Ollama REST error: %s", e)
         return None
 

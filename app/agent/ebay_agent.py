@@ -10,6 +10,7 @@ from app.agent.memory import AgentMemory
 from app.agent.planner import ReactPlanner
 from app.agent.prompts import build_final_answer_prompt
 from app.agent.schemas import AgentRequest, AgentResponse, AgentStep
+from app.agent.task_decomposer import decompose_query
 from app.agent.tool_registry import ToolContext
 from app.services.parser import call_gemini, call_ollama
 
@@ -26,10 +27,6 @@ class EbayReactAgent:
         self.user = user
 
     def run(self, request: AgentRequest) -> AgentResponse:
-        """
-        Esecuzione non-streaming ottimizzata:
-        non costruisce tutta la lista eventi, ma tiene solo il finale e la trace.
-        """
         final_payload: Optional[Dict] = None
 
         for event in self.run_stream(request):
@@ -54,9 +51,12 @@ class EbayReactAgent:
         )
 
     def run_stream(self, request: AgentRequest) -> Generator[Dict, None, None]:
-        max_steps = min(max(int(request.max_steps), 1), 5)
+        max_steps = min(max(int(request.max_steps), 1), 6)
 
         memory = AgentMemory(user_query=request.query)
+        tasks = decompose_query(request.query, request.llm_engine)
+
+        memory.load_tasks(tasks)
         planner = ReactPlanner(llm_engine=request.llm_engine)
 
         executor = ToolExecutor(
@@ -84,9 +84,8 @@ class EbayReactAgent:
                 max_steps=max_steps,
             )
 
-            # --------------------------------------------------
-            # STOP
-            # --------------------------------------------------
+            if decision.intent and not memory.detected_intent:
+                memory.detected_intent = decision.intent
 
             if decision.should_stop or decision.action is None:
                 final_answer = decision.final_answer or self._finalize(
@@ -101,20 +100,12 @@ class EbayReactAgent:
                 }
                 break
 
-            # --------------------------------------------------
-            # THINKING
-            # --------------------------------------------------
-
             yield {
                 "type": "thinking",
                 "step": step_index,
                 "thought": decision.thought,
                 "action": decision.action.tool,
             }
-
-            # --------------------------------------------------
-            # TOOL START
-            # --------------------------------------------------
 
             yield {
                 "type": "tool_start",
@@ -123,16 +114,8 @@ class EbayReactAgent:
                 "input": decision.action.input,
             }
 
-            # --------------------------------------------------
-            # TOOL EXECUTION
-            # --------------------------------------------------
-
             observation = executor.execute(decision.action)
             memory.apply_observation(observation)
-
-            # --------------------------------------------------
-            # TOOL RESULT
-            # --------------------------------------------------
 
             yield {
                 "type": "tool_result",
@@ -142,22 +125,23 @@ class EbayReactAgent:
                 "summary": observation.summary,
             }
 
-            step = AgentStep(
-                step=step_index,
-                thought=decision.thought,
-                action=decision.action.tool,
-                action_input=decision.action.input,
-                observation_summary=observation.summary,
-                status="ok" if observation.ok else "error",
+            trace.append(
+                AgentStep(
+                    step=step_index,
+                    thought=decision.thought,
+                    action=decision.action.tool,
+                    action_input=decision.action.input,
+                    observation_summary=observation.summary,
+                    status="ok" if observation.ok else "error",
+                )
             )
-            trace.append(step)
 
             if not observation.ok:
+                logger.warning("Tool execution failed at step %s: %s", step_index, observation.error)
                 final_answer = self._finalize(memory, request.llm_engine)
                 break
 
-            # stop anticipato se search già sufficiente e query non richiede seller
-            if memory.search_payload is not None and planner.can_stop_early(memory):
+            if planner.can_stop_early(memory):
                 final_answer = self._finalize(memory, request.llm_engine)
                 break
 
@@ -173,14 +157,8 @@ class EbayReactAgent:
         }
 
     def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
-        """
-        Finalizzazione più aggressiva:
-        - evita LLM finale quando abbiamo già una risposta fallback buona
-        - usa LLM solo se serve arricchire davvero
-        """
         fallback = self._fallback_final_answer(memory)
 
-        # se abbiamo già una risposta solida, evitiamo una chiamata LLM finale
         if self._is_fallback_good_enough(memory, fallback):
             return fallback
 
@@ -201,10 +179,8 @@ class EbayReactAgent:
         try:
             if llm_engine == "gemini":
                 return call_gemini(prompt)
-
             if llm_engine == "ollama":
                 return call_ollama(prompt)
-
             return None
         except Exception as e:
             logger.warning("Final answer LLM failed: %s", e)
@@ -212,14 +188,11 @@ class EbayReactAgent:
 
     @staticmethod
     def _is_fallback_good_enough(memory: AgentMemory, fallback: str) -> bool:
-        """
-        Heuristic: se abbiamo search payload con top result o seller payload chiaro,
-        il fallback è già sufficiente e non serve spendere un'altra call LLM.
-        """
+        if memory.detected_intent == "conversation" and fallback:
+            return True
+
         if memory.search_payload:
-            results = memory.search_payload.get("results") or []
-            if results:
-                return True
+            return True
 
         if memory.seller_payload:
             return True
@@ -227,12 +200,80 @@ class EbayReactAgent:
         if memory.errors and fallback:
             return True
 
-        return False
+        return bool(fallback)
 
     @staticmethod
     def _fallback_final_answer(memory: AgentMemory) -> str:
+        intent = (memory.detected_intent or "").lower()
         search_payload = memory.search_payload
         seller_payload = memory.seller_payload
+
+        if intent == "conversation" and not search_payload and not seller_payload:
+            return (
+                  ""
+            )
+
+        if search_payload and seller_payload:
+            seller_name = seller_payload.get("seller_name") or memory.last_seller_name or "il venditore"
+            count = seller_payload.get("count")
+            seller_trust = seller_payload.get("trust_score")
+            sentiment = seller_payload.get("sentiment_score")
+            seller_error = seller_payload.get("error")
+
+            results = search_payload.get("results") or []
+            analysis = (memory.search_analysis or "").strip()
+
+            if not results:
+                product_part = "Ho verificato la ricerca prodotti ma non ho trovato risultati utili."
+            else:
+                top = results[0]
+                title = top.get("title") or "un prodotto"
+                price = top.get("price")
+                currency = top.get("currency") or "EUR"
+                top_seller = top.get("seller_name") or top.get("seller_username")
+                trust_score = top.get("trust_score")
+
+                product_part = f"Ho verificato anche i prodotti e il risultato migliore è '{title}'"
+                if price is not None:
+                    product_part += f", al prezzo di {price} {currency}"
+                if top_seller:
+                    product_part += f", venduto da {top_seller}"
+                if trust_score is not None:
+                    try:
+                        product_part += f" con trust score {round(float(trust_score) * 100)}%"
+                    except Exception:
+                        pass
+                product_part += "."
+
+                if analysis:
+                    product_part += f" {analysis}"
+
+            if seller_error:
+                seller_part = (
+                    f"Ho analizzato {seller_name}, ma eBay non ha restituito feedback "
+                    f"consultabili per questo utente."
+                )
+            else:
+                details = []
+                if seller_trust is not None:
+                    try:
+                        details.append(f"trust score {round(float(seller_trust) * 100)}%")
+                    except Exception:
+                        pass
+                if sentiment is not None:
+                    try:
+                        details.append(f"sentiment {round(float(sentiment) * 100)}%")
+                    except Exception:
+                        pass
+                if count is not None:
+                    details.append(f"{count} feedback analizzati")
+
+                seller_part = f"Ho analizzato {seller_name}"
+                if details:
+                    seller_part += " con " + ", ".join(details)
+                seller_part += "."
+
+            return f"{seller_part} {product_part}".strip()
 
         if search_payload:
             results = search_payload.get("results") or []
@@ -268,48 +309,23 @@ class EbayReactAgent:
 
             intro += "."
 
-            parts = [intro]
-
             if analysis:
-                parts.append(analysis)
+                return f"{intro} {analysis}".strip()
 
-            if seller_payload:
-                seller_name = seller_payload.get("seller_name") or memory.last_seller_name or "il venditore"
-                count = seller_payload.get("count")
-                seller_trust = seller_payload.get("trust_score")
-                sentiment = seller_payload.get("sentiment_score")
-
-                seller_sentence = f"Ho anche approfondito {seller_name}"
-                details = []
-
-                if seller_trust is not None:
-                    try:
-                        details.append(f"trust score {round(float(seller_trust) * 100)}%")
-                    except Exception:
-                        pass
-
-                if sentiment is not None:
-                    try:
-                        details.append(f"sentiment {round(float(sentiment) * 100)}%")
-                    except Exception:
-                        pass
-
-                if count is not None:
-                    details.append(f"{count} feedback analizzati")
-
-                if details:
-                    seller_sentence += " (" + ", ".join(details) + ")"
-
-                seller_sentence += "."
-                parts.append(seller_sentence)
-
-            return " ".join(parts)
+            return intro
 
         if seller_payload:
-            seller_name = seller_payload.get("seller_name") or "il venditore"
+            seller_name = seller_payload.get("seller_name") or memory.last_seller_name or "il venditore"
             count = seller_payload.get("count")
             trust_score = seller_payload.get("trust_score")
             sentiment = seller_payload.get("sentiment_score")
+            error = seller_payload.get("error")
+
+            if error:
+                return (
+                    f"Ho provato ad analizzare il venditore {seller_name}, "
+                    f"ma eBay non ha restituito dati di feedback per questo utente."
+                )
 
             text = f"Ho analizzato {seller_name}"
             details = []
@@ -336,6 +352,9 @@ class EbayReactAgent:
             return text
 
         if memory.errors:
-            return f"Non sono riuscito a completare correttamente l'analisi. Ultimo errore: {memory.errors[-1]}"
+            return (
+                "Non sono riuscito a completare correttamente l'analisi. "
+                f"Ultimo errore: {memory.errors[-1]}"
+            )
 
         return "Non ho raccolto abbastanza informazioni per produrre una risposta utile."

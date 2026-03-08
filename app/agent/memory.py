@@ -25,13 +25,32 @@ class AgentMemory:
 
     search_payload: Optional[Dict[str, Any]] = None
     seller_payload: Optional[Dict[str, Any]] = None
+    tasks: List[Dict] = field(default_factory=list)
+    task_pointer: int = 0
 
     top_result: Optional[Dict[str, Any]] = None
     last_seller_name: Optional[str] = None
     search_analysis: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
 
+    detected_intent: Optional[str] = None
     errors: List[str] = field(default_factory=list)
+
+    def load_tasks(self, tasks: List[Dict]):
+
+        if tasks:
+            self.tasks = tasks
+            self.task_pointer = 0
+
+    def next_task(self):
+
+        if self.task_pointer >= len(self.tasks):
+            return None
+
+        task = self.tasks[self.task_pointer]
+        self.task_pointer += 1
+
+        return task
 
     def apply_observation(self, observation: Observation) -> None:
         self.observations.append(observation)
@@ -65,14 +84,18 @@ class AgentMemory:
                 or self.top_result.get("seller_username")
             )
             if seller_name:
-                self.last_seller_name = seller_name
+                self.last_seller_name = str(seller_name).strip()
 
     def _apply_seller_payload(self, data: Dict[str, Any]) -> None:
         self.seller_payload = data
 
         seller_name = data.get("seller_name")
         if seller_name:
-            self.last_seller_name = seller_name
+            self.last_seller_name = str(seller_name).strip()
+
+        error = data.get("error")
+        if error:
+            self.errors.append(str(error))
 
     def has_search_results(self) -> bool:
         if not self.search_payload:
@@ -80,12 +103,18 @@ class AgentMemory:
         results = self.search_payload.get("results") or []
         return len(results) > 0
 
+    def has_seller_data(self) -> bool:
+        return self.seller_payload is not None
+
+    def has_seller_error(self) -> bool:
+        if not self.seller_payload:
+            return False
+        return bool(self.seller_payload.get("error"))
+
+    def steps_done(self) -> int:
+        return len(self.observations)
+
     def scratchpad(self) -> Dict[str, Any]:
-        """
-        Scratchpad compatto:
-        - contiene solo i dati utili alla pianificazione/finalizzazione
-        - evita payload enormi o duplicazioni inutili
-        """
         results = (self.search_payload or {}).get("results") or []
         top_results = [_compact_result(item) for item in results[:3]]
 
@@ -96,11 +125,13 @@ class AgentMemory:
                 "count": self.seller_payload.get("count"),
                 "trust_score": self.seller_payload.get("trust_score"),
                 "sentiment_score": self.seller_payload.get("sentiment_score"),
+                "error": self.seller_payload.get("error"),
             }
 
         return {
             "user_query": self.user_query,
-            "steps_done": len(self.observations),
+            "steps_done": self.steps_done(),
+            "intent": self.detected_intent,
             "has_search_payload": self.search_payload is not None,
             "has_seller_payload": self.seller_payload is not None,
             "has_search_results": self.has_search_results(),
@@ -109,17 +140,14 @@ class AgentMemory:
             "search_analysis": self.search_analysis,
             "metrics": self.metrics,
             "seller_summary": seller_summary,
-            "recent_errors": self.errors[-2:],
+            "recent_errors": self.errors[-3:],
         }
 
     def final_data(self) -> Dict[str, Any]:
-        """
-        Dati finali utili al frontend, ma un po' compattati:
-        manteniamo payload completi search/seller solo se servono davvero.
-        """
         compact_top = _compact_result(self.top_result) if self.top_result else None
 
         return {
+            "intent": self.detected_intent,
             "search": self.search_payload,
             "seller": self.seller_payload,
             "top_result": compact_top,

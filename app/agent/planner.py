@@ -9,16 +9,13 @@ from app.agent.memory import AgentMemory
 from app.agent.prompts import build_planner_prompt
 from app.agent.schemas import PlannerOutput, ToolCall
 from app.agent.tool_registry import TOOLS, get_tool_descriptions
-from app.services.parser import (
-    call_gemini,
-    call_ollama,
-    extract_first_json_object,
-)
+from app.services.parser import call_gemini, call_ollama, extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
 
 class ReactPlanner:
+
     def __init__(self, llm_engine: str = "gemini"):
         self.llm_engine = (llm_engine or "gemini").strip().lower()
         self._decision_cache: Dict[str, PlannerOutput] = {}
@@ -29,113 +26,43 @@ class ReactPlanner:
         step_index: int,
         max_steps: int,
     ) -> PlannerOutput:
-        if step_index > max_steps:
-            return PlannerOutput(
-                thought="Ho raggiunto il limite di step.",
-                should_stop=True,
-            )
 
-        # --------------------------------------------------
-        # FAST HEURISTIC PATH
-        # --------------------------------------------------
-        heuristic_first = self._heuristic_fast_path(memory, step_index)
-        if heuristic_first is not None:
-            return heuristic_first
-
-        llm_decision = self._llm_decide(
-            memory=memory,
-            step_index=step_index,
-            max_steps=max_steps,
-        )
-
-        if llm_decision is not None:
-            return llm_decision
-
-        return self._heuristic_decide(memory)
-
-    def can_stop_early(self, memory: AgentMemory) -> bool:
-        """
-        Se l'utente non ha chiesto esplicitamente seller/trust/feedback
-        e abbiamo già risultati search, possiamo chiudere.
-        """
-        query = (memory.user_query or "").lower()
-
-        wants_seller_check = any(
-            token in query
-            for token in [
-                "venditore",
-                "seller",
-                "affidabile",
-                "feedback",
-                "fidato",
-                "trust",
-                "sicuro",
-            ]
-        )
-
-        return memory.search_payload is not None and not wants_seller_check
-
-    def _heuristic_fast_path(
-        self,
-        memory: AgentMemory,
-        step_index: int,
-    ) -> Optional[PlannerOutput]:
-        """
-        Evita la planner LLM quando il caso è banale:
-        - primo step: search quasi sempre
-        - secondo step: seller solo se richiesto
-        """
-        query = (memory.user_query or "").lower()
         explicit_seller = self._extract_explicit_seller(memory.user_query)
 
-        wants_seller_check = any(
-            token in query
-            for token in [
-                "venditore",
-                "seller",
-                "affidabile",
-                "feedback",
-                "fidato",
-                "trust",
-                "sicuro",
-            ]
-        )
+        if explicit_seller and not memory.last_seller_name:
+            memory.last_seller_name = explicit_seller
 
-        if step_index == 1 and memory.search_payload is None and memory.seller_payload is None:
-            if wants_seller_check and explicit_seller:
-                return PlannerOutput(
-                    thought="Analizzo direttamente il venditore richiesto.",
-                    action=ToolCall(
-                        tool="seller_pipeline",
-                        input={"seller_name": explicit_seller, "page": 1, "limit": 10},
-                    ),
-                )
+        llm_decision = self._llm_decide(memory, step_index, max_steps)
 
-            return PlannerOutput(
-                thought="Cerco prima i prodotti più rilevanti.",
-                action=ToolCall(
-                    tool="search_pipeline",
-                    input={"query": memory.user_query},
-                ),
+        if llm_decision:
+            return llm_decision
+
+        return self._safe_fallback_decide(memory)
+
+    # --------------------------------------------------
+
+    def can_stop_early(self, memory: AgentMemory) -> bool:
+
+        intent = (memory.detected_intent or "").lower()
+
+        if intent == "conversation":
+            return True
+
+        if intent == "seller_analysis":
+            return memory.seller_payload is not None
+
+        if intent == "product_search":
+            return memory.search_payload is not None
+
+        if intent == "hybrid":
+            return (
+                memory.search_payload is not None
+                and memory.seller_payload is not None
             )
 
-        if step_index >= 2:
-            if wants_seller_check and memory.search_payload is not None and memory.seller_payload is None and memory.last_seller_name:
-                return PlannerOutput(
-                    thought="Approfondisco il venditore del risultato migliore.",
-                    action=ToolCall(
-                        tool="seller_pipeline",
-                        input={"seller_name": memory.last_seller_name, "page": 1, "limit": 10},
-                    ),
-                )
+        return False
 
-            if memory.search_payload is not None:
-                return PlannerOutput(
-                    thought="Ho abbastanza elementi per rispondere.",
-                    should_stop=True,
-                )
-
-        return None
+    # --------------------------------------------------
 
     def _llm_decide(
         self,
@@ -143,13 +70,9 @@ class ReactPlanner:
         step_index: int,
         max_steps: int,
     ) -> Optional[PlannerOutput]:
+
         if self.llm_engine == "rule_based":
             return None
-
-        cache_key = self._build_cache_key(memory, step_index, max_steps)
-        cached = self._decision_cache.get(cache_key)
-        if cached is not None:
-            return cached
 
         prompt = build_planner_prompt(
             user_query=memory.user_query,
@@ -159,107 +82,224 @@ class ReactPlanner:
             tool_descriptions=get_tool_descriptions(),
         )
 
-        raw = self._call_planner_llm(prompt)
+        raw = self._call_llm(prompt)
+
         if not raw:
             return None
 
         json_text = extract_first_json_object(raw)
+
         if not json_text:
-            logger.warning("Planner LLM did not return JSON")
             return None
 
         try:
             payload = json.loads(json_text)
-        except Exception as e:
-            logger.warning("Planner JSON parse failed: %s", e)
+        except Exception:
             return None
 
-        if not isinstance(payload, dict):
-            return None
-
-        thought = str(payload.get("thought") or "").strip()
-        action = str(payload.get("action") or "").strip().lower()
+        thought = str(payload.get("thought") or "")
+        intent = str(payload.get("intent") or "").lower()
+        action = str(payload.get("action") or "").lower()
         action_input = payload.get("action_input") or {}
-        final_answer = payload.get("final_answer")
 
-        if action in {"finish", "final", "stop", "done"}:
-            out = PlannerOutput(
-                thought=thought or "Ho abbastanza informazioni per rispondere.",
+        if intent not in {"conversation", "seller_analysis", "product_search", "hybrid"}:
+            intent = self._infer_intent(memory)
+
+        if action in {"finish", "stop"}:
+
+            if intent == "hybrid":
+                if memory.search_payload is None or memory.seller_payload is None:
+                    return self._safe_fallback_decide(memory, forced_intent="hybrid")
+
+            return PlannerOutput(
+                thought=thought,
                 should_stop=True,
-                final_answer=str(final_answer).strip() if isinstance(final_answer, str) and final_answer.strip() else None,
+                intent=intent,
             )
-            self._decision_cache[cache_key] = out
-            return out
 
         if action not in TOOLS:
-            logger.warning("Planner returned unknown action: %s", action)
             return None
 
         normalized_input = self._normalize_action_input(
-            action=action,
-            action_input=action_input,
-            memory=memory,
+            action,
+            action_input,
+            memory,
         )
 
         if normalized_input is None:
             return None
 
-        if action == "search_pipeline" and memory.search_payload is not None:
-            return PlannerOutput(
-                thought="Ho già risultati di ricerca sufficienti.",
-                should_stop=True,
-            )
+        return PlannerOutput(
+            thought=thought,
+            action=ToolCall(tool=action, input=normalized_input),
+            intent=intent,
+        )
 
-        if action == "seller_pipeline" and memory.seller_payload is not None:
-            current_seller = str(normalized_input.get("seller_name") or "").strip().lower()
-            previous_seller = str(memory.seller_payload.get("seller_name") or "").strip().lower()
+    # --------------------------------------------------
 
-            if current_seller and previous_seller and current_seller == previous_seller:
+    def _safe_fallback_decide(
+        self,
+        memory: AgentMemory,
+        forced_intent: Optional[str] = None,
+    ) -> PlannerOutput:
+
+        intent = (forced_intent or memory.detected_intent or self._infer_intent(memory)).lower()
+
+        seller = memory.last_seller_name
+
+        task = memory.next_task()
+
+        if task:
+
+            tool = task.get("tool")
+            tool_input = task.get("input") or {}
+
+            if tool in TOOLS:
                 return PlannerOutput(
-                    thought="Ho già analizzato questo venditore.",
-                    should_stop=True,
+                    thought="Eseguo task pianificato.",
+                    action=ToolCall(
+                        tool=tool,
+                        input=tool_input,
+                    ),
                 )
 
-        out = PlannerOutput(
-            thought=thought or "Procedo con il tool più utile.",
-            action=ToolCall(tool=action, input=normalized_input),
-        )
-        self._decision_cache[cache_key] = out
-        return out
+        if intent == "conversation":
 
-    def _call_planner_llm(self, prompt: str) -> Optional[str]:
+            return PlannerOutput(
+                thought="La richiesta è conversazionale.",
+                should_stop=True,
+                intent="conversation",
+            )
+
+        if intent == "seller_analysis":
+
+            if memory.seller_payload is None and seller:
+
+                return PlannerOutput(
+                    thought="Analizzo il venditore richiesto.",
+                    action=ToolCall(
+                        tool="seller_pipeline",
+                        input={
+                            "seller_name": seller,
+                            "page": 1,
+                            "limit": 10,
+                        },
+                    ),
+                    intent="seller_analysis",
+                )
+
+            return PlannerOutput(
+                thought="Ho abbastanza informazioni sul venditore.",
+                should_stop=True,
+                intent="seller_analysis",
+            )
+
+        if intent == "product_search":
+
+            if memory.search_payload is None:
+
+                return PlannerOutput(
+                    thought="Cerco i prodotti.",
+                    action=ToolCall(
+                        tool="search_pipeline",
+                        input={
+                            "query": self._clean_search_query(memory.user_query),
+                        },
+                    ),
+                    intent="product_search",
+                )
+
+            return PlannerOutput(
+                thought="Ho abbastanza informazioni sulla ricerca.",
+                should_stop=True,
+                intent="product_search",
+            )
+
+        if intent == "hybrid":
+
+            if memory.seller_payload is None and seller:
+
+                return PlannerOutput(
+                    thought="Analizzo prima il venditore.",
+                    action=ToolCall(
+                        tool="seller_pipeline",
+                        input={
+                            "seller_name": seller,
+                            "page": 1,
+                            "limit": 10,
+                        },
+                    ),
+                    intent="hybrid",
+                )
+
+            if memory.search_payload is None:
+
+                return PlannerOutput(
+                    thought="Ora verifico i prodotti.",
+                    action=ToolCall(
+                        tool="search_pipeline",
+                        input={
+                            "query": self._clean_search_query(memory.user_query),
+                        },
+                    ),
+                    intent="hybrid",
+                )
+
+            return PlannerOutput(
+                thought="Ho raccolto tutte le informazioni.",
+                should_stop=True,
+                intent="hybrid",
+            )
+
+        return PlannerOutput(
+            thought="Termino.",
+            should_stop=True,
+        )
+
+    # --------------------------------------------------
+
+    def _call_llm(self, prompt: str) -> Optional[str]:
+
         try:
+
             if self.llm_engine == "gemini":
                 return call_gemini(prompt)
 
             if self.llm_engine == "ollama":
                 return call_ollama(prompt)
 
-            return None
         except Exception as e:
-            logger.warning("Planner LLM call failed: %s", e)
-            return None
+            logger.warning("Planner LLM failed: %s", e)
+
+        return None
+
+    # --------------------------------------------------
 
     def _normalize_action_input(
-        self,
-        action: str,
-        action_input: Dict[str, Any],
-        memory: AgentMemory,
+            self,
+            action: str,
+            action_input: Dict[str, Any],
+            memory: AgentMemory,
     ) -> Optional[Dict[str, Any]]:
+
         if not isinstance(action_input, dict):
             action_input = {}
 
         clean = dict(action_input)
 
         if action == "search_pipeline":
+
             query = str(clean.get("query") or memory.user_query).strip()
+
+            query = self._clean_search_query(query)
+
             if not query:
                 return None
 
-            clean = {"query": query}
-            return clean
+            return {"query": query}
 
         if action == "seller_pipeline":
+
             seller_name = str(
                 clean.get("seller_name")
                 or memory.last_seller_name
@@ -290,89 +330,63 @@ class ReactPlanner:
 
         return None
 
-    def _heuristic_decide(self, memory: AgentMemory) -> PlannerOutput:
-        query = (memory.user_query or "").lower()
+    def _clean_search_query(self, query: str) -> str:
 
-        wants_seller_check = any(
-            token in query
-            for token in [
-                "venditore",
-                "seller",
-                "affidabile",
-                "feedback",
-                "fidato",
-                "trust",
-                "sicuro",
-            ]
+        q = query.lower()
+
+        q = re.sub(r"(venditore|seller)\s+[a-zA-Z0-9._-]+", "", q)
+
+        q = re.sub(
+            r"(dammi i feedback|analizza|controlla se vende|verifica se vende)",
+            "",
+            q,
         )
 
-        explicit_seller = self._extract_explicit_seller(memory.user_query)
+        return q.strip()
 
-        if memory.search_payload is None and memory.seller_payload is None:
-            if wants_seller_check and explicit_seller:
-                return PlannerOutput(
-                    thought="Analizzo direttamente il venditore richiesto.",
-                    action=ToolCall(
-                        tool="seller_pipeline",
-                        input={"seller_name": explicit_seller, "page": 1, "limit": 10},
-                    ),
-                )
+    # --------------------------------------------------
 
-            return PlannerOutput(
-                thought="Cerco prima i prodotti più rilevanti.",
-                action=ToolCall(
-                    tool="search_pipeline",
-                    input={"query": memory.user_query},
-                ),
-            )
+    def _infer_intent(self, memory: AgentMemory) -> str:
 
-        if wants_seller_check and memory.seller_payload is None and memory.last_seller_name:
-            return PlannerOutput(
-                thought="Approfondisco il venditore del risultato migliore.",
-                action=ToolCall(
-                    tool="seller_pipeline",
-                    input={"seller_name": memory.last_seller_name, "page": 1, "limit": 10},
-                ),
-            )
+        q = memory.user_query.lower()
 
-        return PlannerOutput(
-            thought="Ho abbastanza elementi per rispondere.",
-            should_stop=True,
-        )
+        seller_words = ["seller", "venditore", "feedback"]
+
+        product_words = [
+            "compra",
+            "vende",
+            "selling",
+            "search",
+            "prezzo",
+            "carte",
+            "magic",
+            "pokemon",
+        ]
+
+        has_seller = any(w in q for w in seller_words)
+        has_product = any(w in q for w in product_words)
+
+        if has_seller and has_product:
+            return "hybrid"
+
+        if has_seller:
+            return "seller_analysis"
+
+        if has_product:
+            return "product_search"
+
+        return "conversation"
+
+    # --------------------------------------------------
 
     @staticmethod
     def _extract_explicit_seller(text: str) -> Optional[str]:
-        if not text:
-            return None
 
-        patterns = [
-            r"(?:venditore|seller)\s+([A-Za-z0-9._-]{3,})",
-            r'"([A-Za-z0-9._-]{3,})"',
-            r"'([A-Za-z0-9._-]{3,})'",
-        ]
+        pattern = r"(?:venditore|seller)\s+([A-Za-z0-9._-]{3,})"
 
-        for pattern in patterns:
-            match = re.search(pattern, text, flags=re.IGNORECASE)
-            if match:
-                seller_name = match.group(1).strip()
-                if seller_name:
-                    return seller_name
+        match = re.search(pattern, text, re.IGNORECASE)
+
+        if match:
+            return match.group(1)
 
         return None
-
-    @staticmethod
-    def _build_cache_key(
-        memory: AgentMemory,
-        step_index: int,
-        max_steps: int,
-    ) -> str:
-        return json.dumps(
-            {
-                "q": memory.user_query,
-                "scratchpad": memory.scratchpad(),
-                "step": step_index,
-                "max_steps": max_steps,
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )

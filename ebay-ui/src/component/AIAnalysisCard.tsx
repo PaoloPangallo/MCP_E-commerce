@@ -13,7 +13,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 
-import type { IRMetrics, RagContext } from "../component/searchTypes.ts"
+import type { IRMetrics, RagContext } from "./searchTypes.ts"
 
 interface Props {
   text?: string

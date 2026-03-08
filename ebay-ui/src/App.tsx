@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Box, Typography } from "@mui/material"
+import { Box, Typography, Paper, Chip } from "@mui/material"
 
 import ChatLayout from "./component/ChatLayout"
 import ChatInput from "./component/ChatInput"
 import MessageBubble from "./component/MessageBubble"
 import SearchResultList from "./component/SearchResultList"
-import AIAnalysisCard from "./component/AIAnalysisCard"
 import AIThinkingPipeline from "./component/AIThinkingPipeline"
 import SellerFeedbackPanel from "./component/SellerFeedbackPanel"
+import SellerTrustGauge from "./component/SellerTrustGauge"
 
 import { useAgentStream } from "./hooks/useAgentStream"
 
@@ -25,7 +25,7 @@ function getWelcomeMessage(): ChatEntry {
     msg: {
       role: "assistant",
       content:
-        "Ciao! Sono ebayGPT. Posso cercare prodotti, spiegarti il ranking e controllare se il venditore del risultato migliore è affidabile."
+        "Ciao! Sono ebayGPT. Posso cercare prodotti, confrontare risultati, spiegare il ranking e analizzare l’affidabilità di un venditore eBay."
     }
   }
 }
@@ -62,6 +62,78 @@ function saveSearchHistory(query: string, resultsCount = 0) {
   window.dispatchEvent(new Event("search_history_updated"))
 }
 
+function detectMode(resultsCount: number, hasSeller: boolean): "search" | "seller" | "hybrid" {
+  if (resultsCount > 0 && hasSeller) return "hybrid"
+  if (hasSeller) return "seller"
+  return "search"
+}
+
+function SellerSummaryCard({
+  sellerName,
+  trustScore,
+  sentimentScore,
+  count
+}: {
+  sellerName?: string
+  trustScore?: number
+  sentimentScore?: number
+  count?: number
+}) {
+  if (!sellerName) return null
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mt: 3,
+        p: 3,
+        borderRadius: "16px",
+        bgcolor: "#fff",
+        border: "1px solid #e5e5e5"
+      }}
+    >
+      <Box display="flex" alignItems="center" gap={1} mb={1.25} flexWrap="wrap">
+        <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#202123" }}>
+          Seller deep dive
+        </Typography>
+
+        <Chip
+          label={sellerName}
+          size="small"
+          sx={{
+            bgcolor: "#f5f5f5",
+            border: "1px solid #e5e5e5"
+          }}
+        />
+      </Box>
+
+      {typeof trustScore === "number" && (
+        <SellerTrustGauge score={trustScore} />
+      )}
+
+      <Box display="flex" gap={1} flexWrap="wrap" mt={1}>
+        {typeof sentimentScore === "number" && (
+          <Chip
+            label={`Sentiment ${Math.round(sentimentScore * 100)}%`}
+            size="small"
+            sx={{ bgcolor: "#f5f5f5", border: "1px solid #e5e5e5" }}
+          />
+        )}
+
+        {typeof count === "number" && (
+          <Chip
+            label={`${count} feedback analizzati`}
+            size="small"
+            sx={{ bgcolor: "#f5f5f5", border: "1px solid #e5e5e5" }}
+          />
+        )}
+      </Box>
+
+      <SellerFeedbackPanel seller={sellerName} />
+    </Paper>
+  )
+}
+
 export default function App() {
   const [chat, setChat] = useState<ChatEntry[]>([getWelcomeMessage()])
   const [loadingQuery, setLoadingQuery] = useState<string | null>(null)
@@ -71,9 +143,10 @@ export default function App() {
 
   const {
     steps,
-    results,
     running,
-    run
+    finalPayload,
+    run,
+    reset
   } = useAgentStream()
 
   useEffect(() => {
@@ -81,7 +154,7 @@ export default function App() {
       behavior: "smooth",
       block: "end"
     })
-  }, [chat, steps])
+  }, [chat, steps, finalPayload, running])
 
   const hasSearches = useMemo(
     () => chat.some((entry) => entry.type === "search"),
@@ -89,12 +162,12 @@ export default function App() {
   )
 
   const resetChat = () => {
+    reset()
     setChat([getWelcomeMessage()])
     setLoadingQuery(null)
   }
 
   const handleSend = async (text: string) => {
-
     if (!text.trim()) return
 
     const query = text.trim()
@@ -108,7 +181,6 @@ export default function App() {
     setChat((prev) => [...prev, { type: "message", msg: userMessage }])
 
     if (cache[cacheKey]) {
-
       const cached = cache[cacheKey]
 
       saveSearchHistory(query, cached.results.length)
@@ -119,7 +191,7 @@ export default function App() {
           type: "message",
           msg: {
             role: "assistant",
-            content: cached.final_answer || "Risultati recuperati dalla cache."
+            content: cached.final_answer || "Ho recuperato la risposta dalla cache."
           }
         },
         { type: "search", search: cached }
@@ -129,31 +201,34 @@ export default function App() {
     }
 
     setLoadingQuery(query)
-
     run(query)
   }
 
-  /**
-   * Quando arrivano risultati finali dallo stream
-   */
-
   useEffect(() => {
+    if (!finalPayload || !loadingQuery) return
 
-    if (!results || results.length === 0) return
-
-    const query = loadingQuery || "query"
+    const query = loadingQuery
     const cacheKey = query.toLowerCase()
+
+    const sellerSummary = finalPayload.sellerSummary || null
+    const results = finalPayload.results || []
+
+    const mode = detectMode(results.length, !!sellerSummary?.seller_name)
 
     const newSearch: SearchBlock = {
       query,
       results,
-      analysis: null,
-      metrics: undefined,
-      rag_context: undefined,
+      analysis: finalPayload.analysis,
+      metrics: finalPayload.metrics,
+      rag_context: finalPayload.ragContext,
       timings: undefined,
-      agent_trace: steps,
-      seller_summary: null,
-      final_answer: `Ho trovato ${results.length} risultati per "${query}".`
+      agent_trace: finalPayload.trace?.length ? finalPayload.trace : steps,
+      seller_summary: sellerSummary,
+      final_answer:
+        finalPayload.finalAnswer ||
+        "Ho completato l’analisi della richiesta.",
+      mode,
+      errors: finalPayload.errors
     }
 
     setCache((prev) => ({
@@ -169,13 +244,14 @@ export default function App() {
         type: "message",
         msg: {
           role: "assistant",
-          content: newSearch.final_answer ?? ""
+          content: newSearch.final_answer ?? "Analisi completata."
         }
       },
       { type: "search", search: newSearch }
     ])
 
-  }, [results])
+    setLoadingQuery(null)
+  }, [finalPayload, loadingQuery, steps])
 
   return (
     <ChatLayout onSearch={handleSend} onNewChat={resetChat}>
@@ -192,28 +268,33 @@ export default function App() {
         }}
       >
         <Box sx={{ width: "100%", maxWidth: 1000 }}>
-
           {!hasSearches && chat.length <= 1 && (
             <Box sx={{ px: 2, py: 4 }}>
               <Typography
                 sx={{
-                  fontSize: 28,
-                  fontWeight: 700,
+                  fontSize: 30,
+                  fontWeight: 800,
                   mb: 1.5,
                   color: "#202123"
                 }}
               >
-                ebayGPT · ricerca conversazionale agentica
+                ebayGPT
               </Typography>
 
-              <Typography sx={{ color: "#6e6e80", fontSize: 15 }}>
-                Prova con query come “iPhone 13 massimo 700 euro e controlla il venditore”.
+              <Typography sx={{ color: "#6e6e80", fontSize: 15, mb: 2 }}>
+                Ricerca conversazionale agentica per prodotti e venditori eBay.
               </Typography>
+
+              <Box display="flex" gap={1} flexWrap="wrap">
+                <Chip label="product search" size="small" />
+                <Chip label="seller trust" size="small" />
+                <Chip label="agent trace" size="small" />
+                <Chip label="ranking explanation" size="small" />
+              </Box>
             </Box>
           )}
 
           {chat.map((entry, index) => {
-
             if (entry.type === "message") {
               return (
                 <Box key={`msg-${index}`} mb={2}>
@@ -228,7 +309,6 @@ export default function App() {
 
             return (
               <Box key={`search-${index}`} mt={2} mb={4}>
-
                 {search.agent_trace?.length ? (
                   <AIThinkingPipeline
                     agentTrace={search.agent_trace}
@@ -236,43 +316,63 @@ export default function App() {
                   />
                 ) : null}
 
-                {search.analysis && (
-                  <AIAnalysisCard text={search.analysis} />
-                )}
-
-                {search.results.length > 0 ? (
+                {search.mode !== "seller" && search.results.length > 0 ? (
                   <SearchResultList results={search.results} />
                 ) : null}
 
-                {search.seller_summary?.seller_name && (
-                  <Box
+                {search.mode === "seller" && search.seller_summary?.seller_name ? (
+                  <SellerSummaryCard
+                    sellerName={search.seller_summary.seller_name}
+                    trustScore={search.seller_summary.trust_score}
+                    sentimentScore={search.seller_summary.sentiment_score}
+                    count={search.seller_summary.count}
+                  />
+                ) : null}
+
+                {search.mode === "hybrid" && search.seller_summary?.seller_name ? (
+                  <SellerSummaryCard
+                    sellerName={search.seller_summary.seller_name}
+                    trustScore={search.seller_summary.trust_score}
+                    sentimentScore={search.seller_summary.sentiment_score}
+                    count={search.seller_summary.count}
+                  />
+                ) : null}
+
+                {search.errors && search.errors.length > 0 && (
+                  <Paper
+                    elevation={0}
                     sx={{
-                      mt: 3,
-                      p: 3,
-                      borderRadius: "16px",
-                      bgcolor: "#fff",
-                      border: "1px solid #e5e5e5"
+                      mt: 2,
+                      p: 2,
+                      borderRadius: 2,
+                      bgcolor: "#fff7f7",
+                      border: "1px solid #f1cccc"
                     }}
                   >
-                    <Typography sx={{ fontSize: 16, fontWeight: 700 }}>
-                      Seller deep dive
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#a33" }}>
+                      Errori o segnali backend
                     </Typography>
 
-                    <SellerFeedbackPanel
-                      seller={search.seller_summary.seller_name}
-                    />
-                  </Box>
+                    {search.errors.map((err, idx) => (
+                      <Typography
+                        key={`${err}-${idx}`}
+                        sx={{ fontSize: 12.5, color: "#7a4b4b", mt: 0.5 }}
+                      >
+                        {err}
+                      </Typography>
+                    ))}
+                  </Paper>
                 )}
-
               </Box>
             )
           })}
 
           {running && (
             <Box mt={2} mb={3}>
-              <MessageBubble role="assistant">
+              <MessageBubble role="assistant" isTyping={false}>
                 <AIThinkingPipeline
                   agentTrace={steps}
+                  loading
                   query={loadingQuery ?? undefined}
                 />
               </MessageBubble>

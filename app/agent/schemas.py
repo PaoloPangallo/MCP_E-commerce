@@ -28,6 +28,7 @@ class PlannerOutput(BaseModel):
     action: Optional[ToolCall] = None
     should_stop: bool = False
     final_answer: Optional[str] = None
+    intent: Optional[Literal["conversation", "seller_analysis", "product_search", "hybrid"]] = None
 
 
 class Observation(BaseModel):

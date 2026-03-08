@@ -39,7 +39,7 @@ def _normalize_llm_engine(llm_engine: str) -> str:
     llm_engine = (llm_engine or "").strip().lower()
     if llm_engine in {"gemini", "ollama", "rule_based"}:
         return llm_engine
-    return "gemini"
+    return "ollama"
 
 
 def _dedupe_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

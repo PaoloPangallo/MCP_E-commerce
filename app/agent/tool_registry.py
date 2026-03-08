@@ -13,7 +13,7 @@ from app.services.seller_pipeline import run_seller_pipeline
 class ToolContext:
     db: Session
     user: Optional[object] = None
-    llm_engine: str = "gemini"
+    llm_engine: str = "ollama"
 
 
 @dataclass(slots=True)
@@ -40,16 +40,6 @@ def _to_bounded_int(
         return min(max(parsed, min_value), max_value)
     except Exception:
         return default
-
-
-def _validate_required(action_input: Dict[str, Any], required_fields: tuple[str, ...]) -> None:
-    for field_name in required_fields:
-        val = action_input.get(field_name)
-        if isinstance(val, str):
-            if not val.strip():
-                raise ValueError(f"Missing required field '{field_name}'")
-        elif val is None:
-            raise ValueError(f"Missing required field '{field_name}'")
 
 
 def _normalize_search_input(action_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -88,11 +78,33 @@ def _run_search_pipeline(action_input: Dict[str, Any], context: ToolContext) -> 
 def _run_seller_pipeline(action_input: Dict[str, Any], context: ToolContext) -> Dict[str, Any]:
     clean = _normalize_seller_input(action_input)
 
-    return run_seller_pipeline(
-        seller_name=clean["seller_name"],
-        page=clean["page"],
-        limit=clean["limit"],
-    )
+    try:
+        result = run_seller_pipeline(
+            seller_name=clean["seller_name"],
+            page=clean["page"],
+            limit=clean["limit"],
+        )
+
+        if not isinstance(result, dict):
+            result = {"result": result}
+
+        result.setdefault("seller_name", clean["seller_name"])
+        result.setdefault("page", clean["page"])
+        result.setdefault("limit", clean["limit"])
+        result.setdefault("feedbacks", [])
+        return result
+
+    except Exception as e:
+        return {
+            "seller_name": clean["seller_name"],
+            "page": clean["page"],
+            "limit": clean["limit"],
+            "count": 0,
+            "trust_score": None,
+            "sentiment_score": None,
+            "feedbacks": [],
+            "error": str(e),
+        }
 
 
 TOOLS: Dict[str, ToolSpec] = {
