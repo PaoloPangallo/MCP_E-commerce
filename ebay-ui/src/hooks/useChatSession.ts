@@ -35,7 +35,7 @@ export function useChatSession() {
 
   const addHistory = useSidebarStore((state) => state.addHistory)
 
-  const { steps, running, finalPayload, run, reset } = useAgentStream()
+  const { steps, running, finalPayload, plannedTasks, run, reset } = useAgentStream()
 
   const hasSearches = useMemo(
     () => chat.some((entry: ChatEntry) => entry.type === "search"),
@@ -108,7 +108,10 @@ export function useChatSession() {
       !!sellerSummary?.seller_name ||
       !!newSearch.analysis ||
       !!newSearch.agent_trace?.length ||
-      !!newSearch.errors?.length
+      !!newSearch.errors?.length ||
+      !!finalPayload.plannedTasks?.length ||
+      !!finalPayload.toolStates &&
+        Object.keys(finalPayload.toolStates).length > 0
 
     setCachedSearch(cacheKey, newSearch)
     addHistory({ query, results: results.length })
@@ -134,13 +137,14 @@ export function useChatSession() {
   ])
 
   return {
-    chat,
-    steps,
-    running,
-    finalPayload,
-    loadingQuery,
-    hasSearches,
-    handleSend,
-    resetChat
-  }
+  chat,
+  steps,
+  running,
+  finalPayload,
+  plannedTasks,
+  loadingQuery,
+  hasSearches,
+  handleSend,
+  resetChat
+}
 }

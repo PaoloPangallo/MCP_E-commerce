@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Button, CircularProgress, Divider, Typography, Chip } from "@mui/material"
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Divider,
+  Typography,
+  Chip
+} from "@mui/material"
 
 import SellerTrustGauge from "./SellerTrustGauge.tsx"
 import SellerFeedbackList from "../SellerFeedbackList.tsx"
 import type { Feedback } from "../../../types"
+import { API_BASE } from "../../../api/apiClient.ts"
 
 interface ApiResponse {
   seller_name?: string
@@ -11,14 +19,41 @@ interface ApiResponse {
   feedback?: Feedback[]
   trust_score?: number
   sentiment_score?: number
+  error?: string
 }
 
 interface Props {
   seller?: string
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8030"
+async function fetchSellerFeedback(seller: string): Promise<ApiResponse> {
+  const encodedSeller = encodeURIComponent(seller)
+
+  const candidateUrls = [
+    `${API_BASE}/seller/${encodedSeller}/feedback`,
+    `${API_BASE}/seller-feedback?seller=${encodedSeller}`
+  ]
+
+  let lastError: Error | null = null
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url)
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} on ${url}`)
+      }
+
+      const data = (await res.json()) as ApiResponse
+      return data
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error("Unknown fetch error")
+      console.warn("Seller feedback fetch failed for:", url, lastError)
+    }
+  }
+
+  throw lastError ?? new Error("Unable to load seller feedback")
+}
 
 export default function SellerFeedbackPanel({ seller }: Props) {
   const [open, setOpen] = useState(false)
@@ -38,12 +73,12 @@ export default function SellerFeedbackPanel({ seller }: Props) {
   }, [seller])
 
   const positive = useMemo(
-    () => feedbacks.filter(item => (item.rating ?? 0) >= 4),
+    () => feedbacks.filter((item) => (item.rating ?? 0) >= 4),
     [feedbacks]
   )
 
   const negative = useMemo(
-    () => feedbacks.filter(item => (item.rating ?? 0) <= 2),
+    () => feedbacks.filter((item) => (item.rating ?? 0) <= 2),
     [feedbacks]
   )
 
@@ -56,7 +91,7 @@ export default function SellerFeedbackPanel({ seller }: Props) {
     if (!seller || loading) return
 
     if (feedbacks.length > 0) {
-      setOpen(prev => !prev)
+      setOpen((prev) => !prev)
       return
     }
 
@@ -64,32 +99,31 @@ export default function SellerFeedbackPanel({ seller }: Props) {
       setLoading(true)
       setError(null)
 
-      const res = await fetch(
-        `${API_BASE_URL}/seller/${encodeURIComponent(seller)}/feedback`
-      )
+      const data = await fetchSellerFeedback(seller)
 
-      if (!res.ok) {
-        throw new Error(`Server error ${res.status}`)
+      if (data.error) {
+        throw new Error(data.error)
       }
 
-      const data: ApiResponse = await res.json()
+      const items = Array.isArray(data.feedbacks)
+        ? data.feedbacks
+        : Array.isArray(data.feedback)
+          ? data.feedback
+          : []
 
-      setFeedbacks(data.feedbacks || data.feedback || [])
+      setFeedbacks(items)
+
       setTrustScore(
-        typeof data.trust_score === "number"
-          ? data.trust_score
-          : null
+        typeof data.trust_score === "number" ? data.trust_score : null
       )
 
       setSentimentScore(
-        typeof data.sentiment_score === "number"
-          ? data.sentiment_score
-          : null
+        typeof data.sentiment_score === "number" ? data.sentiment_score : null
       )
 
       setOpen(true)
     } catch (err) {
-      console.error(err)
+      console.error("SellerFeedbackPanel error:", err)
       setError("Errore nel caricamento dell'analisi venditore")
     } finally {
       setLoading(false)
@@ -119,15 +153,13 @@ export default function SellerFeedbackPanel({ seller }: Props) {
         )}
       </Button>
 
-      {error && !open && (
-        <Typography
-          sx={{ mt: 1, color: "#c62828", fontSize: 13 }}
-        >
+      {error && !open ? (
+        <Typography sx={{ mt: 1, color: "#c62828", fontSize: 13 }}>
           {error}
         </Typography>
-      )}
+      ) : null}
 
-      {open && (
+      {open ? (
         <Box
           mt={2}
           sx={{
@@ -179,17 +211,15 @@ export default function SellerFeedbackPanel({ seller }: Props) {
             </Box>
           </Box>
 
-          {sentimentScore !== null && (
-            <Typography
-              sx={{ fontSize: 13, color: "#444", mt: 1.5 }}
-            >
+          {sentimentScore !== null ? (
+            <Typography sx={{ fontSize: 13, color: "#444", mt: 1.5 }}>
               Sentiment score: {sentimentScore.toFixed(2)}
             </Typography>
-          )}
+          ) : null}
 
           <Divider sx={{ my: 2 }} />
 
-          {positive.length > 0 && (
+          {positive.length > 0 ? (
             <Box mb={2}>
               <SellerFeedbackList
                 feedbacks={positive.slice(0, 3)}
@@ -197,9 +227,9 @@ export default function SellerFeedbackPanel({ seller }: Props) {
                 title="Top positive feedback"
               />
             </Box>
-          )}
+          ) : null}
 
-          {negative.length > 0 && (
+          {negative.length > 0 ? (
             <Box mb={2}>
               <SellerFeedbackList
                 feedbacks={negative.slice(0, 3)}
@@ -207,14 +237,14 @@ export default function SellerFeedbackPanel({ seller }: Props) {
                 title="Top negative feedback"
               />
             </Box>
-          )}
+          ) : null}
 
           <SellerFeedbackList
             feedbacks={feedbacks}
             title="Tutti i feedback"
           />
         </Box>
-      )}
+      ) : null}
     </Box>
   )
 }

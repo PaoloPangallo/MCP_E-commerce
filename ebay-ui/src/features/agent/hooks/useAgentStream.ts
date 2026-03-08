@@ -4,39 +4,52 @@ import { streamAgent } from "../api/stream"
 import type {
   AgentEvent,
   AgentStep,
-  FinalPayload
+  FinalPayload,
+  PlannedTask,
+  ToolStatePayload
 } from "../types"
 
-function normalizeTraceStep(event: AgentEvent): AgentStep | null {
-  if (event.type === "thinking") {
-    return {
-      step: event.step ?? 1,
-      thought: event.thought ?? event.message ?? "",
-      action: event.action,
-      status: "thinking"
-    }
+function upsertStep(
+  previous: AgentStep[],
+  incoming: Partial<AgentStep> & { step: number }
+): AgentStep[] {
+  const index = previous.findIndex((s) => s.step === incoming.step)
+
+  if (index === -1) {
+    return [
+      ...previous,
+      {
+        step: incoming.step,
+        thought: incoming.thought ?? "",
+        action: incoming.action,
+        action_input: incoming.action_input,
+        observation_summary: incoming.observation_summary,
+        status: incoming.status ?? "thinking"
+      }
+    ]
   }
 
-  if (event.type === "tool_start") {
-    return {
-      step: event.step ?? 1,
-      thought: `Avvio tool ${event.tool ?? ""}`,
-      action: event.tool,
-      action_input: event.input,
-      status: "running"
-    }
+  const current = previous[index]
+
+  const updated: AgentStep = {
+    ...current,
+    ...incoming,
+    thought: incoming.thought ?? current.thought,
+    action: incoming.action ?? current.action,
+    action_input: incoming.action_input ?? current.action_input,
+    observation_summary:
+      incoming.observation_summary ?? current.observation_summary,
+    status: incoming.status ?? current.status
   }
 
-  if (event.type === "tool_result") {
-    return {
-      step: event.step ?? 1,
-      action: event.tool,
-      observation_summary: event.summary,
-      status: event.ok ? "ok" : "error"
-    }
-  }
+  const next = [...previous]
+  next[index] = updated
+  return next
+}
 
-  return null
+function normalizeFinalTrace(trace: AgentStep[] | undefined, fallback: AgentStep[]) {
+  if (Array.isArray(trace) && trace.length > 0) return trace
+  return fallback
 }
 
 export function useAgentStream() {
@@ -47,6 +60,7 @@ export function useAgentStream() {
   const [results, setResults] = useState<import("../../search/types").SearchItem[]>([])
   const [running, setRunning] = useState(false)
   const [finalPayload, setFinalPayload] = useState<FinalPayload | null>(null)
+  const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>([])
 
   const reset = useCallback(() => {
     runIdRef.current += 1
@@ -59,6 +73,7 @@ export function useAgentStream() {
     setSteps([])
     setResults([])
     setFinalPayload(null)
+    setPlannedTasks([])
     setRunning(false)
   }, [])
 
@@ -70,20 +85,36 @@ export function useAgentStream() {
 
     const currentRunId = runIdRef.current
     let localTrace: AgentStep[] = []
+    let localPlannedTasks: PlannedTask[] = []
 
-    const nextSource = streamAgent(query, (event) => {
+    const nextSource = streamAgent(query, (event: AgentEvent) => {
       if (currentRunId !== runIdRef.current) return
-      if (event.type === "heartbeat" || event.type === "start") return
+
+      if (event.type === "heartbeat") return
+
+      if (event.type === "start") {
+        localPlannedTasks = Array.isArray(event.planned_tasks)
+          ? event.planned_tasks
+          : []
+        setPlannedTasks(localPlannedTasks)
+        return
+      }
 
       if (event.type === "error") {
         setRunning(false)
         setFinalPayload({
-          finalAnswer: event.message || "Si è verificato un errore nello stream agentico.",
+          finalAnswer:
+            event.message || "Si è verificato un errore nello stream agentico.",
           results: [],
           analysis: null,
           sellerSummary: null,
           trace: localTrace,
-          errors: [event.message || "Unknown stream error"]
+          errors: [event.message || "Unknown stream error"],
+          plannedTasks: localPlannedTasks,
+          pendingTasks: [],
+          toolStates: {},
+          toolCalls: {},
+          finalData: null
         })
 
         if (sourceRef.current) {
@@ -93,10 +124,43 @@ export function useAgentStream() {
         return
       }
 
-      const traceStep = normalizeTraceStep(event)
-      if (traceStep) {
-        localTrace = [...localTrace, traceStep]
+      if (event.type === "thinking") {
+        const nextStep = {
+          step: event.step ?? 1,
+          thought: event.thought ?? event.message ?? "",
+          action: event.action,
+          status: "thinking" as const
+        }
+
+        localTrace = upsertStep(localTrace, nextStep)
         setSteps(localTrace)
+        return
+      }
+
+      if (event.type === "tool_start") {
+        const nextStep = {
+          step: event.step ?? 1,
+          action: event.tool,
+          action_input: event.input,
+          status: "running" as const
+        }
+
+        localTrace = upsertStep(localTrace, nextStep)
+        setSteps(localTrace)
+        return
+      }
+
+      if (event.type === "tool_result") {
+        const nextStep = {
+          step: event.step ?? 1,
+          action: event.tool,
+          observation_summary: event.summary,
+          status: event.ok ? ("ok" as const) : ("error" as const)
+        }
+
+        localTrace = upsertStep(localTrace, nextStep)
+        setSteps(localTrace)
+        return
       }
 
       if (event.type === "final") {
@@ -104,6 +168,13 @@ export function useAgentStream() {
         const search = finalData.search || {}
         const seller = finalData.seller || null
         const finalResults = Array.isArray(search.results) ? search.results : []
+        const finalTrace = normalizeFinalTrace(event.agent_trace, localTrace)
+
+        const toolStates = finalData.tool_states || {}
+        const toolCalls = finalData.tool_calls || {}
+        const pendingTasks = Array.isArray(finalData.pending_tasks)
+          ? finalData.pending_tasks
+          : []
 
         setResults(finalResults)
         setFinalPayload({
@@ -113,9 +184,16 @@ export function useAgentStream() {
           metrics: search.metrics || finalData.metrics,
           ragContext: search.rag_context,
           sellerSummary: seller,
-          trace: Array.isArray(event.agent_trace) && event.agent_trace.length > 0 ? event.agent_trace : localTrace,
-          errors: Array.isArray(finalData.errors) ? finalData.errors : []
+          trace: finalTrace,
+          errors: Array.isArray(finalData.errors) ? finalData.errors : [],
+          plannedTasks: localPlannedTasks,
+          pendingTasks,
+          toolStates: toolStates as Record<string, ToolStatePayload>,
+          toolCalls,
+          finalData
         })
+
+        setSteps(finalTrace)
         setRunning(false)
 
         if (sourceRef.current) {
@@ -151,6 +229,7 @@ export function useAgentStream() {
     results,
     running,
     finalPayload,
+    plannedTasks,
     run,
     reset
   }

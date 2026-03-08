@@ -64,18 +64,35 @@ def _stable_text_fingerprint(texts: Sequence[str]) -> str:
 # ============================================================
 
 @lru_cache(maxsize=1)
-def _anchor_vectors() -> tuple[np.ndarray, np.ndarray]:
+def _anchor_vectors():
+
     model = _get_model()
 
+    positive_examples = [
+        "excellent seller fast shipping",
+        "great product highly recommended",
+        "perfect transaction very happy",
+        "ottimo venditore spedizione veloce",
+        "perfetto consigliato"
+    ]
+
+    negative_examples = [
+        "terrible seller never again",
+        "fake item scam seller",
+        "bad service broken product",
+        "venditore pessimo prodotto rotto",
+        "truffa non comprate"
+    ]
+
     pos = model.encode(
-        "excellent seller fast shipping great service authentic item",
+        positive_examples,
         normalize_embeddings=True
-    ).astype("float32")
+    )
 
     neg = model.encode(
-        "terrible seller scam fake item bad service broken product",
+        negative_examples,
         normalize_embeddings=True
-    ).astype("float32")
+    )
 
     return pos, neg
 
@@ -174,13 +191,13 @@ def compute_sentiment_score(
             show_progress_bar=False,
         ).astype("float32")
 
-        sim_pos = np.dot(embs, pos_anchor)
-        sim_neg = np.dot(embs, neg_anchor)
+        sim_pos = np.max(np.dot(embs, pos_anchor.T), axis=1)
+        sim_neg = np.max(np.dot(embs, neg_anchor.T), axis=1)
 
         raw = sim_pos - sim_neg
         mean_score = float(np.mean(raw))
 
-        normalized = float(np.clip((mean_score + 1.0) / 2.0, 0.0, 1.0))
+        normalized = float(1 / (1 + np.exp(-3 * mean_score)))
 
     except Exception as e:
         logger.warning("Embedding sentiment failed, using heuristic: %s", e)

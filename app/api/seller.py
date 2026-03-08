@@ -9,7 +9,7 @@ seller_router = APIRouter()
 def get_feedback_route(
     seller_name: str,
     page: int = 1,
-    limit: int = 10
+    limit: int = 50
 ):
     try:
         return run_seller_pipeline(

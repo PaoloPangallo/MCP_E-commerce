@@ -1,6 +1,6 @@
 export type { Message, ChatEntry } from "./chat.ts"
 export type { AppMode } from "./common.ts"
-export type { AgentStep, AgentEvent } from "../features/agent/types.ts"
+export type { AgentStep, AgentEvent, FinalPayload } from "../features/agent/types.ts"
 export type {
   SearchItem,
   IRMetrics,
