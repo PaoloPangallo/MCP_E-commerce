@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -80,7 +81,7 @@ class AgentMemory:
     def pending_tasks(self) -> List[Dict[str, Any]]:
         if not self.has_pending_tasks():
             return []
-        return self.tasks[self.task_pointer :]
+        return self.tasks[self.task_pointer:]
 
     def register_tool_call(self, tool_name: str) -> None:
         self.tool_call_counts[tool_name] = self.tool_call_counts.get(tool_name, 0) + 1
@@ -105,6 +106,7 @@ class AgentMemory:
                 "payload": payload,
                 "tool": observation.tool,
                 "attempts": payload.get("_tool_attempts", 1),
+                "summary": observation.summary,
             }
 
         self._refresh_derived_fields(payload)
@@ -137,9 +139,16 @@ class AgentMemory:
     def state(self, state_key: str) -> Optional[Dict[str, Any]]:
         return self.tool_states.get(state_key)
 
+    def payload(self, state_key: str) -> Optional[Dict[str, Any]]:
+        state = self.state(state_key)
+        return state.get("payload") if state else None
+
     def has_terminal_state(self, state_key: str) -> bool:
         state = self.state(state_key)
         return bool(state and state.get("terminal"))
+
+    def has_any_terminal_state(self) -> bool:
+        return any(bool(state.get("terminal")) for state in self.tool_states.values())
 
     def has_useful_state(self, state_key: str) -> bool:
         state = self.state(state_key)
@@ -153,15 +162,32 @@ class AgentMemory:
         state = self.state(state_key)
         return state.get("status") if state else None
 
+    def terminal_states(self) -> Dict[str, bool]:
+        return {
+            key: bool(value.get("terminal"))
+            for key, value in self.tool_states.items()
+        }
+
+    def tool_state_summaries(self) -> Dict[str, Dict[str, Any]]:
+        return {
+            key: {
+                "tool": value.get("tool"),
+                "status": value.get("status"),
+                "quality": value.get("quality"),
+                "terminal": value.get("terminal"),
+                "attempts": value.get("attempts"),
+                "summary": value.get("summary"),
+            }
+            for key, value in self.tool_states.items()
+        }
+
     @property
     def search_payload(self) -> Optional[Dict[str, Any]]:
-        state = self.state("search")
-        return state.get("payload") if state else None
+        return self.payload("search")
 
     @property
     def seller_payload(self) -> Optional[Dict[str, Any]]:
-        state = self.state("seller")
-        return state.get("payload") if state else None
+        return self.payload("seller")
 
     def has_search_results(self) -> bool:
         results = (self.search_payload or {}).get("results") or []
@@ -176,6 +202,23 @@ class AgentMemory:
 
     def steps_done(self) -> int:
         return len(self.observations)
+
+    def recent_observations(self, limit: int = 5) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+
+        for observation in self.observations[-limit:]:
+            items.append(
+                {
+                    "tool": observation.tool,
+                    "status": observation.status,
+                    "quality": observation.quality,
+                    "summary": observation.summary,
+                    "state_key": observation.state_key,
+                    "terminal": observation.terminal,
+                }
+            )
+
+        return items
 
     def scratchpad(self) -> Dict[str, Any]:
         results = (self.search_payload or {}).get("results") or []
@@ -208,6 +251,8 @@ class AgentMemory:
             "metrics": self.metrics,
             "seller_summary": seller_summary,
             "tool_calls": dict(self.tool_call_counts),
+            "tool_states": self.tool_state_summaries(),
+            "recent_observations": self.recent_observations(limit=4),
             "recent_errors": self.errors[-3:],
         }
 
@@ -223,7 +268,9 @@ class AgentMemory:
             "search_analysis": self.search_analysis,
             "metrics": self.metrics,
             "errors": self.errors[-5:],
-            "tool_states": self.tool_states,
+            "tool_states": self.tool_state_summaries(),
+            "terminal_states": self.terminal_states(),
             "tool_calls": self.tool_call_counts,
             "pending_tasks": self.pending_tasks(),
+            "recent_observations": self.recent_observations(limit=5),
         }

@@ -1,5 +1,5 @@
 import { Avatar, Box, Chip, Paper, Rating, Typography } from "@mui/material"
-import type { Feedback } from "../types"
+import type { Feedback } from "../../../types"
 
 function normalizeRating(rating?: number) {
   if (rating === undefined) return "neutral"

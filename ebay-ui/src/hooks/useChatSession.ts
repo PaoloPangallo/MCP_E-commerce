@@ -1,61 +1,14 @@
-import { useEffect, useMemo, useState } from "react"
-import { useAgentStream } from "./useAgentStream"
+import { useEffect, useMemo } from "react"
 
 import type {
   ChatEntry,
   Message,
   SearchBlock
-} from "../component/searchTypes"
+} from "../types/searchTypes.ts"
 
-const HISTORY_KEY = "search_history"
-
-type HistoryItem = {
-  query: string
-  results: number
-}
-
-function getWelcomeMessage(): ChatEntry {
-  return {
-    type: "message",
-    msg: {
-      role: "assistant",
-      content:
-        "Ciao! Sono ebayGPT. Posso cercare prodotti, confrontare risultati, spiegare il ranking e analizzare l’affidabilità di un venditore eBay."
-    }
-  }
-}
-
-function safeParseHistory(): HistoryItem[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-
-    if (!Array.isArray(parsed)) return []
-
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item.query === "string" &&
-        typeof item.results === "number"
-    )
-  } catch {
-    return []
-  }
-}
-
-function saveSearchHistory(query: string, resultsCount = 0) {
-  const history = safeParseHistory()
-
-  const updated = [
-    { query, results: resultsCount },
-    ...history.filter(
-      (item) => item.query.toLowerCase() !== query.toLowerCase()
-    )
-  ].slice(0, 20)
-
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
-  window.dispatchEvent(new Event("search_history_updated"))
-}
+import { useAgentStream } from "../features/agent/hooks/useAgentStream.ts"
+import { useChatStore } from "../features/chat/store/chatStore.ts"
+import { useSidebarStore } from "../features/chat/store/sidebarStore.ts"
 
 function detectMode(
   resultsCount: number,
@@ -67,27 +20,31 @@ function detectMode(
 }
 
 export function useChatSession() {
-  const [chat, setChat] = useState<ChatEntry[]>([getWelcomeMessage()])
-  const [loadingQuery, setLoadingQuery] = useState<string | null>(null)
-  const [cache, setCache] = useState<Record<string, SearchBlock>>({})
+  const chat = useChatStore((state) => state.chat)
+  const loadingQuery = useChatStore((state) => state.loadingQuery)
+  const cache = useChatStore((state) => state.cache)
 
-  const {
-    steps,
-    running,
-    finalPayload,
-    run,
-    reset
-  } = useAgentStream()
+  const resetConversation = useChatStore((state) => state.resetConversation)
+  const setLoadingQuery = useChatStore((state) => state.setLoadingQuery)
+  const appendMessage = useChatStore((state) => state.appendMessage)
+  const appendAssistantMessage = useChatStore(
+    (state) => state.appendAssistantMessage
+  )
+  const appendSearchBlock = useChatStore((state) => state.appendSearchBlock)
+  const setCachedSearch = useChatStore((state) => state.setCachedSearch)
+
+  const addHistory = useSidebarStore((state) => state.addHistory)
+
+  const { steps, running, finalPayload, run, reset } = useAgentStream()
 
   const hasSearches = useMemo(
-    () => chat.some((entry) => entry.type === "search"),
+    () => chat.some((entry: ChatEntry) => entry.type === "search"),
     [chat]
   )
 
   const resetChat = () => {
     reset()
-    setChat([getWelcomeMessage()])
-    setLoadingQuery(null)
+    resetConversation()
   }
 
   const handleSend = async (text: string) => {
@@ -101,26 +58,17 @@ export function useChatSession() {
       content: query
     }
 
-    setChat((prev) => [...prev, { type: "message", msg: userMessage }])
+    appendMessage(userMessage)
 
-    if (cache[cacheKey]) {
-      const cached = cache[cacheKey]
+    const cached = cache[cacheKey]
 
-      saveSearchHistory(query, cached.results.length)
+    if (cached) {
+      addHistory({ query, results: cached.results.length })
 
-      setChat((prev) => [
-        ...prev,
-        {
-          type: "message",
-          msg: {
-            role: "assistant",
-            content:
-              cached.final_answer || "Ho recuperato la risposta dalla cache."
-          }
-        },
-        { type: "search", search: cached }
-      ])
-
+      appendAssistantMessage(
+        cached.final_answer || "Ho recuperato la risposta dalla cache."
+      )
+      appendSearchBlock(cached)
       return
     }
 
@@ -162,42 +110,28 @@ export function useChatSession() {
       !!newSearch.agent_trace?.length ||
       !!newSearch.errors?.length
 
-    setCache((prev) => ({
-      ...prev,
-      [cacheKey]: newSearch
-    }))
+    setCachedSearch(cacheKey, newSearch)
+    addHistory({ query, results: results.length })
 
-    saveSearchHistory(query, results.length)
+    appendAssistantMessage(
+      newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
+    )
 
     if (hasStructuredBlock) {
-      setChat((prev) => [
-        ...prev,
-        {
-          type: "message",
-          msg: {
-            role: "assistant",
-            content: newSearch.final_answer ?? "Analisi completata."
-          }
-        },
-        { type: "search", search: newSearch }
-      ])
-    } else {
-      setChat((prev) => [
-        ...prev,
-        {
-          type: "message",
-          msg: {
-            role: "assistant",
-            content:
-              newSearch.final_answer ??
-              "Ho completato l’analisi della richiesta."
-          }
-        }
-      ])
+      appendSearchBlock(newSearch)
     }
 
     setLoadingQuery(null)
-  }, [finalPayload, loadingQuery, steps])
+  }, [
+    finalPayload,
+    loadingQuery,
+    steps,
+    setCachedSearch,
+    addHistory,
+    appendAssistantMessage,
+    appendSearchBlock,
+    setLoadingQuery
+  ])
 
   return {
     chat,

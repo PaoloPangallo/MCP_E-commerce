@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 import { Box, Typography, CircularProgress, Chip, Button } from "@mui/material"
 
-import FeedbackCard from "./FeedbackCard.tsx";
-import type {Feedback} from "../types";
+import FeedbackCard from "./component/FeedbackCard.tsx";
+import type {Feedback} from "../../types";
 
 interface Props {
   feedbacks?: Feedback[]

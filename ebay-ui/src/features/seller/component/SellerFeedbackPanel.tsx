@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { Box, Button, CircularProgress, Divider, Typography, Chip } from "@mui/material"
 
-import SellerTrustGauge from "./SellerTrustGauge"
-import SellerFeedbackList from "./SellerFeedbackList"
-import type { Feedback } from "../types"
+import SellerTrustGauge from "./SellerTrustGauge.tsx"
+import SellerFeedbackList from "../SellerFeedbackList.tsx"
+import type { Feedback } from "../../../types"
 
 interface ApiResponse {
   seller_name?: string

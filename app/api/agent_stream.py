@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.agent.ebay_agent import EbayReactAgent
 from app.agent.schemas import AgentRequest
 from app.auth.dependencies import get_optional_user
-from app.db.database import SessionLocal, get_db
+from app.db.database import SessionLocal
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -36,9 +36,6 @@ def _sse(data: Dict[str, Any], event: str | None = None) -> str:
 
 
 def _validate_event(event: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Validazione minima per evitare payload incoerenti nello stream.
-    """
     if not isinstance(event, dict):
         return {
             "type": "error",
@@ -63,10 +60,6 @@ def _run_agent_stream_sync(
     user: Any,
     stop_event: threading.Event,
 ) -> Iterator[Dict[str, Any]]:
-    """
-    Esegue l'agente in sync dentro un thread dedicato.
-    La Session viene creata QUI, così non attraversa thread diversi.
-    """
     db: Optional[Session] = None
 
     try:
@@ -74,14 +67,14 @@ def _run_agent_stream_sync(
 
         agent = EbayReactAgent(db=db, user=user)
 
-        request = AgentRequest(
+        agent_request = AgentRequest(
             query=query,
             llm_engine=llm_engine,
-            max_steps=6,   # meglio non inchiodarlo a 4 se hai hybrid + recovery
+            max_steps=6,
             return_trace=True,
         )
 
-        for event in agent.run_stream(request):
+        for event in agent.run_stream(agent_request):
             if stop_event.is_set():
                 logger.info("Stop event detected: interrompo stream agente")
                 break
@@ -163,7 +156,6 @@ async def agent_event_generator(
             yield _sse(event)
             await asyncio.sleep(0)
 
-        # manda done solo se la connessione è ancora viva
         if not await request.is_disconnected():
             yield _sse({"type": "done"})
 
@@ -194,7 +186,6 @@ async def agent_stream(
     request: Request,
     query: str = Query(..., min_length=1),
     llm_engine: str = Query("gemini"),
-    _db: Session = Depends(get_db),  # tenuto solo se vuoi preservare dipendenze/auth stack
     user=Depends(get_optional_user),
 ):
     return StreamingResponse(

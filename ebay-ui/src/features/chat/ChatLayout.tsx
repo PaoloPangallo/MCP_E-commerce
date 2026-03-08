@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import {
   Box,
   Button,
@@ -16,16 +16,13 @@ import { useTheme } from "@mui/material/styles"
 
 import AddIcon from "@mui/icons-material/Add"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
 import MenuIcon from "@mui/icons-material/Menu"
 import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined"
 import SearchIcon from "@mui/icons-material/Search"
 
-interface HistoryItem {
-  query: string
-  results: number
-}
+import { useSidebarStore } from "./store/sidebarStore"
+import AuthPanel from "../../auth/ui/AuthPanel"
 
 interface Props {
   children: React.ReactNode
@@ -35,19 +32,7 @@ interface Props {
   sidebarTopSlot?: React.ReactNode
 }
 
-const HISTORY_KEY = "search_history"
-const PINNED_KEY = "pinned_searches"
 const SIDEBAR_WIDTH = 280
-
-function readArray<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 function SidebarSectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -87,19 +72,10 @@ function SidebarItem({
           py: 1.1,
           px: 1.25,
           alignItems: "center",
-          "&:hover": {
-            bgcolor: "#eceff3"
-          }
+          "&:hover": { bgcolor: "#eceff3" }
         }}
       >
-        <SearchIcon
-          sx={{
-            fontSize: 16,
-            color: "#6b7280",
-            mr: 1.25,
-            flexShrink: 0
-          }}
-        />
+        <SearchIcon sx={{ fontSize: 16, color: "#6b7280", mr: 1.25 }} />
 
         <ListItemText
           primary={query}
@@ -110,22 +86,20 @@ function SidebarItem({
           }}
         />
 
-        {onPin ? (
+        {onPin && (
           <IconButton
             size="small"
-            edge="end"
-            onClick={(event) => {
-              event.stopPropagation()
+            onClick={(e) => {
+              e.stopPropagation()
               onPin()
             }}
             sx={{
-              ml: 0.5,
               color: isPinned ? "#111827" : "#9ca3af"
             }}
           >
             <PushPinOutlinedIcon sx={{ fontSize: 16 }} />
           </IconButton>
-        ) : null}
+        )}
       </ListItemButton>
     </ListItem>
   )
@@ -138,66 +112,24 @@ export default function ChatLayout({
   onNewChat,
   sidebarTopSlot
 }: Props) {
+
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down("md"))
 
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [history, setHistory] = useState<HistoryItem[]>([])
-  const [pinned, setPinned] = useState<string[]>([])
+  const mobileOpen = useSidebarStore((s) => s.mobileOpen)
+  const history = useSidebarStore((s) => s.history)
+  const pinned = useSidebarStore((s) => s.pinned)
 
-  useEffect(() => {
-    const syncSidebar = () => {
-      const nextHistory = readArray<HistoryItem>(HISTORY_KEY).filter(
-        (item) =>
-          item &&
-          typeof item.query === "string" &&
-          item.query.trim().length > 0 &&
-          typeof item.results === "number"
-      )
-
-      const nextPinned = readArray<string>(PINNED_KEY).filter(
-        (item) => typeof item === "string" && item.trim().length > 0
-      )
-
-      setHistory(nextHistory)
-      setPinned(nextPinned)
-    }
-
-    syncSidebar()
-    window.addEventListener("search_history_updated", syncSidebar)
-
-    return () => {
-      window.removeEventListener("search_history_updated", syncSidebar)
-    }
-  }, [])
+  const setMobileOpen = useSidebarStore((s) => s.setMobileOpen)
+  const clearHistory = useSidebarStore((s) => s.clearHistory)
+  const pinSearch = useSidebarStore((s) => s.pinSearch)
+  const unpinSearch = useSidebarStore((s) => s.unpinSearch)
 
   const visibleHistory = useMemo(() => history.slice(0, 20), [history])
 
-  const clearHistory = () => {
-    localStorage.removeItem(HISTORY_KEY)
-    setHistory([])
-    window.dispatchEvent(new Event("search_history_updated"))
-  }
-
-  const pinSearch = (query: string) => {
-    const updated = [query, ...pinned.filter((item) => item !== query)].slice(
-      0,
-      10
-    )
-    localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
-    setPinned(updated)
-    window.dispatchEvent(new Event("search_history_updated"))
-  }
-
-  const unpinSearch = (query: string) => {
-    const updated = pinned.filter((item) => item !== query)
-    localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
-    setPinned(updated)
-    window.dispatchEvent(new Event("search_history_updated"))
-  }
-
   const handleSidebarSearch = (query: string) => {
     onSearch?.(query)
+
     if (isMobile) {
       setMobileOpen(false)
     }
@@ -212,58 +144,39 @@ export default function ChatLayout({
         bgcolor: "#f7f8fb"
       }}
     >
-      <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1.25,
-            px: 1,
-            py: 0.5
-          }}
-        >
+
+      {/* HEADER */}
+      <Box sx={{ px: 2, pt: 2 }}>
+        <Box display="flex" alignItems="center" gap={1.25}>
           <Box
             sx={{
               width: 30,
               height: 30,
-              borderRadius: 2.5,
+              borderRadius: 2,
               bgcolor: "#111827",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#fff",
-              flexShrink: 0
+              color: "#fff"
             }}
           >
             <AutoAwesomeIcon sx={{ fontSize: 17 }} />
           </Box>
 
           <Box>
-            <Typography
-              sx={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#111827",
-                lineHeight: 1.15
-              }}
-            >
+            <Typography fontSize={14} fontWeight={700}>
               ebayGPT
             </Typography>
 
-            <Typography
-              sx={{
-                fontSize: 12,
-                color: "#6b7280",
-                lineHeight: 1.25
-              }}
-            >
+            <Typography fontSize={12} color="#6b7280">
               chat search + seller trust
             </Typography>
           </Box>
         </Box>
       </Box>
 
-      <Box sx={{ px: 2, pb: 1.5 }}>
+      {/* NEW CHAT */}
+      <Box sx={{ px: 2, py: 2 }}>
         <Button
           fullWidth
           variant="contained"
@@ -273,9 +186,6 @@ export default function ChatLayout({
             justifyContent: "flex-start",
             textTransform: "none",
             borderRadius: 3,
-            py: 1.15,
-            px: 1.5,
-            fontWeight: 600,
             bgcolor: "#111827",
             boxShadow: "none",
             "&:hover": {
@@ -288,24 +198,22 @@ export default function ChatLayout({
         </Button>
       </Box>
 
-      {sidebarTopSlot ? <Box px={2} pb={1.5}>{sidebarTopSlot}</Box> : null}
+      {/* AUTH PANEL */}
+      <Box px={2} pb={2}>
+        {sidebarTopSlot ?? <AuthPanel />}
+      </Box>
 
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          pb: 1
-        }}
-      >
-        {pinned.length > 0 ? (
+      {/* HISTORY */}
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
+
+        {pinned.length > 0 && (
           <>
             <SidebarSectionTitle>Pinned</SidebarSectionTitle>
 
-            <List dense disablePadding sx={{ mb: 1 }}>
+            <List dense disablePadding>
               {pinned.map((query) => (
                 <SidebarItem
-                  key={`pinned-${query}`}
+                  key={query}
                   query={query}
                   onClick={() => handleSidebarSearch(query)}
                   onPin={() => unpinSearch(query)}
@@ -314,40 +222,31 @@ export default function ChatLayout({
               ))}
             </List>
 
-            <Divider sx={{ mx: 2, mb: 1.5 }} />
+            <Divider sx={{ mx: 2, my: 1 }} />
           </>
-        ) : null}
+        )}
 
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            px: 2,
-            pb: 1
-          }}
-        >
+        <Box display="flex" justifyContent="space-between" px={2}>
           <SidebarSectionTitle>Recenti</SidebarSectionTitle>
 
-          {visibleHistory.length > 0 ? (
-            <IconButton
-              size="small"
-              onClick={clearHistory}
-              sx={{ mt: -1, color: "#9ca3af" }}
-            >
+          {visibleHistory.length > 0 && (
+            <IconButton size="small" onClick={clearHistory}>
               <DeleteOutlineIcon sx={{ fontSize: 18 }} />
             </IconButton>
-          ) : null}
+          )}
         </Box>
 
         {visibleHistory.length > 0 ? (
           <List dense disablePadding>
             {visibleHistory.map((item) => {
-              const isPinned = pinned.includes(item.query)
+
+              const isPinned = pinned.some(
+                (p) => p.toLowerCase() === item.query.toLowerCase()
+              )
 
               return (
                 <SidebarItem
-                  key={`${item.query}-${item.results}`}
+                  key={item.query}
                   query={item.query}
                   onClick={() => handleSidebarSearch(item.query)}
                   onPin={() =>
@@ -361,54 +260,21 @@ export default function ChatLayout({
             })}
           </List>
         ) : (
-          <Box sx={{ px: 2.25, pt: 0.5 }}>
-            <Typography
-              sx={{
-                fontSize: 13,
-                color: "#6b7280",
-                lineHeight: 1.6
-              }}
-            >
-              Le tue ricerche recenti compariranno qui.
+          <Box px={2}>
+            <Typography fontSize={13} color="#6b7280">
+              Le tue ricerche compariranno qui.
             </Typography>
           </Box>
         )}
+
       </Box>
 
-      <Box sx={{ px: 2, py: 1.75 }}>
-        <Divider sx={{ mb: 1.5 }} />
-
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            px: 1
-          }}
-        >
-          <ChatBubbleOutlineIcon sx={{ fontSize: 16, color: "#6b7280" }} />
-
-          <Typography
-            sx={{
-              fontSize: 12.5,
-              color: "#6b7280"
-            }}
-          >
-            UI ispirata a ChatGPT, ottimizzata per search + reasoning.
-          </Typography>
-        </Box>
-      </Box>
     </Box>
   )
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        minHeight: "100vh",
-        bgcolor: "#f7f8fb"
-      }}
-    >
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+
       {isMobile ? (
         <Drawer
           open={mobileOpen}
@@ -417,8 +283,7 @@ export default function ChatLayout({
           ModalProps={{ keepMounted: true }}
           sx={{
             "& .MuiDrawer-paper": {
-              width: SIDEBAR_WIDTH,
-              borderRight: "1px solid #e5e7eb"
+              width: SIDEBAR_WIDTH
             }
           }}
         >
@@ -432,8 +297,7 @@ export default function ChatLayout({
             flexShrink: 0,
             "& .MuiDrawer-paper": {
               width: SIDEBAR_WIDTH,
-              boxSizing: "border-box",
-              borderRight: "1px solid #e5e7eb"
+              boxSizing: "border-box"
             }
           }}
         >
@@ -441,6 +305,7 @@ export default function ChatLayout({
         </Drawer>
       )}
 
+      {/* MAIN AREA */}
       <Box
         sx={{
           flex: 1,
@@ -449,71 +314,53 @@ export default function ChatLayout({
           flexDirection: "column"
         }}
       >
+
+        {/* TOP BAR */}
         <Box
           sx={{
             height: 56,
-            px: { xs: 1.5, md: 2.5 },
+            px: 2,
             display: "flex",
             alignItems: "center",
             gap: 1,
-            borderBottom: "1px solid #e5e7eb",
-            bgcolor: "rgba(247, 248, 251, 0.86)",
-            backdropFilter: "blur(10px)",
-            position: "sticky",
-            top: 0,
-            zIndex: 10
+            borderBottom: "1px solid #e5e7eb"
           }}
         >
-          {isMobile ? (
+          {isMobile && (
             <IconButton onClick={() => setMobileOpen(true)}>
               <MenuIcon />
             </IconButton>
-          ) : null}
+          )}
 
-          <Typography
-            sx={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#111827"
-            }}
-          >
+          <Typography fontSize={14} fontWeight={600}>
             ebayGPT
-          </Typography>
-
-          <Typography
-            sx={{
-              fontSize: 12.5,
-              color: "#6b7280"
-            }}
-          >
-            Conversational search workspace
           </Typography>
         </Box>
 
+        {/* CHAT AREA */}
         <Box
           sx={{
             flex: 1,
-            minHeight: 0,
             overflowY: "auto"
           }}
         >
           {children}
         </Box>
 
-        {composer ? (
+        {/* COMPOSER */}
+        {composer && (
           <Box
             sx={{
               position: "sticky",
-              bottom: 0,
-              zIndex: 8,
-              background:
-                "linear-gradient(180deg, rgba(247,248,251,0) 0%, rgba(247,248,251,0.9) 24%, rgba(247,248,251,1) 100%)"
+              bottom: 0
             }}
           >
             {composer}
           </Box>
-        ) : null}
+        )}
+
       </Box>
+
     </Box>
   )
 }

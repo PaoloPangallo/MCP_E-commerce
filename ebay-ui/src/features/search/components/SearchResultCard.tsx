@@ -7,11 +7,11 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 
-import SellerTrustGauge from "../../../component/SellerTrustGauge"
-import SellerFeedbackPanel from "../../../component/SellerFeedbackPanel"
-import ExplanationChips from "./ExplanationChips"
+import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
+import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
 import type { SearchItem } from "../types"
-import SellerInfo from "../../../component/SellerInfo.tsx";
+import SellerInfo from "../../seller/SellerInfo.tsx";
+import ExplanationChips from "./ExplanationChips.tsx";
 
 function formatPrice(price?: number, currency?: string) {
   if (typeof price !== "number") return "Prezzo non disponibile"

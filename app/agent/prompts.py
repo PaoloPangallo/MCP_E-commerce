@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -5,9 +6,11 @@ from typing import Any, Dict
 
 
 PLANNER_SYSTEM_PROMPT = """
-You are ebayGPT, an agentic e-commerce assistant.
+You are ebayGPT, an MCP-style e-commerce assistant.
 
 Decide only the NEXT BEST ACTION.
+Use ONLY the tools from the provided catalog.
+Do not invent tool names or parameters.
 Be conservative, short, and deterministic.
 
 Available intents:
@@ -18,36 +21,17 @@ Available intents:
 
 Rules:
 - If pending_tasks is not empty, prioritize completing those tasks before finishing.
-- Use seller_pipeline only for seller trust, feedback, reliability, or an explicitly known seller.
-- Use search_pipeline for product discovery, checking what a seller sells, and product comparison.
-- Do not repeat a tool if the scratchpad already has terminal information for that need.
-- Never invent seller names.
+- Prefer the tool whose tags and description best match the user's unmet need.
 - Never finish while a required part of the request is still unanswered.
+- If no tool is needed, finish.
+- Always keep the reasoning and any free text in Italian.
 - Return ONLY valid minified JSON.
-
-Few-shot examples:
-
-User: "ciao come va?"
-Output:
-{"thought":"Richiesta conversazionale.","intent":"conversation","action":"finish","action_input":{},"final_answer":null}
-
-User: "analizza il venditore mario_store"
-Output:
-{"thought":"Serve analisi seller.","intent":"seller_analysis","action":"seller_pipeline","action_input":{"seller_name":"mario_store","page":1,"limit":10},"final_answer":null}
-
-User: "cerca una maglia inter"
-Output:
-{"thought":"Serve ricerca prodotto.","intent":"product_search","action":"search_pipeline","action_input":{"query":"maglia inter"},"final_answer":null}
-
-User: "dammi i feedback del venditore mario_store e controlla se vende carte pokemon"
-Output:
-{"thought":"Richiesta ibrida, prima seller.","intent":"hybrid","action":"seller_pipeline","action_input":{"seller_name":"mario_store","page":1,"limit":10},"final_answer":null}
 
 Schema:
 {
   "thought":"short reasoning",
   "intent":"conversation|seller_analysis|product_search|hybrid",
-  "action":"search_pipeline|seller_pipeline|finish",
+  "action":"tool_name|finish",
   "action_input":{},
   "final_answer":null
 }
@@ -59,10 +43,10 @@ You are ebayGPT.
 
 Write the final answer in Italian.
 Use only the provided data.
-Do not invent prices, sellers, trust scores, metrics or results.
+Do not invent prices, sellers, trust scores, metrics, weather, or results.
 If the request was conversational, answer naturally and clearly.
 If no useful result exists, say it clearly.
-If both seller data and product data are available, combine them in one coherent answer.
+If multiple tool outputs are available, integrate them in one coherent answer.
 No markdown.
 No bullet points.
 """.strip()
@@ -75,6 +59,25 @@ def _compact_json(data: Dict[str, Any]) -> str:
         separators=(",", ":"),
         default=str,
     )
+
+
+def _compact_tool_catalog_for_prompt(tool_catalog: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    compact: Dict[str, Dict[str, Any]] = {}
+
+    for name, spec in (tool_catalog or {}).items():
+        if not isinstance(spec, dict):
+            continue
+
+        compact[name] = {
+            "description": spec.get("description"),
+            "input_schema": spec.get("input_schema"),
+            "required_fields": spec.get("required_fields") or [],
+            "tags": spec.get("tags") or [],
+            "examples": (spec.get("examples") or [])[:2],
+            "state_key": spec.get("state_key"),
+        }
+
+    return compact
 
 
 def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]:
@@ -92,6 +95,8 @@ def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]
         "seller_summary": scratchpad.get("seller_summary"),
         "search_analysis": scratchpad.get("search_analysis"),
         "tool_calls": scratchpad.get("tool_calls") or {},
+        "tool_states": scratchpad.get("tool_states") or {},
+        "recent_observations": scratchpad.get("recent_observations") or [],
         "recent_errors": scratchpad.get("recent_errors") or [],
     }
 
@@ -125,6 +130,8 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
         "metrics": final_data.get("metrics"),
         "errors": final_data.get("errors") or [],
         "pending_tasks": final_data.get("pending_tasks") or [],
+        "tool_states": final_data.get("tool_states") or {},
+        "recent_observations": final_data.get("recent_observations") or [],
     }
 
 
@@ -133,14 +140,15 @@ def build_planner_prompt(
     scratchpad: Dict[str, Any],
     step_index: int,
     max_steps: int,
-    tool_descriptions: Dict[str, str],
+    tool_catalog: Dict[str, Dict[str, Any]],
 ) -> str:
     compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
+    compact_tool_catalog = _compact_tool_catalog_for_prompt(tool_catalog)
 
     return (
         f"{PLANNER_SYSTEM_PROMPT}\n\n"
         f"Step:{step_index}/{max_steps}\n"
-        f"Tools:{_compact_json(tool_descriptions or {})}\n"
+        f"Available tools:{_compact_json(compact_tool_catalog)}\n"
         f"User query:{user_query}\n"
         f"Scratchpad:{_compact_json(compact_scratchpad)}\n"
         f"Return JSON only."

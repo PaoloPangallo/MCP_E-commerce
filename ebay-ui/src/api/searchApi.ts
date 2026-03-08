@@ -5,7 +5,7 @@ import type {
   RagContext,
   SearchItem,
   SellerSummaryBlock
-} from "../component/searchTypes"
+} from "../types/searchTypes.ts"
 
 export interface ParsedQuery {
   semantic_query?: string

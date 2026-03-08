@@ -1,9 +1,9 @@
 import { useState } from "react"
-import { searchProducts } from "../api/searchApi"
+import { searchProducts } from "../../../api/searchApi.ts"
 
 import type {
   SearchItem
-} from "../component/searchTypes"
+} from "../../../types/searchTypes.ts"
 
 export function useSearch() {
 

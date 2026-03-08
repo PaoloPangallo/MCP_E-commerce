@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import logging
@@ -9,8 +10,16 @@ from app.agent.executor import ToolExecutor
 from app.agent.memory import AgentMemory
 from app.agent.planner import ReactPlanner
 from app.agent.prompts import build_final_answer_prompt
-from app.agent.schemas import AgentResponse, AgentRequest, ThinkingEvent, ToolStartEvent, ToolResultEvent, StartEvent, \
-    AgentStep, FinalEvent
+from app.agent.schemas import (
+    AgentResponse,
+    AgentRequest,
+    ThinkingEvent,
+    ToolStartEvent,
+    ToolResultEvent,
+    StartEvent,
+    AgentStep,
+    FinalEvent,
+)
 from app.agent.task_decomposer import decompose_query
 from app.agent.tool_registry import ToolContext
 from app.services.parser import call_gemini, call_ollama
@@ -95,7 +104,7 @@ class EbayReactAgent:
 
                 yield ThinkingEvent(
                     step=step_index,
-                    message="Ho raccolto abbastanza informazioni.",
+                    message="Sto preparando la risposta.",
                 ).model_dump()
                 break
 
@@ -164,6 +173,20 @@ class EbayReactAgent:
         ).model_dump()
 
     def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
+        if memory.detected_intent == "conversation":
+            prompt = f"""
+You are ebayGPT, a helpful conversational assistant.
+Respond in Italian.
+User message:
+{memory.user_query}
+
+Respond naturally and briefly.
+"""
+            llm_text = self._call_final_llm(prompt, llm_engine)
+
+            if llm_text and llm_text.strip():
+                return llm_text.strip()
+
         fallback = self._fallback_final_answer(memory)
 
         if self._is_fallback_good_enough(memory, fallback):
@@ -199,15 +222,15 @@ class EbayReactAgent:
             return False
 
         if memory.detected_intent == "conversation":
-            return True
+            return False
 
-        if memory.has_terminal_state("search") or memory.has_terminal_state("seller"):
+        if memory.search_payload or memory.seller_payload:
             return True
 
         if memory.errors:
             return True
 
-        return bool(fallback)
+        return False
 
     def _fallback_final_answer(self, memory: AgentMemory) -> str:
         intent = (memory.detected_intent or "").lower()
@@ -231,6 +254,16 @@ class EbayReactAgent:
                 "Non sono riuscito a completare correttamente l'analisi. "
                 f"Ultimo errore: {memory.errors[-1]}"
             )
+
+        recent = memory.recent_observations(limit=3)
+        if recent:
+            joined = " ".join(
+                item["summary"].strip()
+                for item in recent
+                if isinstance(item.get("summary"), str) and item["summary"].strip()
+            ).strip()
+            if joined:
+                return joined
 
         if intent == "seller_analysis":
             return "Per analizzare il venditore mi serve il suo nome esatto."

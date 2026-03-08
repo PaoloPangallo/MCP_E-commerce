@@ -3,16 +3,16 @@ import { Box, Chip, Paper, Typography } from "@mui/material"
 
 
 
-import { useChatSession } from "../hooks/useChatSession"
-import type { SearchBlock } from "../features/search/types"
-import AIThinkingPipeline from "../features/agent/components/AIThinkingPipeline.tsx";
-import AIAnalysisCard from "../features/agent/components/AIAnalysisCard.tsx";
+import { useChatSession } from "../../hooks/useChatSession.ts"
+import type { SearchBlock } from "../search/types.ts"
+import AIThinkingPipeline from "../agent/components/AIThinkingPipeline.tsx";
+import AIAnalysisCard from "../agent/components/AIAnalysisCard.tsx";
 import ChatLayout from "./ChatLayout.tsx";
-import SearchResultList from "../features/search/components/SearchResultList.tsx";
+import SearchResultList from "../search/components/SearchResultList.tsx";
 import ChatInput from "./ChatInput.tsx";
 import MessageBubble from "./MessageBubble.tsx";
-import SellerTrustGauge from "./SellerTrustGauge.tsx";
-import SellerFeedbackPanel from "./SellerFeedbackPanel.tsx";
+import SellerTrustGauge from "../seller/component/SellerTrustGauge.tsx";
+import SellerFeedbackPanel from "../seller/component/SellerFeedbackPanel.tsx";
 
 function SellerSummaryCard({ sellerName, trustScore, sentimentScore, count }: { sellerName?: string; trustScore?: number; sentimentScore?: number; count?: number }) {
   if (!sellerName) return null
