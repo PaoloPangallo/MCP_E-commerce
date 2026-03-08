@@ -1,13 +1,16 @@
+import torch
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from functools import lru_cache
 
-
 # ============================================================
-# MODEL LOAD
+# GPU CONFIG & MODEL LOAD
 # ============================================================
 
-_model = SentenceTransformer("all-MiniLM-L6-v2")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# Usiamo un modello multilingue per supportare meglio l'Italiano su eBay
+_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device=device)
+_model.to(device)
 
 
 # ============================================================

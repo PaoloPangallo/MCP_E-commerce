@@ -52,7 +52,7 @@ export async function searchProducts(
 ): Promise<SearchResponse> {
   return apiFetch<SearchResponse>("/search", {
     method: "POST",
-    timeout: 90000,
+    timeout: 180000,
     body: JSON.stringify({
       query,
       llm_engine: "ollama",

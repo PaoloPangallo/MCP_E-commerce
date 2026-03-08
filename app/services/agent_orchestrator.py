@@ -91,6 +91,8 @@ def _extract_tool_call_from_text(text: str) -> Dict[str, Any]:
 
 from app.services.agent_graph import run_agent_graph
 
+from app.services.session_persistence import save_session_state, load_session_state
+
 def ask_agent_orchestrator(
     user_message: str, 
     history: List[Dict[str, str]],
@@ -101,10 +103,25 @@ def ask_agent_orchestrator(
     ecommerce_pipeline_func=None 
 ) -> Dict[str, Any]:
     """
-    Nuovo Orchestratore basato su LangGraph.
-    Delegata la logica di loop allo StateGraph per una maggiore autonomia.
+    Nuovo Orchestratore basato su LangGraph con PERSISTENZA STATO.
     """
+    session_id = str(user_obj.id) if user_obj and hasattr(user_obj, "id") else "guest"
+    SESSION_TTL = 900 # 15 minuti
     
+    # Tentiamo il recupero solo se il contesto è assente
+    is_greeting = re.search(r"^(ciao|hi|buongiorno|salve|hey)\b", user_message.lower().strip())
+    if not context and not (session_id == "guest" and is_greeting):
+        persisted = load_session_state(session_id)
+        if persisted and "_last_updated" in persisted:
+            age = time.time() - persisted["_last_updated"]
+            
+            # Recuperiamo sempre se la sessione è "fresca" (age < TTL)
+            if age < SESSION_TTL:
+                logger.info(f"ORCHESTRATOR: Recovered context for session '{session_id}' (age: {int(age)}s).")
+                context = persisted.get("parsed_query")
+            else:
+                logger.info(f"ORCHESTRATOR: Persisted context for '{session_id}' expired (age: {int(age)}s).")
+
     shared_state: Dict[str, Any] = {
         "results": [],
         "parsed_query": context or None,
@@ -124,6 +141,10 @@ def ask_agent_orchestrator(
             history=history,
             shared_state=shared_state
         )
+        
+        # PERSISTENZA: salviamo lo stato aggiornato per la prossima volta
+        if "shared_state" in response_payload:
+            save_session_state(session_id, response_payload["shared_state"])
         
         # Aggiungiamo i timing finali se non presenti
         if "_timings" in response_payload:

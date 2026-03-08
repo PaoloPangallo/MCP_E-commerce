@@ -219,53 +219,71 @@ def _build_query(parsed: Dict[str, Any]) -> str:
     semantic = parsed.get("semantic_query", "")
     sem_parts = str(semantic).split()
     
-    # Add values from compatibilities (e.g., Size: 42, Color: Black)
+    # Add values from compatibilities (e.g., Size: 42, Color: Black, TargetModel: iPhone)
     compatibilities = parsed.get("compatibilities") or {}
     comp_values = [str(v) for v in compatibilities.values() if v]
     
     # Merge Logic: Add parts from brands + product + compatibilities, then add semantic parts
-    raw_parts = []
+    raw_candidates = []
     if brands:
-        if isinstance(brands, list): raw_parts.extend([str(b) for b in brands])
-        else: raw_parts.append(str(brands))
+        if isinstance(brands, list): raw_candidates.extend([str(b) for b in brands])
+        else: raw_candidates.append(str(brands))
     if product:
-        if isinstance(product, list): raw_parts.extend([str(p) for p in product])
-        else: raw_parts.append(str(product))
+        if isinstance(product, list): raw_candidates.extend([str(p) for p in product])
+        else: raw_candidates.append(str(product))
     if comp_values:
-        raw_parts.extend(comp_values)
-        
-    for item in raw_parts:
-        # Check if this item (as a whole or its words) should be added
-        item_words = str(item).split()
-        for iw in item_words:
-            if not any(iw.lower() == p.lower() for p in parts):
-                parts.append(iw)
-
-    for sp in sem_parts:
-        if not any(sp.lower() == p.lower() for p in parts):
-            parts.append(sp)
+        raw_candidates.extend(comp_values)
+    
+    # Pre-add semantic query parts
+    raw_candidates.extend(str(semantic).split())
 
     # Stopwords list: generic words that pollute eBay search results
     stopwords = {
         "modello", "tipo", "articolo", "cercare", "cerco", "vorrei", "trovami", "oggetto", 
         "chiesto", "richiesta", "precedente", "quello", "quelli", "stessi", "altri", "altre",
         "ciao", "grazie", "per", "con", "dei", "delle", "degli", "un", "una", "uno", 
-        "li", "lo", "la", "le", "il", "i", "gli", "da", "di", "a", "in", "su", "nel", "nella", "dai", "dai", "da", "del", "della"
+        "li", "lo", "la", "le", "il", "i", "gli", "da", "di", "a", "in", "su", "nel", "nella", 
+        "chi", "cosa", "come", "dove", "quando", "perché", "perche", "puoi", "fare", "fai", "fatto",
+        "aiutarmi", "aiuto", "assistenza", "cercami", "trova", "voglio", "serve", "servirebbe",
+        "mille", "benvenuto", "gentilissimo", "ok", "va", "bene", "figo", "perfetto", "ottimo",
+        "cerchiamo", "vediamo", "prodotto", "help", "search", "shopping", "assistant", "ebay",
+        "originale", "keywords", "taglia", "numero", "size", "percaso", "caso", "colore", "color", 
+        "ce", "disponibile", "disponibili", "trovi", "trovare", "esiste", "esistono", "sono", "sia", "fosse"
     }
+
+    seen_norms = set()
+    cleaned_parts = []
     
-    parts = [p for p in parts if p.lower() not in stopwords]
+    for candidate in raw_candidates:
+        # Split candidate in case it contains multiple words (e.g. from brands list)
+        for word in str(candidate).split():
+            # NORMALIZE: remove punctuation for check (e.g. "ciao," -> "ciao")
+            w_clean = re.sub(r"[^\w]", "", word.lower())
+            
+            if not w_clean or len(w_clean) < 2:
+                continue
+                
+            if w_clean in stopwords:
+                continue
+                
+            if w_clean not in seen_norms:
+                cleaned_parts.append(word)
+                seen_norms.add(w_clean)
 
     # Category-Specific Standardization (Safety Layer)
-    query_str = " ".join(parts)
+    query_str = " ".join(cleaned_parts)
     product_low = str(product).lower()
     
-    # 1. Shoes: "taglia 43" -> "EU 43"
+    # 1. Shoes: "taglia 44" -> "EU 44", Gender detection
     if any(x in product_low for x in ["scarpe", "sneakers", "stivali", "calzature"]):
         # Match standalone numbers 35-48 or "taglia/numero 43"
         query_str = re.sub(r"\b(?:taglia|numero|taglie)\s+(\d{2})\b", r"EU \1", query_str, flags=re.IGNORECASE)
-        # If we see a standalone number that looks like a shoe size and not already part of "EU X"
-        query_str = re.sub(r"\b(?<!EU\s)(\d{2})\b", r"EU \1", query_str) if re.search(r"\b\d{2}\b", query_str) else query_str
-
+        # Gender standardization for shoes
+        if "uomo" in query_str.lower() and "men's" not in query_str.lower():
+            query_str += " Men's"
+        elif "donna" in query_str.lower() and "women's" not in query_str.lower():
+            query_str += " Women's"
+            
     # 2. Jeans/Pants: "taglia X lunghezza Y" -> "WX LY"
     elif any(x in product_low for x in ["jeans", "pantaloni", "pantalone"]):
         t_match = re.search(r"taglia\s+(\d+)", query_str, re.IGNORECASE)
@@ -280,7 +298,6 @@ def _build_query(parsed: Dict[str, Any]) -> str:
     final_words = []
     seen = set()
     for w in query_str.split():
-        # Remove punctuation for comparison (e.g., "Levi's" vs "levis")
         w_norm = re.sub(r"[^\w]", "", w.lower())
         if w_norm and w_norm not in seen:
             final_words.append(w)
@@ -291,9 +308,6 @@ def _build_query(parsed: Dict[str, Any]) -> str:
     if not final_q:
         final_q = parsed.get("original_query", "")
 
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"Final eBay Query Construction: '{final_q}'")
     return final_q
 
 

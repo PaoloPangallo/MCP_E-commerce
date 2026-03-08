@@ -1,57 +1,62 @@
-from typing import List, Dict
+import json
+import logging
+from typing import List, Dict, Optional
+from langchain_community.chat_models import ChatOllama
+from langchain_core.messages import HumanMessage, SystemMessage
+import os
 
+logger = logging.getLogger(__name__)
+
+# Configurazione LLM per l'Explainer (simile a Planner)
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral-nemo")
+
+explainer_llm = ChatOllama(
+    model=OLLAMA_MODEL,
+    temperature=0.7, # Più creativo per l'eloquenza
+    keep_alive=0
+)
 
 def explain_results(query: str, items: List[Dict], missing_info: List[str] = None) -> str:
-
+    """Genera una spiegazione 'Eloquente' usando l'LLM."""
     if not items:
-        # Se non ci sono risultati, cerchiamo di essere utili
-        msg = f"🔍 **Ricerca per: '{query}'**\n\nPurtroppo non ho trovato risultati che corrispondano esattamente ai tuoi criteri su eBay."
-        if missing_info:
-            readable = ", ".join([f"**{m}**" for m in missing_info])
-            msg += f"\n\n💡 **Suggerimento:** Prova a specificare meglio questi dettagli per aiutarmi a trovare quello che cerchi: {readable}."
-        return msg
+        readable_missing = f" (magari aggiungendo: {', '.join(missing_info)})" if missing_info else ""
+        return f"### 🔍 Ricerca per: *{query}*\n\nPurtroppo non ho trovato risultati che corrispondano esattamente ai tuoi criteri su eBay{readable_missing}. Prova a variare i termini di ricerca o a essere meno specifico."
 
-    best = items[0]
-    best_title = best.get("title", "Prodotto senza titolo")
-    best_price = best.get("price", "N.D.")
-    best_currency = best.get("currency", "€")
-    best_seller = best.get("seller_name", "Venditore Privato")
-    trust = best.get("trust_score", 0)
-    
-    explanation = []
-    explanation.append(f"### 🎯 Risultato consigliato per: *{query}*")
-    explanation.append(f"Ho analizzato **{len(items)}** prodotti e questo è il migliore per te:\n")
-    
-    # Card del prodotto
-    explanation.append(f"**[{best_title}]({best.get('url', '#')})**")
-    explanation.append(f"💰 **Prezzo:** {best_price} {best_currency}")
-    explanation.append(f"👤 **Venditore:** {best_seller} (Affidabilità: **{round(trust * 100)}%**)")
-    explanation.append("")
+    # Prepariamo i dati per l'LLM (top 3 risultati)
+    top_3 = []
+    for it in items[:3]:
+        top_3.append({
+            "title": it.get("title"),
+            "price": f"{it.get('price')} {it.get('currency')}",
+            "seller": it.get("seller_name"),
+            "trust": f"{round(it.get('trust_score', 0) * 100)}%",
+            "features": it.get("explanations", [])
+        })
 
-    # Motivazioni del ranking
-    reasons = best.get("explanations") or []
-    if reasons:
-        explanation.append("✨ **Perché lo abbiamo scelto:**")
-        for r in reasons:
-            explanation.append(f"- {r}")
-    else:
-        explanation.append("✨ **Perché lo abbiamo scelto:** Questo prodotto offre il miglior bilanciamento tra pertinenza, prezzo e reputazione del venditore.")
-    
-    explanation.append("")
+    prompt = f"""
+Sei un Personal Shopper di alto livello per eBay. Il tuo compito è presentare i risultati della ricerca all'utente in modo ELEQUENTE, PROFESSIONALE e PERSUASIVO.
 
-    # RAG Social Proof
-    feedbacks = best.get("rag_feedback") or []
-    if feedbacks:
-        explanation.append("💬 **Cosa dicono gli acquirenti di questo venditore:**")
-        for f in feedbacks[:2]:
-            text = f.get("text", "").strip()
-            if text:
-                explanation.append(f"> \"{text}\"")
-        explanation.append("")
+RICHIESTA UTENTE: "{query}"
+PRODOTTI TROVATI: {json.dumps(top_3, ensure_ascii=False)}
 
-    # Suggerimenti per affinare
-    if missing_info:
-        readable = ", ".join([f"**{m}**" for m in missing_info])
-        explanation.append(f"💡 **Vuoi essere più preciso?** Se mi dici il tuo **{readable}** posso filtrare i risultati ancora meglio.")
+REGOLE DI RISPOSTA:
+1. Tono caloroso e da esperto, non tecnico/robotico.
+2. Formattazione pulita: usa titoli ###, grassetti e liste.
+3. Spiega PERCHÉ il primo prodotto è la scelta migliore (bilancio prezzo/reputazione).
+4. Se ci sono alternative valide (secondo/terzo), accennale brevemente.
+5. Includi suggerimenti solo se mancano parametri chiave (tipo taglia o colore).
+6. Lingua: ITALIANO.
 
-    return "\n".join(explanation)
+RISPOSTA:
+"""
+    try:
+        response = explainer_llm.invoke([
+            SystemMessage(content="Sei un assistente allo shopping esperto ed eloquente. Scrivi in modo fluido ed elegante."),
+            HumanMessage(content=prompt)
+        ])
+        return response.content.strip()
+    except Exception as e:
+        logger.error(f"Errore LLM Explainer: {e}")
+        # Fallback se l'LLM fallisce
+        best = items[0]
+        return f"### 🎯 Ho trovato quello che cercavi!\nIl prodotto migliore è **{best.get('title')}** a {best.get('price')} {best.get('currency')}. L'ho scelto perché il venditore ha un'affidabilità del {round(best.get('trust_score', 0)*100)}%."

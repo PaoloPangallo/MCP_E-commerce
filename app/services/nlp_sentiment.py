@@ -1,13 +1,16 @@
+import torch
+from sentence_transformers import SentenceTransformer
 from typing import List, Dict
 import numpy as np
-from sentence_transformers import SentenceTransformer
-
 
 # ============================================================
-# MODEL (singleton)
+# GPU CONFIG & MODEL (singleton)
 # ============================================================
 
-_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# Usiamo un modello multilingue per gestire i feedback italiani su eBay
+_MODEL = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device=device)
+_MODEL.to(device)
 
 
 # ============================================================

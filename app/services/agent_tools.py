@@ -136,13 +136,19 @@ def tool_search_products(state: Dict[str, Any], **kwargs) -> str:
     if not isinstance(parsed, dict):
         parsed = {"semantic_query": str(parsed)}
 
-    # Se la query è allucinata o assente, usiamo la semantic_query già parsata
-    if is_hallucinated or not query:
-        logger.warning(f"HALLUCINATED QUERY DETECTED: '{query}'. Falling back to parsed semantic_query.")
-        query = parsed.get("semantic_query") or ""
-    elif query and query != parsed.get("semantic_query"):
-        # Se l'agente ha fornito una query valida ma diversa, la usiamo
-        parsed["semantic_query"] = query
+    # PRIORITÀ ALLA QUERY PULITA DEL PARSER (semantic_query)
+    clean_search_query = parsed.get("semantic_query")
+    if clean_search_query and len(clean_search_query.strip()) > 3 and not is_hallucinated:
+        query = clean_search_query
+    elif not query or is_hallucinated:
+        logger.warning(f"FALLBACK: Using original message words because search_query is missing or hallucinated.")
+        from langchain_core.messages import HumanMessage
+        query_text = ""
+        for msg in reversed(state.get("messages", [])):
+            if isinstance(msg, HumanMessage):
+                query_text = msg.content
+                break
+        query = " ".join([w for w in query_text.split() if len(w) > 3]) or parsed.get("product", "jeans")
     
     # Se dopo tutto non abbiamo nulla, errore
     if not query and not parsed.get("semantic_query"):
@@ -404,11 +410,9 @@ def tool_search_products(state: Dict[str, Any], **kwargs) -> str:
 
 def tool_explain_results(state: Dict[str, Any], **kwargs) -> str:
     """Genera una spiegazione finale (analoga allo step 7 della pipeline)."""
-    query = kwargs.get("query") or ""
-    results = state.get("results", [])
-    
     # Recupera info mancanti dal parser per arricchire la spiegazione
     parsed = state.get("parsed_query") or {}
+    query = kwargs.get("query") or parsed.get("semantic_query") or parsed.get("search_query") or ""
     missing = parsed.get("missing_info", [])
     
     explanation = generate_explanation(query, results, missing_info=missing)
@@ -511,11 +515,18 @@ def tool_detect_price_anomaly(state: Dict[str, Any], **kwargs) -> str:
     state["thinking_trace"].append("✔ analyzed price anomalies")
     return json.dumps({"anomaly_score": 0.1, "is_anomalous": False})
 
+def tool_social_response(state: Dict[str, Any], **kwargs) -> str:
+    """Risponde a messaggi sociali (grazie, ciao, etc) con grande creatività."""
+    response = kwargs.get("response") or "Ciao! Sono il tuo assistente shopping AI. Come posso aiutarti oggi?"
+    return json.dumps({
+        "response": response,
+        "social_message": response
+    })
+
 def tool_request_user_clarification(state: Dict[str, Any], **kwargs) -> str:
     """Chiede chiarimenti all'utente."""
     question = kwargs.get("question") or kwargs.get("clarification") or "Puoi chiarire la tua richiesta?"
     return json.dumps({"question": question})
-
 
 def tool_detect_intent(state: Dict[str, Any], **kwargs) -> str:
     """Rileva l'intento dell'utente (per routing)."""
@@ -619,8 +630,29 @@ AGENT_TOOLS_SCHEMA = [
         },
     },
     # ==========================================================
-    # CLARIFICATION
+    # SOCIAL & CLARIFICATION
     # ==========================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "social_response",
+            "description": (
+                "Call this for greetings (ciao, hi), thanks, or general conversation. "
+                "The assistant should be professional and mention its capabilities: "
+                "Deep Search, Seller Analysis, and AI Ranking."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "response": {
+                        "type": "string",
+                        "description": "Your creative and professional response in Italian",
+                    }
+                },
+                "required": ["response"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -752,5 +784,6 @@ TOOLS_MAP = {
     "detect_price_anomaly": tool_detect_price_anomaly,
     "rerank_products": tool_rerank_products,
     "explain_results": tool_explain_results,
+    "social_response": tool_social_response,
     "request_user_clarification": tool_request_user_clarification,
 }

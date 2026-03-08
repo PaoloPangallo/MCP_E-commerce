@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 *.db
 .env
+app/logs/*
 
 # Virtual environment
 venv/

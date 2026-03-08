@@ -55,9 +55,8 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
 LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()  # es. "ollama"
 
 # Ollama
-
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "30"))
+OLLAMA_MODEL = os.getenv("PARSER_MODEL", os.getenv("OLLAMA_MODEL", "llama3.1:latest")).split('#')[0].strip()
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 
 # Gemini
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -69,6 +68,7 @@ logger = logging.getLogger(__name__)
 
 # Lista piccola e opzionale: SOLO canonicalizzazione/fallback (non dipendere solo da questa)
 BRAND_WHITELIST = {
+    # Tech
     "apple": "Apple",
     "iphone": "iPhone",
     "macbook": "MacBook",
@@ -80,16 +80,40 @@ BRAND_WHITELIST = {
     "playstation": "PlayStation",
     "ps5": "PS5",
     "xbox": "Xbox",
-    "lenovo": "Lenovo",
-    "asus": "ASUS",
     "hp": "HP",
     "dell": "Dell",
+    "asus": "ASUS",
     "acer": "Acer",
+    "lenovo": "Lenovo",
     "msi": "MSI",
     "lg": "LG",
     "dyson": "Dyson",
     "bose": "Bose",
     "jbl": "JBL",
+    
+    # Fashion & Luxury
+    "ck": "Calvin Klein",
+    "calvin": "Calvin Klein",
+    "th": "Tommy Hilfiger",
+    "tommy": "Tommy Hilfiger",
+    "rl": "Ralph Lauren",
+    "ralph": "Ralph Lauren",
+    "lv": "Louis Vuitton",
+    "vuitton": "Louis Vuitton",
+    "dg": "Dolce & Gabbana",
+    "dolce": "Dolce & Gabbana",
+    "gabbana": "Dolce & Gabbana",
+    "armani": "Giorgio Armani",
+    "ea7": "Emporio Armani",
+    "gucci": "Gucci",
+    "prada": "Prada",
+    "versace": "Versace",
+    "nike": "Nike",
+    "adidas": "Adidas",
+    "puma": "Puma",
+    "reebok": "Reebok",
+    "levis": "Levi's",
+    "levìs": "Levi's",
 }
 # Brand vocabulary dinamica (popolata dal layer search)
 BRAND_VOCAB: List[str] = []
@@ -550,7 +574,6 @@ def call_ollama(prompt: str) -> Optional[str]:
     try:
         url = "http://localhost:11434/api/generate"
 
-        print(OLLAMA_MODEL)
         payload = {
             "model": OLLAMA_MODEL,
             "prompt": prompt,
@@ -725,6 +748,34 @@ def normalize_condition_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"type": "condition", "value": val}
 
 
+def clean_semantic_query(query: str) -> str:
+    """Rimuove programmaticamente parole di disturbo dalla query di ricerca."""
+    if not query:
+        return ""
+    
+    # Parole da rimuovere (noise)
+    forbidden = {
+        "budget", "euro", "prezzo", "costo", "massimo", "minimo", "circa", "intorno",
+        "taglia", "misura", "size", "color", "colore", "vorrei", "cerco", "trovami",
+        "grazie", "ciao", "salve", "per", "come", "alla", "sotto", "sopra", "entro",
+        "spedizione", "venditore", "nuovo", "usato", "condizione", "brand", "marca"
+    }
+    
+    # Rimuoviamo simboli di valuta e punteggiatura
+    query = re.sub(r"[€$£]", "", query)
+    words = query.split()
+    
+    # Filtriamo le parole, mantenendo solo quelle non proibite e non numeriche pure (a meno che non siano taglie o modelli)
+    clean_words = []
+    for w in words:
+        clean_w = w.lower().strip(" ,.!?()[]\"")
+        if clean_w not in forbidden and len(clean_w) > 1:
+            # Se è un numero puro e non sembra un anno o un modello tech, potremmo volerlo togliere, 
+            # ma per ora siamo conservativi e togliamo solo il noise testuale.
+            clean_words.append(w)
+            
+    return " ".join(clean_words).strip()
+
 def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(c, dict):
         return None
@@ -761,11 +812,10 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
     result = empty_result(original_query)
 
     semantic_query = data.get("semantic_query")
-    result["semantic_query"] = (
-        semantic_query.strip()
-        if isinstance(semantic_query, str) and semantic_query.strip()
-        else original_query
-    )
+    if isinstance(semantic_query, str) and semantic_query.strip():
+        result["semantic_query"] = clean_semantic_query(semantic_query.strip())
+    else:
+        result["semantic_query"] = clean_semantic_query(original_query)
 
     brands = data.get("brands", [])
     if isinstance(brands, list):
@@ -843,19 +893,33 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
 # LLM PARSE
 # ============================================================
 
-def llm_parse(query: str) -> Tuple[Optional[Dict[str, Any]], str]:
+def llm_parse(query: str, previous_context: Dict[str, Any] = None) -> Tuple[Optional[Dict[str, Any]], str]:
+    context_part = ""
+    if previous_context:
+        ctx_clean = {k: v for k, v in previous_context.items() if not k.startswith("_")}
+        context_part = f"\nPREVIOUS SHOPPING CONTEXT: {json.dumps(ctx_clean, ensure_ascii=False)}\nUSE CONTEXT TO: Resolve pronouns (li, quello), maintain core product/brand if user only adds attributes (color, size), and detect topic changes.\n"
+
     prompt = f"""
-You are a strict semantic query parser for an e-commerce assistant.
+You are a smart shopping assistant state manager. Your goal is to extract entities and maintain the current search context.
 
-Return ONLY valid minified JSON.
-No markdown.
-No explanations.
-No code fences.
+INPUTS:
+- CURRENT REQUEST: {json.dumps(query, ensure_ascii=False)}
+- PREVIOUS CONTEXT: {json.dumps(ctx_clean, ensure_ascii=False) if previous_context else "None"}
 
-Schema:
+STATE TRANSITION LOGIC:
+1. TOPIC REDIRECTION (CRITICAL): If the user mentions a BRAND (e.g. "Nike") or a PRODUCT (e.g. "scarpe") that is DIFFERENT from the PREVIOUS CONTEXT, you must IMMEDIATELY DISCARD all old brand/product information. DO NOT MERGE multiple brands.
+2. ATTRIBUTE OVERRIDE: If the user provides a NEW value for an attribute (e.g., a new budget "80 euro" vs old "60", or a new size L vs old M), the NEW value must ALWAYS replace the old one. NEVER keep two different values for the same attribute.
+3. CONTEXT PRESERVATION: Only keep context (like size or color) if the user is refining the SAME brand/product AND doesn't provide a new value for that attribute.
+4. SEMANTIC QUERY: Generate a keyword-rich string for eBay. Use ONLY: [Brand] [Product] [Size] [Color] [Gender]. 
+   - DO NOT include "budget", "euro", "taglia", "prezzo", "vorrei", "cerco".
+   - DO NOT include technical field names or JSON keys.
+   - Example: "Calvin Klein felpa L nero uomo"
+5. CLEANING: Remove ALL conversational noise and filler words.
+
+OUTPUT FORMAT (JSON ONLY):
 {{
-  "semantic_query": "", // SEARCH STRING optimized for eBay. MUST include: Brand, Model, specific attributes (e.g. "iPhone 15 Pro Max 128GB Black", "Levi's 501 W36 L32", "Nike Air Jordan EU 42").
-  "product": null,      // Main item type (e.g., "jeans", "scarpe", "iPhone") 
+  "semantic_query": "", 
+  "product": "",      
   "brands": [],
   "compatibilities": {{}}, 
   "constraints": [],
@@ -863,83 +927,13 @@ Schema:
   "missing_info": []    
 }}
 
-Rules for `semantic_query`:
-- Be extremely precise. Include all user details (color, size, material, capacity).
-- CATEGORY STANDARDIZATION:
-  - CLOTHING (Jeans/Pants): Use "W[number] L[number]" format if both waist and length are provided.
-  - SHOES: Use "EU [number]" for European sizes.
-  - TECH: Use "[number]GB" or "[number]TB" for memory/storage.
-- Clean filler words like "vorrei", "cerco", "un", "il", "li".
-- Keep it in a format that works best for a keyword search engine like eBay.
-- Language: Preserve Italian terms if relevant to the Italian eBay market (e.g. "neri", "usato").
-- If the user provides a size (e.g. "numero 43", "taglia L") or color, it MUST be in the `semantic_query` in its standardized form.
-
-Definitions:
-- semantic_query: the final string to be sent to the search engine.
-- product: the main item/model (e.g. "jeans", "scarpe", "smartphone").
-- brands: brands mentioned.
-- compatibilities: Parameters like {{"Make": "BMW", "Year": "2018", "Model": "318i", "Memory": "128GB"}}.
-- constraints: mandatory search filters (price, condition).
-- preferences: wishes that shouldn't exclude results.
-
-Allowed constraint/preference item types:
-
-Price:
-{{
-  "type": "price",
-  "operator": "<=" | ">=" | "between",
-  "value": number OR [min, max]
-}}
-
-Condition:
-{{
-  "type": "condition",
-  "value": "new" | "used" | "refurbished"
-}}
-
-Optional brand preference:
-{{
-  "type": "brand",
-  "value": "Samsung"
-}}
-
-Rules:
-- Put ONLY mandatory requirements in constraints.
-- Put optional wishes in preferences.
-- Do NOT invent brands or products. Never include words like "euro", "numero", "prezzo", "costo" or currency symbols in the "brands" or "product" fields.
-- If the user gives a MAX BUDGET (e.g. "massimo 1000 euro", "entro 500", "sotto 100"), use ONLY "<=" (not both >= and <=). It corresponds to [0, max].
-- If the user gives a MINIMUM budget (e.g. "almeno 300 euro", "sopra i 2 euro"), use ONLY ">=".
-- If the user gives BOTH a minimum and a maximum (e.g. "minimo 10 massimo 20 euro", "tra 100 e 200"), use "between" and provide the array [min, max].
-- If the user gives an APPROXIMATE budget (e.g. "intorno a 100 euro", "circa 200", "sui 300"), calculate a +/- 20% range and use "between" (e.g. 100 -> [80, 120]).
-- Use "between" only when a range is explicitly given (both min and max) or for approximate values.
-- If the query implies "X for Y" (e.g. "cover per iphone", "cintura per jeans"), extract ONLY "X" as the `product`, and place "Y" details into `compatibilities`.
-- If a price is expressed as a mathematical expression (e.g., "10+5", "radice quadrata di 144", "metà di 50"), evaluate the expression mathematically and use ONLY the final numerical result (e.g., 15, 12, 25). Do NOT use the original text numbers.
-- Output JSON only.
-
-Examples (must follow exactly):
-Query: "iphone 13 massimo 1000 euro"
-Output: {{"semantic_query":"iphone 13","product":"iPhone 13","brands":["Apple"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"<=","value":1000}}],"preferences":[]}}
-
-Query: "lenti vista rayban con prezzo minimo radice quadrata di 144 euro"
-Output: {{"semantic_query":"lenti vista rayban","product":"lenti","brands":["Ray-Ban"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":">=","value":12}}],"preferences":[]}}
-
-Query: "cerco prodotto intorno a 100 euro"
-Output: {{"semantic_query":"prodotto","product":"prodotto","brands":[],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"between","value":[80,120]}}],"preferences":[]}}
-
-Query: "tra 200 e 400 euro cuffie bose"
-Output: {{"semantic_query":"cuffie bose","product":"cuffie","brands":["Bose"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"between","value":[200,400]}}],"preferences":[]}}
-
-Query: "ciabatte defonseca minimo 10 massimo 20 euro"
-Output: {{"semantic_query":"ciabatte defonseca","product":"ciabatte","brands":["Defonseca"],"compatibilities":{{}},"constraints":[{{"type":"price","operator":"between","value":[10,20]}}],"preferences":[]}}
-
-Query: "freni per bmw 318i anno 2018"
-Output: {{"semantic_query":"freni bmw 318i 2018","product":"freni","brands":["BMW"],"compatibilities":{{"Make":"BMW","Model":"318i","Year":"2018"}},"constraints":[],"preferences":[]}}
-
-Query: "jeans carhartt neri"
-Output: {{"semantic_query":"jeans carhartt neri","product":"jeans","brands":["Carhartt"],"compatibilities":{{}},"constraints":[],"preferences":[]}}
-
-Query: {json.dumps(query, ensure_ascii=False)}
-""".strip()
+RULES:
+- Standardize sizes (EU 44, L, XL, W32 L30).
+- Standardize genders (Men, Women, Kids) in `compatibilities`.
+- NO PRICE IN QUERY: Never include price, budget, or currency (e.g., "60 euro", "budget", "€") in the `semantic_query`. Put them ONLY in `constraints`.
+- If the user says "red or blue", prioritize the first or include both if relevant.
+- NEVER combine two competing brands in one `semantic_query` unless the user explicitly asks for both.
+"""
 
     response, used_provider = call_llm(prompt)
     if not response:
@@ -1078,14 +1072,19 @@ def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[s
 # ============================================================
 
 def correct_brands_in_text(text: str) -> str:
-    if not BRAND_VOCAB:
-        return text
-
     words = text.split()
     corrected = []
 
     for w in words:
-        if len(w) < 4:
+        w_low = w.lower().strip(",.!?")
+        
+        # PRIORITÀ 1: Whitelist (anche se corto, es. 'ck')
+        if w_low in BRAND_WHITELIST:
+            corrected.append(BRAND_WHITELIST[w_low])
+            continue
+            
+        # PRIORITÀ 2: Fuzzy matching su vocabolo dinamico
+        if not BRAND_VOCAB or len(w) < 4:
             corrected.append(w)
             continue
 
@@ -1106,8 +1105,10 @@ def correct_brands_in_text(text: str) -> str:
     return " ".join(corrected)
 
 
-def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = True, **kwargs) -> Dict[str, Any]:
+def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = True, previous_context: Dict[str, Any] = None, **kwargs) -> Dict[str, Any]:
     text = normalize_text(text)
+    if previous_context:
+        logger.info(f"PARSER: Using previous context for query: '{text}'")
 
     # 🔥 spell correction prima di tutto
     text = correct_brands_in_text(text)
@@ -1118,7 +1119,7 @@ def parse_query_service(text: str, use_llm: bool = True, include_meta: bool = Tr
     used_provider: Optional[str] = None
 
     if use_llm:
-        parsed_llm, used_provider = llm_parse(text)
+        parsed_llm, used_provider = llm_parse(text, previous_context)
         llm_result = parsed_llm
 
     final = merge_results(rule_result, llm_result)
