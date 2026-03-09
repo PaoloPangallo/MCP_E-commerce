@@ -48,7 +48,9 @@ export interface ChatMessage {
 export async function searchProducts(
   query: string,
   history: ChatMessage[] = [],
-  context: Record<string, any> = {}
+  context: Record<string, any> = {},
+  resetContext: boolean = false,
+  sessionId: string | null = null
 ): Promise<SearchResponse> {
   return apiFetch<SearchResponse>("/search", {
     method: "POST",
@@ -57,7 +59,37 @@ export async function searchProducts(
       query,
       llm_engine: "ollama",
       history,
-      context
+      context,
+      reset_context: resetContext,
+      session_id: sessionId
     })
   })
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  updated_at: string
+}
+
+export interface ChatHistoryResponse {
+  id: string
+  title: string
+  messages: {
+    role: string
+    content: string
+    payload: any
+  }[]
+}
+
+export async function getChats(): Promise<ChatSession[]> {
+  return apiFetch<ChatSession[]>("/chats/", { method: "GET" })
+}
+
+export async function getChatHistory(sid: string): Promise<ChatHistoryResponse> {
+  return apiFetch<ChatHistoryResponse>(`/chats/${sid}`, { method: "GET" })
+}
+
+export async function deleteChat(sid: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/chats/${sid}`, { method: "DELETE" })
 }

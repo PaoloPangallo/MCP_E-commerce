@@ -14,90 +14,69 @@ import {
 
 import AddIcon from "@mui/icons-material/Add"
 import DeleteIcon from "@mui/icons-material/Delete"
-import PushPinIcon from "@mui/icons-material/PushPin"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import SearchIcon from "@mui/icons-material/Search"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
-import {useAuth} from "../auth/useAuth.ts";
+import { useAuth } from "../auth/useAuth.ts";
 import AuthPanel from "../auth/ui/AuthPanel.tsx";
 
 
 
-interface HistoryItem {
-  query: string
-  results: number
-}
+// La struttura precedente era basata su localStorage, ora usiamo il DB.
+// Manteniamo PINNED per ora come logica locale opzionale.
 
 interface Props {
   children: React.ReactNode
-  onSearch: (query: string) => void
   onNewChat: () => void
+  onLoadHistory?: (sid: string) => void
+  activeSessionId?: string
 }
 
 const HISTORY_KEY = "search_history"
-const PINNED_KEY = "pinned_searches"
 
-function readArray<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 export default function ChatLayout({
   children,
-  onSearch,
-  onNewChat
+  onNewChat,
+  onLoadHistory,
+  activeSessionId
 }: Props) {
   const { loggedIn } = useAuth()
 
-  const [history, setHistory] = useState<HistoryItem[]>([])
-  const [pinned, setPinned] = useState<string[]>([])
+  const [history, setHistory] = useState<any[]>([])
+
+  const fetchChats = async () => {
+    try {
+      const { getChats } = await import("../api/searchApi")
+      const chats = await getChats()
+      setHistory(chats)
+    } catch (e) {
+      console.error("Error fetching chats", e)
+    }
+  }
 
   useEffect(() => {
-    const syncSidebar = () => {
-      setHistory(
-        readArray<HistoryItem>(HISTORY_KEY).filter(
-          item =>
-            item &&
-            typeof item.query === "string" &&
-            typeof item.results === "number"
-        )
-      )
+    fetchChats()
 
-      setPinned(
-        readArray<string>(PINNED_KEY).filter(
-          item => typeof item === "string" && item.trim().length > 0
-        )
-      )
-    }
-
-    syncSidebar()
-    window.addEventListener("search_history_updated", syncSidebar)
-
-    return () =>
-      window.removeEventListener("search_history_updated", syncSidebar)
+    window.addEventListener("search_history_updated", fetchChats)
+    return () => window.removeEventListener("search_history_updated", fetchChats)
   }, [])
 
   const clearHistory = () => {
+    // In un sistema a DB, "pulisci" potrebbe significare cancellare tutto o solo nascondere
     localStorage.removeItem(HISTORY_KEY)
     setHistory([])
-    window.dispatchEvent(new Event("search_history_updated"))
   }
 
-  const pinSearch = (query: string) => {
-    const updated = [query, ...pinned.filter(item => item !== query)].slice(0, 10)
-    localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
-    setPinned(updated)
-  }
-
-  const unpinSearch = (query: string) => {
-    const updated = pinned.filter(item => item !== query)
-    localStorage.setItem(PINNED_KEY, JSON.stringify(updated))
-    setPinned(updated)
+  const handleDeleteChat = async (sid: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const { deleteChat } = await import("../api/searchApi")
+      await deleteChat(sid)
+      fetchChats()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   const visibleHistory = useMemo(() => history.slice(0, 20), [history])
@@ -107,14 +86,15 @@ export default function ChatLayout({
       <Drawer
         variant="permanent"
         sx={{
-          width: 296,
+          width: 340,
           flexShrink: 0,
           "& .MuiDrawer-paper": {
-            width: 296,
-            bgcolor: "#f7f7f8",
-            borderRight: "1px solid #ececf1",
+            width: 340,
+            bgcolor: "#f9f9fb",
+            borderRight: "1px solid #e5e5e5",
             display: "flex",
-            flexDirection: "column"
+            flexDirection: "column",
+            boxShadow: "4px 0 10px rgba(0,0,0,0.02)"
           }
         }}
       >
@@ -208,76 +188,6 @@ export default function ChatLayout({
 
         <Divider />
 
-        {/* Saved */}
-        {pinned.length > 0 && (
-          <>
-            <Box
-              sx={{
-                px: 2,
-                pt: 2,
-                pb: 0.75,
-                display: "flex",
-                alignItems: "center",
-                gap: 1
-              }}
-            >
-              <PushPinIcon sx={{ fontSize: 15, color: "#8e8ea0" }} />
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  textTransform: "uppercase",
-                  color: "#8e8ea0"
-                }}
-              >
-                Salvati
-              </Typography>
-            </Box>
-
-            <List dense sx={{ px: 1 }}>
-              {pinned.map(query => (
-                <ListItem key={query} disablePadding sx={{ mb: 0.5 }}>
-                  <ListItemButton
-                    onClick={() => onSearch(query)}
-                    sx={{
-                      borderRadius: 2,
-                      minHeight: 42,
-                      "&:hover": {
-                        bgcolor: "#ececf1"
-                      }
-                    }}
-                  >
-                    <PushPinIcon sx={{ fontSize: 16, mr: 1.2, color: "#777" }} />
-
-                    <ListItemText
-                      primary={query}
-                      primaryTypographyProps={{
-                        fontSize: 13,
-                        noWrap: true,
-                        sx: { maxWidth: 160, color: "#202123" }
-                      }}
-                    />
-
-                    <IconButton
-                      size="small"
-                      aria-label="Rimuovi ricerca salvata"
-                      onClick={event => {
-                        event.stopPropagation()
-                        unpinSearch(query)
-                      }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-
-            <Divider sx={{ mt: 1 }} />
-          </>
-        )}
-
         {/* History */}
         <Box flex={1} overflow="auto">
           <Box
@@ -339,18 +249,34 @@ export default function ChatLayout({
           ) : (
             <List dense sx={{ px: 1 }}>
               {visibleHistory.map(item => {
-                const isPinned = pinned.includes(item.query)
+                const isActive = activeSessionId === item.id
 
                 return (
-                  <ListItem key={item.query} disablePadding sx={{ mb: 0.5 }}>
+                  <ListItem
+                    key={item.id}
+                    disablePadding
+                    sx={{ mb: 0.5 }}
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        onClick={(e) => handleDeleteChat(item.id, e)}
+                        sx={{ opacity: 0.6, "&:hover": { opacity: 1 } }}
+                      >
+                        <DeleteIcon fontSize="inherit" />
+                      </IconButton>
+                    }
+                  >
                     <ListItemButton
-                      onClick={() => onSearch(item.query)}
+                      onClick={() => onLoadHistory?.(item.id)}
                       sx={{
                         borderRadius: 2,
                         alignItems: "flex-start",
-                        py: 1,
+                        py: 1.2,
+                        bgcolor: isActive ? "#f0f0f5" : "transparent",
+                        border: isActive ? "1px solid #e0e0e0" : "1px solid transparent",
                         "&:hover": {
-                          bgcolor: "#ececf1"
+                          bgcolor: isActive ? "#f0f0f5" : "#f7f7f8"
                         }
                       }}
                     >
@@ -358,47 +284,30 @@ export default function ChatLayout({
                         sx={{
                           fontSize: 16,
                           mr: 1.2,
-                          mt: 0.2,
-                          color: "#777"
+                          mt: 0.3,
+                          color: isActive ? "#202123" : "#777"
                         }}
                       />
 
                       <ListItemText
-                        primary={item.query}
-                        secondary={`${item.results} risultati`}
+                        primary={item.title}
+                        secondary={new Date(item.updated_at).toLocaleDateString()}
                         primaryTypographyProps={{
                           fontSize: 13,
                           sx: {
-                            maxWidth: 160,
+                            maxWidth: 180,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
-                            color: "#202123"
+                            color: "#202123",
+                            fontWeight: isActive ? 600 : 400
                           }
                         }}
                         secondaryTypographyProps={{
-                          fontSize: 11,
+                          fontSize: 10,
                           color: "#8e8ea0"
                         }}
                       />
-
-                      <IconButton
-                        size="small"
-                        aria-label={
-                          isPinned ? "Già salvata" : "Salva ricerca"
-                        }
-                        onClick={event => {
-                          event.stopPropagation()
-                          pinSearch(item.query)
-                        }}
-                      >
-                        <PushPinIcon
-                          fontSize="small"
-                          sx={{
-                            color: isPinned ? "#202123" : "#a8a8b3"
-                          }}
-                        />
-                      </IconButton>
                     </ListItemButton>
                   </ListItem>
                 )

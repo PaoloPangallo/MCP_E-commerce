@@ -1,5 +1,6 @@
 import { Box, Avatar, Typography } from "@mui/material"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import ReactMarkdown from "react-markdown"
 
 interface MessageBubbleProps {
   role: "user" | "assistant"
@@ -126,13 +127,17 @@ export default function MessageBubble({
             py: isUser ? 1.6 : 0.5,
             bgcolor: isUser ? "#f4f4f4" : "transparent",
             borderRadius: isUser ? "24px" : 0,
-            maxWidth: "100%"
+            maxWidth: "100%",
+            "& p": { mt: 0, mb: 1.5 },
+            "& ul": { mt: 0, mb: 1.5, pl: 2.5 },
+            "& li": { mb: 0.5 },
+            "& strong": { fontWeight: 600 }
           }}
         >
 
           {isTyping
             ? <TypingIndicator />
-            : children}
+            : (!isUser && typeof children === "string" ? <ReactMarkdown>{children}</ReactMarkdown> : children)}
 
         </Box>
 

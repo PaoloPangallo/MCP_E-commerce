@@ -12,6 +12,7 @@ import {
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
+import ReactMarkdown from "react-markdown"
 
 import type { IRMetrics, RagContext } from "../component/searchTypes.ts"
 
@@ -122,10 +123,16 @@ export default function AIAnalysisCard({
       )}
 
       {text && (
-        <Box mb={hasExtraDetails ? 1 : 0}>
-          <Typography sx={{ fontSize: 15, lineHeight: 1.7, color: "#333" }}>
-            {text}
-          </Typography>
+        <Box mb={hasExtraDetails ? 1 : 0} sx={{
+          color: "#333",
+          fontSize: 15,
+          lineHeight: 1.7,
+          "& p": { mt: 0, mb: 1.5 },
+          "& ul": { mt: 0, mb: 1.5, pl: 2.5 },
+          "& li": { mb: 0.5 },
+          "& strong": { fontWeight: 600 }
+        }}>
+          <ReactMarkdown>{text}</ReactMarkdown>
         </Box>
       )}
 

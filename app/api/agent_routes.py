@@ -2,7 +2,7 @@ import logging
 import os
 import time
 import traceback
-from typing import Literal, Dict, Any, Tuple, List
+from typing import Literal, Dict, Any, Tuple, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -15,8 +15,10 @@ from app.services.ebay import search_items
 from app.services.metrics.ir_metrics import precision_at_k, recall_at_k, ndcg_at_k
 from app.services.parser import parse_query_service
 from app.services.user_profiling import update_user_profile
+from app.services.rag.product_ingest import ingest_products
 
-from app.services.agent_orchestrator import ask_agent_orchestrator
+# importimosimos old orchestrator
+# from app.services.agent_orchestrator import ask_agent_orchestrator
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,6 +32,8 @@ class SearchRequest(BaseModel):
     llm_engine: Literal["gemini", "ollama", "rule_based"] = "ollama"
     history: List[MessageDict] = []
     context: Dict[str, Any] = {}
+    reset_context: bool = False
+    session_id: Optional[str] = None
 
 @router.get("/health")
 def health():
@@ -93,6 +97,13 @@ def execute_full_ecommerce_search(query: str, db: Session, user: Any, t0: float)
         seen_ids.add(ebay_id)
         deduped.append(item)
     items = deduped
+
+    # 3.5) AUTOMATIC RAG INGEST
+    # Ingest search results into RAG to provide context for subsequent messages in the same chat
+    try:
+        ingest_products(items)
+    except Exception as e:
+        logger.warning(f"RAG Ingest failed: {e}")
 
     # 4) SELLER FEEDBACK INGEST
     from app.services.feedback import get_seller_feedback
@@ -243,12 +254,14 @@ def execute_full_ecommerce_search(query: str, db: Session, user: Any, t0: float)
     }
 
 
+from app.services.mcp_client import ask_mcp_orchestrator
+
 # ============================================================
-# SEARCH ENDPOINT A CUI IL FRONTEND REACT RISPONDE
+# SEARCH ENDPOINT A CUI IL FRONTEND REACT RISPONDE (MCP ASYNC)
 # ============================================================
 
 @router.post("/search")
-def search(
+async def search(
     request: SearchRequest,
     db: Session = Depends(get_db),
     user=Depends(get_optional_user),
@@ -256,24 +269,29 @@ def search(
     if not request.query or not request.query.strip():
         raise HTTPException(status_code=400, detail="Query vuota")
 
-    logger.info("Search start: %s", request.query)
+    logger.info("MCP Search start: %s", request.query)
     t0 = time.time()
     
-    # Iniziamo la magia: affidiamo il compito a Llama!
-    # Llama prenderà in mano la situazione. Se necessita, eseguirà 
-    # esegui_full_ecommerce_search in background e ci ridarà i risultati completi giusti
-    
-    final_payload = ask_agent_orchestrator(
-        user_message=request.query,
-        history=[h.dict() for h in request.history],
-        db_session=db,
-        user_obj=user,
-        t0=t0,
-        context=request.context,
-        ecommerce_pipeline_func=execute_full_ecommerce_search
-    )
-    
-    if "error" in final_payload:
-        raise HTTPException(status_code=500, detail=f"Agent Error: {final_payload['error']}")
+    try:
+        # Iniziamo la magia: affidiamo il compito a Ollama via Model Context Protocol!
+        final_payload = await ask_mcp_orchestrator(
+            user_message=request.query,
+            history=[h.dict() for h in request.history],
+            db_session=db,
+            user_obj=user,
+            t0=t0,
+            context=request.context,
+            ecommerce_pipeline_func=execute_full_ecommerce_search,
+            reset_context=request.reset_context,
+            session_id=request.session_id
+        )
         
-    return final_payload
+        if "error" in final_payload:
+            logger.error(f"MCP CLIENT ERROR: {final_payload['error']}")
+            raise HTTPException(status_code=500, detail=f"MCP Agent Error: {final_payload['error']}")
+            
+        return final_payload
+    except Exception as e:
+        logger.error("!!! CRITICAL ERROR IN /search ENDPOINT !!!")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")

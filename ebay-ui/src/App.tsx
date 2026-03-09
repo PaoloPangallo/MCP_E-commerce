@@ -105,11 +105,61 @@ export default function App() {
     [chat]
   )
 
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => `chat-${Date.now()}`)
+  const [contextResetNeeded, setContextResetNeeded] = useState(false)
+
   const resetChat = () => {
     setChat([getWelcomeMessage()])
     setSearchContext({})
     setLoading(false)
     setLoadingQuery(null)
+    setContextResetNeeded(true)
+    setCurrentSessionId(`chat-${Date.now()}`)
+  }
+
+  const loadChatHistory = async (sid: string) => {
+    setLoading(true)
+    try {
+      const { getChatHistory } = await import("./api/searchApi")
+      const history = await getChatHistory(sid)
+
+      const newChat: ChatEntry[] = history.messages.map(m => {
+        if (m.payload) {
+          return {
+            type: "search",
+            search: {
+              query: m.content,
+              results: m.payload.results || [],
+              analysis: m.content,
+              thinking_trace: m.payload.thinking_trace,
+              metrics: m.payload.metrics,
+              rag_context: m.payload.rag_context
+            }
+          }
+        } else {
+          return {
+            type: "message",
+            msg: { role: m.role as any, content: m.content }
+          }
+        }
+      })
+
+      setChat(newChat.length > 0 ? newChat : [getWelcomeMessage()])
+      setCurrentSessionId(sid)
+
+      // Carichiamo l'ultimo contesto salvato se presente
+      const lastMsg = history.messages.filter(m => m.payload && m.payload.parsed_query).pop()
+      if (lastMsg) {
+        setSearchContext(lastMsg.payload.parsed_query)
+      } else {
+        setSearchContext({})
+      }
+
+    } catch (e) {
+      console.error("Failed to load history", e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSend = async (text: string) => {
@@ -162,7 +212,8 @@ export default function App() {
         })
         .filter((msg): msg is { role: string, content: string } => msg !== null);
 
-      const data = await searchProducts(query, chatHistory, searchContext)
+      const data = await searchProducts(query, chatHistory, searchContext, contextResetNeeded, currentSessionId)
+      setContextResetNeeded(false)
 
       if (data.parsed_query) {
         setSearchContext(data.parsed_query)
@@ -235,7 +286,11 @@ export default function App() {
   }
 
   return (
-    <ChatLayout onSearch={handleSend} onNewChat={resetChat}>
+    <ChatLayout
+      onNewChat={resetChat}
+      onLoadHistory={loadChatHistory}
+      activeSessionId={currentSessionId}
+    >
       <Box
         sx={{
           flex: 1,

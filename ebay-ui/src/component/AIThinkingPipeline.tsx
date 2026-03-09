@@ -73,12 +73,15 @@ export default function AIThinkingPipeline({ loading = false, timings, query, tr
       ) : showDynamicTrace && !loading ? (
         <Collapse in={expanded} collapsedSize={40}>
           <Box mt={1}>
-            {trace.map((t, idx) => (
-              <Box key={idx} display="flex" alignItems="center" gap={1.2} mb={1}>
-                <CheckCircleIcon sx={{ fontSize: 16, color: "#10a37f" }} />
-                <Typography sx={{ fontSize: 13, color: "#202123" }}>{t}</Typography>
-              </Box>
-            ))}
+            {trace.map((t, idx) => {
+              const content = typeof t === "string" ? t : JSON.stringify(t);
+              return (
+                <Box key={idx} display="flex" alignItems="center" gap={1.2} mb={1}>
+                  <CheckCircleIcon sx={{ fontSize: 16, color: "#10a37f" }} />
+                  <Typography sx={{ fontSize: 13, color: "#202123" }}>{content}</Typography>
+                </Box>
+              )
+            })}
           </Box>
         </Collapse>
       ) : null}

@@ -307,7 +307,8 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
 def search_items(
     parsed_query: Dict[str, Any],
     limit: int = 30,
-    category_id: Optional[str] = None
+    category_id: Optional[str] = None,
+    ignore_constraints: bool = False
 ) -> List[Dict[str, Any]]:
 
     token = _get_oauth_token()
@@ -318,7 +319,7 @@ def search_items(
 
     # Primo tentativo: Full Query
     query = _build_query(parsed_query, light_mode=False)
-    items = _execute_ebay_search(query, parsed_query, limit, headers, category_id=category_id)
+    items = _execute_ebay_search(query, parsed_query, limit, headers, category_id=category_id, ignore_constraints=ignore_constraints)
     
     # Fallback retry se 0 risultati
     if not items:
@@ -327,17 +328,17 @@ def search_items(
         logger.info("NO RESULTS FOUND. Retrying with LIGHT QUERY...")
         query_light = _build_query(parsed_query, light_mode=True)
         if query_light != query:
-            items = _execute_ebay_search(query_light, parsed_query, limit, headers, category_id=category_id)
+            items = _execute_ebay_search(query_light, parsed_query, limit, headers, category_id=category_id, ignore_constraints=ignore_constraints)
 
     items = items[:limit]
     return [_normalize_item(i) for i in items]
 
-def _execute_ebay_search(query: str, parsed_query: Dict[str, Any], limit: int, headers: Dict[str, str], category_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def _execute_ebay_search(query: str, parsed_query: Dict[str, Any], limit: int, headers: Dict[str, str], category_id: Optional[str] = None, ignore_constraints: bool = False) -> List[Dict[str, Any]]:
     """Logica interna di loop per la ricerca paginata."""
     items = []
     offset = 0
     page_size = 20
-    constraints = parsed_query.get("constraints", [])
+    constraints = parsed_query.get("constraints", []) if not ignore_constraints else []
     
     while len(items) < limit:
         params = {
