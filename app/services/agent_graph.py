@@ -28,11 +28,11 @@ class AgentState(TypedDict):
     shared_state: Dict[str, Any]
     plan: List[Dict[str, Any]]
     current_step_idx: int
-    execution_logs: List[str]
+    execution_logs: Annotated[List[str], lambda x, y: x + y]
     next_step: str 
     fresh_search_done: bool 
     iteration_count: int
-    tools_called: List[str]
+    tools_called: Annotated[List[str], lambda x, y: x + y]
 
 def planner_node(state: AgentState):
     """
@@ -49,14 +49,34 @@ def planner_node(state: AgentState):
     execution_history = "\n".join(state.get("execution_logs", []))
     last_tool_result = state.get("last_observation")
     
+    # --- INGESTIONE LOG WORKER (Informed Planning) ---
+    # Leggiamo l'ultimo report dettagliato per dare al planner visione completa del lavoro del worker
+    worker_context = ""
+    try:
+        import glob
+        logs_dir = "app/logs/workers"
+        if os.path.exists(logs_dir):
+            files = glob.glob(os.path.join(logs_dir, "worker_*.md"))
+            if files:
+                latest_worker_log = max(files, key=os.path.getmtime)
+                with open(latest_worker_log, "r", encoding="utf-8") as f:
+                    # Prendiamo solo le prime righe (input/output) per non sovraccaricare il context
+                    worker_context = f.read()
+                    # Limitiamo la dimensione del log per il prompt
+                    if len(worker_context) > 2000:
+                        worker_context = worker_context[:2000] + "... [log troncato]"
+    except Exception as e:
+        logger.warning(f"Errore caricamento worker logs: {e}")
+
     # --- KILL-SWITCH DETERMINISTICO ---
     last_log = state.get("execution_logs", [])
     if last_log and "TOOL RESULT (explain_results)" in last_log[-1]:
         logger.info("STOP DETERMINISTICO: Risultati già spiegati.")
         return {"plan": [{"tool_name": "END", "task_plan": "Task completato", "expected_input": "N/A"}]}
 
-    # --- CHECK RISULTATI GIÀ PRESENTI (Anti-Loop) ---
-    if state["shared_state"].get("results"):
+    # --- CHECK RISULTATI GIÀ PRESENTI (Anti-Loop / Resume) ---
+    # Saltiamo alla spiegazione solo SE abbiamo risultati E abbiamo effettivamente cercato in questo ciclo.
+    if state["shared_state"].get("results") and "search_products" in state.get("tools_called", []):
         logger.info("PLANNER: Risultati già presenti. Salto alla spiegazione.")
         return {
             "shared_state": state["shared_state"],
@@ -73,14 +93,26 @@ def planner_node(state: AgentState):
         user_msg, 
         state["shared_state"], 
         last_observation=last_tool_result,
-        history_context=execution_history
+        history_context=execution_history,
+        tools_called=state.get("tools_called", []),
+        worker_context=worker_context
     )
     
+    # DETERMISTIC LOOP BREAKER: 
+    # Se parse_query è già stato fatto per questa query, lo rimuoviamo dal nuovo piano
+    if "parse_query" in state.get("tools_called", []):
+        plan = [s for s in plan if s["tool_name"] != "parse_query"]
+        if not plan: # Se il piano diventa vuoto, forziamo una conclusione o una ricerca
+            if state["shared_state"].get("results"):
+                plan = [{"tool_name": "explain_results", "task_plan": "Mostra i risultati esistenti.", "expected_input": "N/A"}]
+            else:
+                plan = [{"tool_name": "search_products", "task_plan": "Cerca con i dati estratti.", "expected_input": "N/A"}]
+
     return {
         "shared_state": state["shared_state"],
         "plan": plan,
-        "current_step_idx": 0, # RESETTIAMO l'indice per il nuovo piano
-        "execution_logs": state.get("execution_logs", []) + [f"PLANNER: Generato piano con {len(plan)} passi."]
+        "current_step_idx": 0,
+        "execution_logs": [f"PLANNER: Generato piano con {len(plan)} passi."]
     }
 
 def router(state: AgentState):
@@ -101,6 +133,13 @@ def router(state: AgentState):
         logger.warning("ROUTER: Raggiunto limite massimo di iterazioni (10). Forza END.")
         return END
 
+    # REATTIVITÀ (Informed Planning): Se l'ultimo tool era parse_query, torniamo al planner
+    # per fargli valutare i risultati del parsing (es. missing_info dalla categoria eBay).
+    last_tools = state.get("tools_called", [])
+    if last_tools and last_tools[-1] == "parse_query":
+        logger.info("ROUTER: Re-evaluating strategy after parse_query.")
+        return "planner"
+
     # Se il piano ha ancora passi, andiamo all'executor per il passo idx
     return "executor"
 
@@ -118,7 +157,7 @@ def executor_node(state: AgentState):
     if tool_name == "END":
         return {
             "current_step_idx": idx + 1,
-            "execution_logs": state.get("execution_logs", []) + ["EXECUTOR: Raggiunto END."]
+            "execution_logs": ["EXECUTOR: Raggiunto END."]
         }
     
     # ESTRAZIONE MESSAGGIO UTENTE
@@ -136,6 +175,16 @@ def executor_node(state: AgentState):
     
     # SMART MODEL SWITCH: Conversational for text, Coder for structures
     verbal_tools = ["social_response", "explain_results", "request_user_clarification"]
+    
+    # Valida se il tool esiste nella toolbox
+    valid_tools = ["parse_query", "search_products", "explain_results", "request_user_clarification", "social_response", "END"]
+    if tool_name not in valid_tools:
+        logger.warning(f"EXECUTOR: Tool halluncinated by planner: {tool_name}. Skipping.")
+        return {
+            "execution_logs": state.get("execution_logs", []) + [f"SKIP: Tool unknown {tool_name}"],
+            "current_step_idx": idx + 1
+        }
+
     if tool_name in verbal_tools:
         logger.info(f"EXECUTOR: Using Conversational model for verbal tool '{tool_name}'")
         tool_caller = get_conversational_llm()
@@ -155,7 +204,9 @@ def executor_node(state: AgentState):
     
     MANDATORY PARAMETER RULES:
     1. If calling 'parse_query': use ONLY the original user message: "{user_msg}"
-    2. If calling 'search_products': use the clean semantic query from state: "{current_parsed.get('semantic_query') or user_msg}"
+    2. If calling 'search_products':
+       - If "{current_parsed.get('semantic_query', '')}" is NOT empty, USE IT as 'query'.
+       - If "{current_parsed.get('semantic_query', '')}" IS empty, STOP and ask to call 'parse_query' first. DO NOT invent attributes like Size or Color.
     3. If calling 'explain_results': use: query="{current_parsed.get('semantic_query') or user_msg}"
     
     CURRENT STATE: {json.dumps(current_parsed)}
@@ -182,6 +233,15 @@ def executor_node(state: AgentState):
                 "id": f"f_{os.urandom(2).hex()}",
                 "type": "tool_call"
             }]
+        elif tool_name in verbal_tools and response.content.strip():
+            # FALLBACK: If verbal tool and model just gave text, wrap it as a tool call
+            logger.info(f"EXECUTOR: Verbal tool '{tool_name}' returned plain text, wrapping it.")
+            response.tool_calls = [{
+                "name": tool_name,
+                "args": {"response": response.content.strip()},
+                "id": f"f_{os.urandom(2).hex()}",
+                "type": "tool_call"
+            }]
         response.content = ""
     
     # SAFETY: Ensure parse_query always has the original query
@@ -193,7 +253,7 @@ def executor_node(state: AgentState):
     return {
         "messages": [response],
         "shared_state": new_shared_state,
-        "execution_logs": state.get("execution_logs", []) + [log_entry],
+        "execution_logs": [log_entry],
         "current_step_idx": idx + 1
     }
 
@@ -218,6 +278,7 @@ def execute_tools(state: AgentState):
 
     tool_outputs = []
     executed_names = []
+    result = None # Inizializzazione di sicurezza
     
     # Prepariamo la cartella dei log del worker
     worker_logs_dir = "app/logs/workers"
@@ -270,19 +331,19 @@ def execute_tools(state: AgentState):
                     name=name,
                     content=json.dumps({"error": str(e)})
                 ))
-    # Aggiorna contatore iterazioni e log
     iterations = state.get("iteration_count", 0) + 1
-    new_logs = list(state.get("execution_logs", []))
+    new_logs = []
     for out in tool_outputs:
         new_logs.append(f"TOOL RESULT ({out.name}): {str(out.content)[:200]}...")
 
     return {
         "messages": tool_outputs, 
         "shared_state": new_shared_state, 
-        "tools_called": state.get("tools_called", []) + executed_names,
+        "tools_called": executed_names,
         "iteration_count": iterations,
         "execution_logs": new_logs,
-        "last_observation": str(tool_outputs[-1].content) if tool_outputs else ""
+        "last_observation": str(tool_outputs[-1].content) if tool_outputs else "",
+        "last_tool_output": result if tool_outputs else None # Dati grezzi per il planner
     }
 
 # Costruzione del Grafo
@@ -340,13 +401,20 @@ def run_agent_graph(user_message: str, history: List[Dict[str, str]], shared_sta
             
     formatted_history.append(HumanMessage(content=user_message))
     
+    shared_state["last_tool_output"] = None # Reset per evitare inquinamento tra messaggi
+    shared_state["worker_logs"] = [] # Reset log fisici per questo run
+    
     # Eseguiamo il Grafo
     final_state = app_graph.invoke({
         "messages": formatted_history,
         "shared_state": shared_state,
         "plan": [],
         "current_step_idx": 0,
-        "execution_logs": []
+        "execution_logs": [],
+        "tools_called": [],
+        "iteration_count": 0,
+        "fresh_search_done": False,
+        "next_step": ""
     })
     
     # Estraiamo l'ultima risposta analizzando solo i messaggi NUOVI di questo ciclo

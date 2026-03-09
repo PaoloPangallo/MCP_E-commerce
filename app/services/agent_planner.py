@@ -9,19 +9,13 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 
-# Configurazione modelli (personalizzabili via env)
-PLANNER_MODEL = os.getenv("PLANNER_MODEL", "mistral-nemo:12b")
-PARSER_MODEL = os.getenv("PARSER_MODEL", "qwen2.5-coder:7b")
-TOOL_CALLER_MODEL = os.getenv("TOOL_CALLER_MODEL", "qwen2.5-coder:7b")
+from app.core.config import PLANNER_MODEL, PARSER_MODEL, TOOL_CALLER_MODEL, NUM_CTX, NUM_GPU
 
-# Parametri estesi (GPU & Context)
-NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "16384"))
-NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "1"))
-
-def generate_plan(user_message: str, shared_state: Dict[str, Any], last_observation: str = None, history_context: str = "") -> List[Dict[str, Any]]:
+def generate_plan(user_message: str, shared_state: Dict[str, Any], last_observation: str = None, history_context: str = "", tools_called: List[str] = None, worker_context: str = "") -> List[Dict[str, Any]]:
     """
     Usa l'LLM Planner con CONTESTO ESTESO e GPU per generare piani multi-step.
     """
+    tools_called = tools_called or []
     planner_llm = ChatOllama(
         model=PLANNER_MODEL, 
         temperature=0,
@@ -45,36 +39,57 @@ def generate_plan(user_message: str, shared_state: Dict[str, Any], last_observat
     
     obs_context = f"\nLAST OBSERVATION:\n{last_observation}" if last_observation else ""
     history_sec = f"\nCURRENT SESSION LOGS:\n{history_context}" if history_context else ""
+    worker_sec = f"\nWORKER_INSIGHTS (Internal tool logs):\n{worker_context}" if worker_context else ""
+    called_sec = f"\nTOOLS ALREADY EXECUTED FOR THIS REQUEST: {', '.join(tools_called)}" if tools_called else ""
     
-    prompt = f"""
+    prompt_template = """
     You are the CHIEF STRATEGIST for a premium eBay shopping assistant.
-    Your goal is to generate a COMPLETE EXECUTION PLAN (sequence of steps) to fulfill the user's request.
+    Your goal is to generate a COMPLETE EXECUTION PLAN to fulfill the user's request.
     
     {history_sec}
+    {worker_sec}
     {obs_context}
     
-    CURRENT STATE (Extracted Data): {json.dumps(current_parsed)}
+    PLANNING CONTEXT:
+    - User Message: "{user_message}"
+    - Parsed Data in Memory: {current_parsed_json}
+    - Last Structured Result: {last_result_json}
+    - Tools already called for THIS message: {tools_called_list}
+
+    🔍 PLANNING ORIENTATION:
+    1. EXAMPLES OF INTENT:
+       - User: "Ciao, come stai?" -> Tool: social_response (Purely social)
+       - User: "Ciao! Cercami delle scarpe Nike" -> Tool: parse_query (Shopping intent detected)
+       - User: "Top! Ora cerca jeans Levi's" -> Tool: parse_query (New shopping intent after praise)
     
-    🔍 STRATEGY RULES:
-    1. ANALYZE INTENT: 
-       - If greeting/thanks/capabilities: plan 'social_response'. 
-       - IMPORTANT: If CURRENT STATE has a product/query (welcome back scenario), YOU SHOULD ALSO plan 'explain_results' to show consistency.
-    2. REFINING / UPDATING: If the user provides a NEW constraint (e.g., "color gold", "size 44", "cheaper") related to the topic in CURRENT STATE, plan:
-       - 'parse_query' (to merge the new detail)
-       - 'search_products'
-       - 'explain_results'
-    3. TOPIC CHANGE: If the user mentions a DIFFERENT product category (e.g., Jeans -> Shoes), plan a fresh 'parse_query' and IGNORE old context.
-    4. SEARCH: If you have a valid 'search_query' for the active topic and need results, plan 'search_products'.
-    5. CLARIFICATION: Only call 'request_user_clarification' if BOTH the user message and CURRENT STATE provide zero specific guidance on style/model (e.g., just "shoes" with no brand and no previous context). If a brand like 'Adidas' is present, DO NOT clarify, just search.
-    6. EXPLAIN: If you have updated results in the shared_state/history, ALWAYS plan 'explain_results' as the final step before END.
-    7. COMPLETION: Once 'explain_results' has been successfully executed, plan ONLY [{{"tool_name": "END", "task_plan": "Goal reached" }}].
+    2. THE GOLDEN RULE:
+       - If any PRODUCT (jeans, sweater, pants) or BRAND (Nike, Levi's, CK) is mentioned, YOU MUST plan 'parse_query' first.
+       - Use 'social_response' ONLY for empty talk, greetings, or "thank you" without new requests.
+
+    3. SHOPPING FLOW:
+       - Phase 1: 'parse_query' (Mandatory for new items).
+       - Phase 2: 'request_user_clarification' (Only if Size/Gender is missing).
+       - Phase 3: 'search_products' -> 'explain_results' (Only when info is complete).
     
     Response format: ONLY a JSON array of objects.
-    Each object MUST have: 'tool_name', 'task_plan', 'expected_input'.
+    Each object: {"tool_name": "...", "task_plan": "...", "expected_input": "..."}
     
-    AVAILABLE TOOLS: {tools_desc}
-    USER MESSAGE: {user_message}
+    AVAILABLE TOOLS:
+    - parse_query: Extract search filters from text.
+    - search_products: Find items on eBay.
+    - explain_results: Generate a report of found items.
+    - request_user_clarification: Ask user for missing details like size.
+    - social_response: Handle generic chat/greetings.
+    - END: Finish the current task.
     """
+    
+    prompt = prompt_template.replace("{history_sec}", history_sec)\
+                           .replace("{worker_sec}", worker_sec)\
+                           .replace("{obs_context}", obs_context)\
+                           .replace("{user_message}", user_message)\
+                           .replace("{current_parsed_json}", json.dumps(current_parsed))\
+                           .replace("{last_result_json}", json.dumps(shared_state.get('last_tool_output')) if shared_state.get('last_tool_output') else 'None')\
+                           .replace("{tools_called_list}", ', '.join(tools_called) if tools_called else 'None')
 
     try:
         response = planner_llm.invoke([

@@ -56,7 +56,7 @@ LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()  
 
 # Ollama
 OLLAMA_MODEL = os.getenv("PARSER_MODEL", os.getenv("OLLAMA_MODEL", "llama3.1:latest")).split('#')[0].strip()
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "500"))
 
 # Gemini
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -324,7 +324,7 @@ PRICE_RANGE_PATTERNS = [
 
 MAX_PRICE_PATTERNS = [
     re.compile(
-        rf"\b(?:sotto|meno di|massimo|max|fino a|entro|non oltre){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
+        rf"\b(?:sotto|meno di|massimo|max|fino a|entro|non oltre|non più di|non superiore a|non superare)\b.*?{NUM_PATTERN}\s*(?:euro|€)?\b",
         re.IGNORECASE
     ),
 ]
@@ -391,6 +391,31 @@ def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
         return None, explicit_prices[0]
 
     return None, None
+
+
+# ============================================================
+# SIZE EXTRACTION (FALLBACK)
+# ============================================================
+
+def extract_size_simple(text: str) -> Optional[str]:
+    """Fallback regex for common sizes."""
+    text_low = text.lower()
+    
+    # Priorità a "taglia L", "numero 42"
+    m = re.search(r"\b(?:taglia|size|misura|numero)\s+([a-z0-9]{1,4})\b", text_low)
+    if m:
+        val = m.group(1).strip()
+        if val in {"s", "m", "l", "xl", "xxl", "xxxl", "xs"}:
+            return val.upper()
+        if val.isdigit() and 20 <= int(val) <= 60:
+            return val
+            
+    # Pattern per taglie isolate
+    m2 = re.search(r"\b(s|m|l|xl|xxl|xs)\b", text_low)
+    if m2:
+        return m2.group(1).upper()
+        
+    return None
 
 
 # ============================================================
@@ -562,6 +587,11 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 
     if condition:
         result["constraints"].append({"type": "condition", "value": condition})
+
+    # 4️⃣ Size (Fallback)
+    size = extract_size_simple(query)
+    if size:
+        result["compatibilities"]["Size"] = size
 
     return result
 
@@ -910,24 +940,30 @@ STATE TRANSITION LOGIC:
 1. TOPIC REDIRECTION (CRITICAL): If the user mentions a BRAND (e.g. "Nike") or a PRODUCT (e.g. "scarpe") that is DIFFERENT from the PREVIOUS CONTEXT, you must IMMEDIATELY DISCARD all old brand/product information. DO NOT MERGE multiple brands.
 2. ATTRIBUTE OVERRIDE: If the user provides a NEW value for an attribute (e.g., a new budget "80 euro" vs old "60", or a new size L vs old M), the NEW value must ALWAYS replace the old one. NEVER keep two different values for the same attribute.
 3. CONTEXT PRESERVATION: Only keep context (like size or color) if the user is refining the SAME brand/product AND doesn't provide a new value for that attribute.
-4. SEMANTIC QUERY: Generate a keyword-rich string for eBay. Use ONLY: [Brand] [Product] [Size] [Color] [Gender]. 
-   - DO NOT include "budget", "euro", "taglia", "prezzo", "vorrei", "cerco".
-   - DO NOT include technical field names or JSON keys.
-   - Example: "Calvin Klein felpa L nero uomo"
-5. CLEANING: Remove ALL conversational noise and filler words.
+4. SEMANTIC QUERY (STRICT SEARCH ENGINE RULES):
+   - BASE: Combine [Brand] + [Product] + [Specs].
+   - ATTRIBUTES: Include descriptive attributes like Color, Material, or specific 모델 types.
+   - SIZES: If Size is specified (e.g. "L"), include ONLY the size value (e.g. "L") if it's alphanumeric, or nothing if it's already in 'compatibilities'. DO NOT include the word "taglia" or "size" in the query.
+   - NO SPECULATIVE NEGATIONS: NEVER use '-' (minus) for an attribute unless the user EXPLICITLY said "no", "not", "senza", "non". (Example: "cercami L" -> query: "Product L", NOT "Product -M").
+   - NO NOISE: Do NOT include "budget", "euro", "prezzo", "vorrei", "cercami".
+   - Final string format: "Brand Model Color Spec -ExcludedSpec"
+5. MISSING INFO: If a critical attribute (Size, Gender) is missing for fashion, add it to `missing_info`.
+6. CLEANING: Remove ALL conversational noise and ensure strictly valid JSON.
 
 OUTPUT FORMAT (JSON ONLY):
 {{
-  "semantic_query": "", 
-  "product": "",      
-  "brands": [],
-  "compatibilities": {{}}, 
-  "constraints": [],
+  "semantic_query": "Clean string for eBay search", 
+  "product": "Principal object",      
+  "brands": ["Normalized brands"],
+  "compatibilities": {{"Size": "L", "Gender": "Men", ...}}, 
+  "constraints": [{{"type": "price", "operator": "<=", "value": 60}}],
   "preferences": [],
-  "missing_info": []    
+  "missing_info": ["Size", "Gender"]    
 }}
 
 RULES:
+- Extract explicitly mentioned SIZE (e.g. "taglia L", "size 42") and put it in `compatibilities` as "Size".
+- Extract explicitly mentioned GENDER (e.g. "uomo", "donna") and put it in `compatibilities` as "Gender".
 - Standardize sizes (EU 44, L, XL, W32 L30).
 - Standardize genders (Men, Women, Kids) in `compatibilities`.
 - NO PRICE IN QUERY: Never include price, budget, or currency (e.g., "60 euro", "budget", "€") in the `semantic_query`. Put them ONLY in `constraints`.
@@ -950,13 +986,66 @@ RULES:
         logger.warning("Invalid JSON from LLM: %s", response[:200])
         return None, used_provider
 
-    if not isinstance(raw, dict):
-        logger.warning("LLM output is not a JSON object")
-        return None, used_provider
+    return raw, used_provider
 
-    parsed = validate_llm_result(raw, query)
-    parsed = enforce_numeric_consistency(query, parsed)
-    return parsed, used_provider
+
+def deep_refine_parse(query: str, current_parsed: Dict[str, Any], category_info: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Second-pass parsing: Refines extraction using known category aspects.
+    """
+    aspects = category_info.get("required_aspects", [])
+    cat_path = category_info.get("category_path") or category_info.get("full_path", "")
+    
+    prompt_template = """
+You are a precision extraction expert for eBay. We have identified the technical category for this search.
+Your task is to REFINE the current state by specifically looking for these REQUIRED ASPECTS in the user query.
+
+CATEGORY: {cat_path}
+REQUIRED ASPECTS: {aspects_json}
+
+CURRENT STATE: {current_state_json}
+USER QUERY: "{query}"
+
+LOGIC:
+1. FOCUS: Look for values that match the REQUIRED ASPECTS (Size, Material, Style, Gender) in the query or previous context.
+   - Put extracted values in `compatibilities` (e.g., {"Size": "L", "Material": "Cotone"}).
+   - Standardize SIZES: S, M, L, XL, EU 42, W32 L30.
+   - Standardize GENDERS: Man/Uomo, Woman/Donna, Unisex.
+2. EXCLUSIONS (CRITICAL): If the user asks for "no X" or "without Y" (e.g., "senza cappuccio", "no hood"), you MUST:
+   - Add "-X" to the `semantic_query` (e.g., "-hood", "-cappuccio").
+   - Add specific opposites if applicable (e.g., if "no hood" for a sweatshirt, add "girocollo" or "crewneck" to `semantic_query`).
+3. PATTERN: [Brand] [Product] [Attributes found] [-Exclusions found].
+4. MISSING INFO: If a REQUIRED ASPECT (like Size or Gender) is still missing after this second pass, add the missing field name (e.g. "Sesso/Gender", "Taglia/Size") to `missing_info`.
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "semantic_query": "", 
+  "product": "",      
+  "brands": [],
+  "compatibilities": {}, 
+  "constraints": [],
+  "preferences": [],
+  "missing_info": []    
+}
+"""
+    prompt = prompt_template.replace("{cat_path}", str(cat_path))\
+                           .replace("{aspects_json}", json.dumps(aspects, ensure_ascii=False))\
+                           .replace("{current_state_json}", json.dumps(current_parsed, ensure_ascii=False))\
+                           .replace("{query}", str(query))
+    response, used_provider = call_llm(prompt)
+    if not response:
+        return current_parsed
+
+    json_text = extract_first_json_object(response)
+    if not json_text:
+        return current_parsed
+
+    try:
+        refined = json.loads(json_text)
+        # Validazione e Merge (manteniamo ID esistenti se necessario)
+        return validate_llm_result(refined, query)
+    except:
+        return current_parsed
 
 
 # ============================================================
@@ -1041,9 +1130,13 @@ def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, An
     final["preferences"] = llm_result.get("preferences", []) or []
 
     # ------------------------------------------------------------
-    # 6️⃣ COMPATIBILITÀ → solo LLM
+    # 6️⃣ COMPATIBILITÀ → unione (LLM prioritario)
     # ------------------------------------------------------------
-    final["compatibilities"] = llm_result.get("compatibilities", {}) or {}
+    llm_comp = llm_result.get("compatibilities", {}) or {}
+    rule_comp = rule_result.get("compatibilities", {}) or {}
+    
+    merged_comp = {**rule_comp, **llm_comp}
+    final["compatibilities"] = merged_comp
 
     return final
 

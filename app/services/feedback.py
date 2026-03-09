@@ -39,7 +39,7 @@ def fetch_feedback_page(username: str, page: int, per_page: int) -> List[Dict]:
         TRADING_URL,
         headers=headers,
         data=body,
-        timeout=10
+        timeout=20
     )
 
     if response.status_code != 200:

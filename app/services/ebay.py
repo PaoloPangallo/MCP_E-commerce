@@ -24,9 +24,14 @@ APPROX_PRICE_MIN_DELTA = float(os.getenv("APPROX_PRICE_MIN_DELTA", "10"))
 if EBAY_ENV == "production":
     OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
     SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+    TAXONOMY_URL = "https://api.ebay.com/commerce/taxonomy/v1"
 else:
     OAUTH_URL = "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
     SEARCH_URL = "https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search"
+    TAXONOMY_URL = "https://api.sandbox.ebay.com/commerce/taxonomy/v1"
+
+# ID albero categorie predefinito (101 per l'Italia)
+EBAY_IT_TREE_ID = "101"
 
 # ============================================================
 # TOKEN CACHE
@@ -210,105 +215,65 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
 # BUILD EBAY QUERY
 # ============================================================
 
-def _build_query(parsed: Dict[str, Any]) -> str:
-    parts = []
+def _build_query(parsed: Dict[str, Any], light_mode: bool = False) -> str:
+    """Costruisce una query ottimizzata per eBay rimuovendo rumore e ridondanze."""
     
-    # Extract Data from parsed
-    brands = parsed.get("brands") or []
-    product = parsed.get("product", "")
-    semantic = parsed.get("semantic_query", "")
-    sem_parts = str(semantic).split()
-    
-    # Add values from compatibilities (e.g., Size: 42, Color: Black, TargetModel: iPhone)
-    compatibilities = parsed.get("compatibilities") or {}
-    comp_values = [str(v) for v in compatibilities.values() if v]
-    
-    # Merge Logic: Add parts from brands + product + compatibilities, then add semantic parts
-    raw_candidates = []
-    if brands:
-        if isinstance(brands, list): raw_candidates.extend([str(b) for b in brands])
-        else: raw_candidates.append(str(brands))
-    if product:
-        if isinstance(product, list): raw_candidates.extend([str(p) for p in product])
-        else: raw_candidates.append(str(product))
-    if comp_values:
-        raw_candidates.extend(comp_values)
-    
-    # Pre-add semantic query parts
-    raw_candidates.extend(str(semantic).split())
+    # In light mode usiamo solo le basi per massimizzare i risultati (utile in caso di 0 found)
+    if light_mode:
+        brands = parsed.get("brands") or []
+        product = parsed.get("product", "")
+        base = " ".join(brands) + " " + str(product)
+        return base.strip()
 
-    # Stopwords list: generic words that pollute eBay search results
+    semantic = parsed.get("semantic_query", "").strip()
+    
+    # Se abbiamo già una semantic_query di qualità prodotta dal parser LLM, la usiamo come base
+    raw_text = semantic
+    if not raw_text:
+        brands = parsed.get("brands") or []
+        product = parsed.get("product", "")
+        compatibilities = parsed.get("compatibilities") or {}
+        comp_values = " ".join([str(v) for v in compatibilities.values() if v])
+        raw_text = f"{' '.join(brands)} {product} {comp_values}"
+
+    # Stopwords list: parole che sporcano la ricerca
     stopwords = {
         "modello", "tipo", "articolo", "cercare", "cerco", "vorrei", "trovami", "oggetto", 
-        "chiesto", "richiesta", "precedente", "quello", "quelli", "stessi", "altri", "altre",
-        "ciao", "grazie", "per", "con", "dei", "delle", "degli", "un", "una", "uno", 
-        "li", "lo", "la", "le", "il", "i", "gli", "da", "di", "a", "in", "su", "nel", "nella", 
-        "chi", "cosa", "come", "dove", "quando", "perché", "perche", "puoi", "fare", "fai", "fatto",
-        "aiutarmi", "aiuto", "assistenza", "cercami", "trova", "voglio", "serve", "servirebbe",
-        "mille", "benvenuto", "gentilissimo", "ok", "va", "bene", "figo", "perfetto", "ottimo",
-        "cerchiamo", "vediamo", "prodotto", "help", "search", "shopping", "assistant", "ebay",
-        "originale", "keywords", "taglia", "numero", "size", "percaso", "caso", "colore", "color", 
-        "ce", "disponibile", "disponibili", "trovi", "trovare", "esiste", "esistono", "sono", "sia", "fosse"
+        "ciao", "grazie", "per", "con", "un", "una", "uno", "il", "i", "gli", "da", "di", "a", 
+        "shopping", "ebay", "prodotto", "originale", "taglia", "numero", "size", "colore", "color",
+        "men", "mens", "women", "womens"
     }
 
     seen_norms = set()
     cleaned_parts = []
     
-    for candidate in raw_candidates:
-        # Split candidate in case it contains multiple words (e.g. from brands list)
-        for word in str(candidate).split():
-            # NORMALIZE: remove punctuation for check (e.g. "ciao," -> "ciao")
-            w_clean = re.sub(r"[^\w]", "", word.lower())
+    for word in raw_text.split():
+        # Preserviamo il '-' se è all'inizio per keyword negative di eBay
+        is_negative = word.startswith("-")
+        clean_word = word[1:] if is_negative else word
+        
+        w_norm = re.sub(r"[^\w]", "", clean_word.lower())
+        if not w_norm or w_norm in stopwords:
+            continue
             
-            if not w_clean or len(w_clean) < 2:
+        # Allow single chars only if they are sizes (s, m, l, x) or digits
+        if len(w_norm) < 2:
+            if w_norm not in {"s", "m", "l", "x"} and not w_norm.isdigit():
                 continue
-                
-            if w_clean in stopwords:
-                continue
-                
-            if w_clean not in seen_norms:
-                cleaned_parts.append(word)
-                seen_norms.add(w_clean)
-
-    # Category-Specific Standardization (Safety Layer)
-    query_str = " ".join(cleaned_parts)
-    product_low = str(product).lower()
-    
-    # 1. Shoes: "taglia 44" -> "EU 44", Gender detection
-    if any(x in product_low for x in ["scarpe", "sneakers", "stivali", "calzature"]):
-        # Match standalone numbers 35-48 or "taglia/numero 43"
-        query_str = re.sub(r"\b(?:taglia|numero|taglie)\s+(\d{2})\b", r"EU \1", query_str, flags=re.IGNORECASE)
-        # Gender standardization for shoes
-        if "uomo" in query_str.lower() and "men's" not in query_str.lower():
-            query_str += " Men's"
-        elif "donna" in query_str.lower() and "women's" not in query_str.lower():
-            query_str += " Women's"
             
-    # 2. Jeans/Pants: "taglia X lunghezza Y" -> "WX LY"
-    elif any(x in product_low for x in ["jeans", "pantaloni", "pantalone"]):
-        t_match = re.search(r"taglia\s+(\d+)", query_str, re.IGNORECASE)
-        l_match = re.search(r"lunghezza\s+(\d+)", query_str, re.IGNORECASE)
-        if t_match and l_match:
-            query_str = re.sub(r"taglia\s+\d+", f"W{t_match.group(1)}", query_str, flags=re.IGNORECASE)
-            query_str = re.sub(r"lunghezza\s+\d+", f"L{l_match.group(1)}", query_str, flags=re.IGNORECASE)
-        elif t_match:
-            query_str = re.sub(r"taglia\s+\d+", f"W{t_match.group(1)}", query_str, flags=re.IGNORECASE)
-    
-    # Final cleanup: deduplicate again after regex replacements
-    final_words = []
-    seen = set()
-    for w in query_str.split():
-        w_norm = re.sub(r"[^\w]", "", w.lower())
-        if w_norm and w_norm not in seen:
-            final_words.append(w)
-            seen.add(w_norm)
-            
-    final_q = " ".join(final_words).strip()
-    
-    if not final_q:
-        final_q = parsed.get("original_query", "")
+        final_word = f"-{w_norm}" if is_negative else word
+        if final_word.lower() not in seen_norms:
+            cleaned_parts.append(final_word)
+            seen_norms.add(final_word.lower())
 
-    return final_q
+    q_str = " ".join(cleaned_parts)
+    # Preferiamo l'italiano per eBay IT
+    if "uomo" in q_str.lower():
+        q_str = q_str.replace("Uomo", "").replace("uomo", "").strip() + " uomo"
+    elif "donna" in q_str.lower():
+        q_str = q_str.replace("Donna", "").replace("donna", "").strip() + " donna"
+
+    return q_str.strip() or parsed.get("original_query", "")
 
 
 # ============================================================
@@ -342,6 +307,7 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
 def search_items(
     parsed_query: Dict[str, Any],
     limit: int = 30,
+    category_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
 
     token = _get_oauth_token()
@@ -350,19 +316,38 @@ def search_items(
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
 
-    query = _build_query(parsed_query)
-    constraints = parsed_query.get("constraints", [])
+    # Primo tentativo: Full Query
+    query = _build_query(parsed_query, light_mode=False)
+    items = _execute_ebay_search(query, parsed_query, limit, headers, category_id=category_id)
     
+    # Fallback retry se 0 risultati
+    if not items:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("NO RESULTS FOUND. Retrying with LIGHT QUERY...")
+        query_light = _build_query(parsed_query, light_mode=True)
+        if query_light != query:
+            items = _execute_ebay_search(query_light, parsed_query, limit, headers, category_id=category_id)
+
+    items = items[:limit]
+    return [_normalize_item(i) for i in items]
+
+def _execute_ebay_search(query: str, parsed_query: Dict[str, Any], limit: int, headers: Dict[str, str], category_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Logica interna di loop per la ricerca paginata."""
     items = []
     offset = 0
     page_size = 20
-
+    constraints = parsed_query.get("constraints", [])
+    
     while len(items) < limit:
         params = {
             "q": query,
             "limit": page_size,
             "offset": offset,
         }
+        
+        if category_id:
+            params["category_ids"] = category_id
 
         filter_string = _build_filter_string(constraints)
         if filter_string:
@@ -372,30 +357,51 @@ def search_items(
         logger = logging.getLogger(__name__)
         logger.info(f"eBay Search Request: URL={SEARCH_URL} PARAMS={params}")
 
-        response = requests.get(
-            SEARCH_URL,
-            headers=headers,
-            params=params,
-            timeout=REQUEST_TIMEOUT,
-        )
+        try:
+            response = requests.get(
+                SEARCH_URL,
+                headers=headers,
+                params=params,
+                timeout=REQUEST_TIMEOUT,
+            )
+            if response.status_code != 200:
+                logger.error(f"eBay API error {response.status_code}: {response.text}")
+                break
+            
+            data = response.json()
+            page_items = data.get("itemSummaries", [])
+            if not page_items:
+                break
 
-        logger.info(f"eBay Search Response Status: {response.status_code}")
-
-        if response.status_code != 200:
-            logger.error(f"eBay API error {response.status_code}: {response.text}")
+            items.extend(page_items)
+            offset += page_size
+        except Exception as e:
+            logger.error(f"eBay API Request error: {e}")
             break
+        
+    return items
 
-        data = response.json()
-        page_items = data.get("itemSummaries", [])
-        total = data.get("total", 0)
-
-        logger.info(f"eBay Results: {len(page_items)} items on this page (Total available: {total})")
-
-        if not page_items:
-            break
-
-        items.extend(page_items)
-        offset += page_size
-
-    items = items[:limit]
-    return [_normalize_item(i) for i in items]
+def get_category_aspects(category_id: str) -> List[str]:
+    """Recupera l'elenco dei campi tecnici (Aspects) per una categoria via Taxonomy API."""
+    token = _get_oauth_token()
+    url = f"{TAXONOMY_URL}/category_tree/{EBAY_IT_TREE_ID}/get_item_aspect_metadata"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+    }
+    params = {"category_id": category_id}
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+        if response.status_code == 200:
+            data = response.json()
+            aspects = data.get("aspects", [])
+            # Estraiamo i nomi degli aspetti obbligatori o rilevanti
+            return [a["localizedAspectName"] for a in aspects if a.get("localizedAspectName")]
+    except Exception as e:
+        logger.error(f"Error fetching aspects for category {category_id}: {e}")
+        
+    return []

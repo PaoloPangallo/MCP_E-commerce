@@ -9,11 +9,9 @@ import requests
 
 from app.services.agent_tools import AGENT_TOOLS_SCHEMA, TOOLS_MAP
 
-logger = logging.getLogger(__name__)
+from app.core.config import OLLAMA_CHAT_URL, MODEL_NAME
 
-OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
-import os
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "llama3.1")
+logger = logging.getLogger(__name__)
 
 def _extract_tool_call_from_text(text: str) -> Dict[str, Any]:
     """

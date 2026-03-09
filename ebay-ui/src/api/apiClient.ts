@@ -13,7 +13,7 @@ export async function apiFetch<T = any>(
   const token = getToken()
 
   const controller = new AbortController()
-  const timeout = options.timeout ?? 300000
+  const timeout = options.timeout ?? 600000
   const id = setTimeout(() => controller.abort(), timeout)
 
   const headers: Record<string, string> = {
@@ -22,11 +22,11 @@ export async function apiFetch<T = any>(
   }
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`
+    headers.Authorization = `Bearer ${token} `
   }
 
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${API_BASE}${path} `, {
       ...options,
       headers,
       signal: controller.signal

@@ -4,7 +4,7 @@ import time
 from typing import Dict, Any, List
 import re
 
-from app.services.parser import parse_query_service
+from app.services.parser import parse_query_service, normalize_condition, deep_refine_parse
 from app.services.ebay import search_items
 from app.services.feedback import get_seller_feedback
 from app.services.trust import compute_trust_score
@@ -14,6 +14,7 @@ from app.services.rag import retrieve_context, build_context
 from app.services.rag.reranker import rerank_products
 from app.services.rag.explainer import explain_results as generate_explanation
 from app.services.metrics.ir_metrics import precision_at_k, recall_at_k, ndcg_at_k
+from app.services.rag.category_classifier import classify_query
 from app.services.user_profiling import update_user_profile
 from app.models.listing import Listing
 
@@ -32,40 +33,21 @@ def tool_parse_query(state: Dict[str, Any], **kwargs) -> str:
     if not query:
         return json.dumps({"error": "No query provided to parse_query"})
 
-    parsed = parse_query_service(query, use_llm=True, include_meta=True)
-    if isinstance(parsed, str):
-        parsed = {"semantic_query": parsed}
-
-    # Merge progressivo con contesto precedente
+    # Recupera il contesto precedente per passarlo al parser LLM
     current = state.get("parsed_query") or {}
     if not isinstance(current, dict):
         current = {"semantic_query": str(current)}
 
-    # Preserviamo i valori precedenti se i nuovi sono vuoti
-    for k, v in parsed.items():
-        if k == "semantic_query":
-            # Per la semantic query, facciamo sempre un merge delle parole uniche
-            # Questo evita di perdere pezzi se l'utente ripete solo una parte (es. da "nike nere 42" a "shox")
-            old_sq = current.get("semantic_query", "").lower()
-            new_sq = str(v or "").lower()
-            
-            # Uniamo le parole mantenendo l'ordine originale dell'anteprima + le nuove
-            words = old_sq.split() + new_sq.split()
-            seen = set()
-            deduped = [w for w in words if w and not (w in seen or seen.add(w))]
-            current[k] = " ".join(deduped)
-            
-        elif k == "compatibilities" and isinstance(v, dict):
-            # Merge dizionario invece di overwrite
-            old_comp = current.get("compatibilities") or {}
-            if not isinstance(old_comp, dict): old_comp = {}
-            old_comp.update(v)
-            current[k] = old_comp
-        elif v:
-            # Overwrite per altri campi (brands, product, etc) solo se present
-            current[k] = v
+    # Passiamo il contesto al parser: ora l'LLM può decidere se mantenere o scartare (Topic Redirection)
+    parsed = parse_query_service(query, use_llm=True, include_meta=True, previous_context=current)
+    
+    if isinstance(parsed, str):
+        parsed = {"semantic_query": parsed}
 
-    state["parsed_query"] = current
+    # Aggiorniamo lo stato: ci fidiamo della logica di merge/discard dell'LLM
+    # che ha ricevuto il contesto precedente.
+    state["parsed_query"] = parsed
+    current = parsed # Allineiamo per logica successiva
 
     # ---- User Profiling implicito ----
     user = state.get("user_obj")
@@ -78,38 +60,43 @@ def tool_parse_query(state: Dict[str, Any], **kwargs) -> str:
 
     state["thinking_trace"].append("✔ parsed query updated")
 
-    # Costruisci la query finale per search_products combinando brand, prodotto, semantic query e compatibilities
-    brands = " ".join(current.get("brands", []))
-    product = current.get("product", "")
-    sq = current.get("semantic_query", "")
-    comp_values = " ".join([str(val) for val in (current.get("compatibilities") or {}).values()])
-    
-    # Uniamo tutto in una stringa di ricerca potente per eBay
-    search_query_parts = []
-    if brands: search_query_parts.append(brands)
-    if product and product.lower() not in brands.lower(): search_query_parts.append(product)
-    if sq: search_query_parts.append(sq)
-    if comp_values: search_query_parts.append(comp_values)
-    
-    # Deduplica parole nella query finale mantenendo l'ordine e ignorando punteggiatura (es "Levi's" vs "levis")
-    final_words = []
-    seen_words = set()
-    for part in search_query_parts:
-        for word in str(part).split():
-            # Pulizia per confronto (es. levi's -> levis)
-            w_norm = re.sub(r"[^\w]", "", word.lower())
-            if w_norm and w_norm not in seen_words:
-                final_words.append(word)
-                seen_words.add(w_norm)
-    
-    final_search_query = " ".join(final_words).strip()
+    # ---- EBAY CATEGORY CLASSIFICATION (Step 1 del nuovo workflow RAG) ----
+    state["ebay_category"] = None # Reset pre-classificazione per evitare inquinamento
+    category_info = classify_query(query)
+    if category_info:
+        if isinstance(category_info, str):
+            try:
+                category_info = json.loads(category_info)
+            except:
+                pass
+        
+        if isinstance(category_info, dict):
+            state["ebay_category"] = category_info
+            state["thinking_trace"].append(f"✔ anchored to category: {category_info.get('category_path')}")
+            
+            # --- DEEP REFINEMENT (Step 2: Informed Extraction) ---
+            # Riesaminiamo la query con la conoscenza degli Aspects della categoria
+            current = deep_refine_parse(query, current, category_info)
+            state["parsed_query"] = current # Aggiorniamo lo stato con i dati raffinati
+            state["thinking_trace"].append("✔ deep refinement performed with category aspects")
+            
+            # Se c'è un conflitto segnalato dal classificatore, lo aggiungiamo ai missing_info
+            if category_info.get("conflict_warning"):
+                missing = current.get("missing_info", [])
+                warning = f"⚠️ CATEGORY CONFLICT: {category_info['conflict_warning']}"
+                if warning not in missing:
+                    missing.append(warning)
+                current["missing_info"] = missing
+
+    # La query finale è quella pulita restituita dal parser LLM (che ha già pulito il rumore)
+    final_search_query = current.get("semantic_query") or query
     missing = current.get("missing_info", [])
 
     return json.dumps({
         "status": "parsed",
         "search_query": final_search_query,
         "missing_info": missing,
-        "next_action": "NOW call search_products OR call request_user_clarification if too many fields are missing.",
+        "next_action": "PLANNER: Check if 'missing_info' contains CRITICAL fields (Size, Gender) before searching.",
     })
 
 
@@ -171,10 +158,11 @@ def tool_search_products(state: Dict[str, Any], **kwargs) -> str:
         pass
 
     # =============================================================
-    # STEP 1: eBay Search (limit=20, come pipeline originale)
+    # STEP 1: eBay Search (ancorato alla categoria se trovata)
     # =============================================================
     t = time.time()
-    results = search_items(parsed_query=parsed, limit=20) or []
+    cat_id = (state.get("ebay_category") or {}).get("category_id")
+    results = search_items(parsed_query=parsed, limit=20, category_id=cat_id) or []
     
     # LOG DIAGNOSTICO: Vediamo cosa stiamo filtrando effettivamente
     logger.info(f"PROCESSED SEARCH: query='{query}' constraints={parsed.get('constraints')} found={len(results)}")
@@ -415,7 +403,9 @@ def tool_explain_results(state: Dict[str, Any], **kwargs) -> str:
     query = kwargs.get("query") or parsed.get("semantic_query") or parsed.get("search_query") or ""
     missing = parsed.get("missing_info", [])
     
-    explanation = generate_explanation(query, results, missing_info=missing)
+    results = state.get("results", [])
+    cat_info = state.get("ebay_category")
+    explanation = generate_explanation(query, results, missing_info=missing, ebay_category=cat_info)
 
     # Salva nello state per l'orchestratore
     state["_explanation"] = explanation
@@ -518,6 +508,16 @@ def tool_detect_price_anomaly(state: Dict[str, Any], **kwargs) -> str:
 def tool_social_response(state: Dict[str, Any], **kwargs) -> str:
     """Risponde a messaggi sociali (grazie, ciao, etc) con grande creatività."""
     response = kwargs.get("response") or "Ciao! Sono il tuo assistente shopping AI. Come posso aiutarti oggi?"
+    
+    # Robustness: if the model double-encoded JSON into the 'response' field
+    if isinstance(response, str) and (response.strip().startswith("{") or response.strip().startswith("[")):
+        try:
+            data = json.loads(response)
+            if isinstance(data, dict):
+                response = data.get("response") or data.get("social_message") or response
+        except:
+            pass
+
     return json.dumps({
         "response": response,
         "social_message": response
