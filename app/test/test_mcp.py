@@ -1,18 +1,33 @@
-from app.mcp.client import MCPToolClient
+import asyncio
 
-URLS = [
-    "http://127.0.0.1:8050/mcp",
-    "http://127.0.0.1:8050/mcp/",
-]
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 
-for url in URLS:
-    print(f"\n=== TEST {url} ===")
-    try:
-        client = MCPToolClient(url, enabled=True)
-        print("TOOLS:")
-        print(client.list_tools())
-        print("PROFILE:")
-        print(client.call_tool("profile_query", {"query": "iphone 13 massimo 700 euro"}))
-    except Exception as e:
-        print("FAIL")
-        print(repr(e))
+
+async def test():
+
+    url = "http://127.0.0.1:8050/mcp"
+
+    async with streamable_http_client(url) as (read, write, _):
+
+        async with ClientSession(read, write) as session:
+
+            await session.initialize()
+
+            print("\nTOOLS DISPONIBILI:")
+            tools = await session.list_tools()
+
+            for tool in tools.tools:
+                print("-", tool.name)
+
+            print("\nTEST search_products\n")
+
+            result = await session.call_tool(
+                "search_products",
+                {"query": "iphone 13"}
+            )
+
+            print(result)
+
+
+asyncio.run(test())

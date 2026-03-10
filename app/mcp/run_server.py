@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-import logging
-import uvicorn
+import os
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name, str(default)).strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
 
 if __name__ == "__main__":
-    logger.info("Starting standalone MCP server on http://127.0.0.1:8050/mcp")
     uvicorn.run(
         "app.mcp.asgi:app",
-        host="127.0.0.1",
-        port=8050,
-        reload=False,
+        host=os.getenv("MCP_HOST", "127.0.0.1"),
+        port=int(os.getenv("MCP_PORT", "8050")),
+        reload=_env_flag("MCP_RELOAD", True),
+        log_level=os.getenv("MCP_LOG_LEVEL", "info"),
     )

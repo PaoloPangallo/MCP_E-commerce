@@ -45,7 +45,7 @@ class EbayReactAgent:
         self.mcp_server_url = (
             mcp_server_url
             or os.getenv("MCP_SERVER_URL")
-            or "http://127.0.0.1:8050/mcp"
+            or "http://127.0.0.1:8040/mcp"
         )
 
         if strict_mcp is None:

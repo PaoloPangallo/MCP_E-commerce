@@ -147,18 +147,46 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "retrieval, reranking, trust scoring e analisi finale."
     ),
 )
+@mcp.tool(
+    name="search_products",
+    description="Search products using the full ecommerce pipeline"
+)
 def search_products(query: str) -> str:
+
     db = None
+
     try:
+
+        logger.info("MCP TOOL search_products START")
+
         db = _get_db()
-        raw = run_search_pipeline(query=query, db=db, user=None)
+
+        raw = run_search_pipeline(
+            query=query,
+            db=db,
+            user=None,
+            llm_engine="ollama"
+        )
+
         normalized = _normalize_search_output(raw)
+
         normalized["_backend"] = "mcp"
+
+        logger.info("MCP TOOL search_products END")
+
         return _safe_json(normalized)
+
     except Exception as exc:
+
         logger.exception("MCP search_products failed")
-        return _tool_error(query=query, error=str(exc))
+
+        return _tool_error(
+            query=query,
+            error=str(exc)
+        )
+
     finally:
+
         _close_db(db)
 
 
@@ -177,7 +205,6 @@ def analyze_seller(seller_name: str, page: int = 1, limit: int = 10) -> str:
             seller_name=seller_name,
             page=page,
             limit=limit,
-            db=db,
         )
         normalized = _normalize_seller_output(raw)
         normalized["_backend"] = "mcp"

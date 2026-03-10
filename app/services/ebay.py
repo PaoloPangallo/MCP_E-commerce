@@ -300,6 +300,7 @@ def _perform_search_request(
     offset: int,
     sort: Optional[str] = None,
 ) -> Dict[str, Any]:
+
     headers = {
         "Authorization": f"Bearer {token}",
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
@@ -317,16 +318,31 @@ def _perform_search_request(
     if sort:
         params["sort"] = sort
 
-    response = _SESSION.get(
-        SEARCH_URL,
-        headers=headers,
-        params=params,
-        timeout=REQUEST_TIMEOUT,
-    )
+    try:
+
+        response = _SESSION.get(
+            SEARCH_URL,
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    except requests.exceptions.Timeout:
+
+        logger.error("EBAY TIMEOUT")
+        raise RuntimeError("EBAY timeout")
+
+    except Exception as exc:
+
+        logger.exception("EBAY CONNECTION ERROR")
+        raise RuntimeError("EBAY connection error")
 
     if response.status_code == 401:
-        # token scaduto / invalido
+
+        logger.warning("EBAY TOKEN EXPIRED")
+
         token = _get_oauth_token(force_refresh=True)
+
         headers["Authorization"] = f"Bearer {token}"
 
         response = _SESSION.get(
@@ -337,7 +353,12 @@ def _perform_search_request(
         )
 
     if response.status_code != 200:
-        raise RuntimeError(f"eBay search error {response.status_code}: {response.text}")
+
+        logger.error("EBAY ERROR %s %s", response.status_code, response.text)
+
+        raise RuntimeError(
+            f"eBay search error {response.status_code}"
+        )
 
     return response.json()
 
@@ -350,18 +371,22 @@ def search_items(
     parsed_query: Dict[str, Any],
     limit: int = 20,
 ) -> List[Dict[str, Any]]:
-    """
-    Search eBay items with optimized pagination:
-    - reuse oauth token
-    - reuse HTTP session
-    - stop early when enough items collected
-    - avoid deep pagination by default
-    """
+
+    logger.info("EBAY SEARCH START")
+
     query = _build_query(parsed_query)
+
     if not query:
+        logger.warning("EBAY QUERY EMPTY")
         return []
 
-    token = _get_oauth_token()
+    logger.info("EBAY QUERY = %s", query)
+
+    try:
+        token = _get_oauth_token()
+    except Exception as e:
+        logger.exception("EBAY TOKEN ERROR")
+        return []
 
     constraints = parsed_query.get("constraints") or []
     preferences = parsed_query.get("preferences") or []
@@ -377,23 +402,41 @@ def search_items(
     pages_done = 0
 
     while len(items) < wanted and pages_done < MAX_OFFSET_PAGES:
-        data = _perform_search_request(
-            token=token,
-            query=query,
-            filter_string=filter_string,
-            limit=page_size,
-            offset=offset,
-            sort=sort,
+
+        logger.info(
+            "EBAY REQUEST | query=%s offset=%s limit=%s",
+            query,
+            offset,
+            page_size
         )
 
+        try:
+
+            data = _perform_search_request(
+                token=token,
+                query=query,
+                filter_string=filter_string,
+                limit=page_size,
+                offset=offset,
+                sort=sort,
+            )
+
+        except Exception as exc:
+
+            logger.exception("EBAY REQUEST FAILED")
+            break
+
         page_items = data.get("itemSummaries", []) or []
+
+        logger.info("EBAY RESPONSE items=%s", len(page_items))
+
         if not page_items:
             break
 
         normalized_page = [_normalize_item(i) for i in page_items]
+
         items.extend(normalized_page)
 
-        # early stop se la pagina torna meno elementi del richiesto
         if len(page_items) < page_size:
             break
 
@@ -402,5 +445,6 @@ def search_items(
 
     items = _dedupe_keep_order(items)
 
-    # trim finale
+    logger.info("EBAY SEARCH END | total_items=%s", len(items))
+
     return items[:wanted]

@@ -278,6 +278,8 @@ def run_search_pipeline(
     # 1) PARSE QUERY
     # ============================================================
 
+    logger.info("PIPELINE STEP 1 parse_query")
+
     t = time.time()
     parsed = parse_query_service(
         query,
@@ -291,7 +293,7 @@ def run_search_pipeline(
     # ============================================================
     # 2) USER PROFILE UPDATE (NO INTERNAL COMMIT)
     # ============================================================
-
+    logger.info("PIPELINE STEP 2 ebay_search")
     if user:
         try:
             update_user_profile(user, parsed, db)
@@ -301,6 +303,7 @@ def run_search_pipeline(
     # ============================================================
     # 3) EBAY SEARCH
     # ============================================================
+    logger.info("PIPELINE STEP 3 rerank")
 
     t = time.time()
     items = search_items(parsed_query=parsed, limit=MAX_RESULTS_FROM_EBAY) or []
@@ -311,6 +314,7 @@ def run_search_pipeline(
     # ============================================================
     # 4) RERANK EARLY
     # ============================================================
+    logger.info("PIPELINE STEP 4 seller_trust")
 
     t = time.time()
     if items:

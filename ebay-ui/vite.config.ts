@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/seller': {
-        target: 'http://localhost:8040',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

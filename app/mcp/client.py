@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -20,10 +21,10 @@ except Exception as exc:
 class MCPToolClient:
     def __init__(
         self,
-        server_url: str = "http://127.0.0.1:8050/mcp",
+        server_url: Optional[str] = None,
         enabled: bool = True,
     ) -> None:
-        self.server_url = server_url
+        self.server_url = server_url or os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp/mcp")
         self.enabled = bool(enabled)
 
     @property
@@ -83,18 +84,17 @@ class MCPToolClient:
                 f"MCP client non disponibile: {_MCP_IMPORT_ERROR}"
             )
 
-    @staticmethod
-    def _run_sync(coro):
+    import asyncio
+
+    def _run_sync(self, coro):
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(coro)
 
-        new_loop = asyncio.new_event_loop()
-        try:
-            return new_loop.run_until_complete(coro)
-        finally:
-            new_loop.close()
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result()
 
     async def _list_tools_async(self) -> List[str]:
         assert streamable_http_client is not None

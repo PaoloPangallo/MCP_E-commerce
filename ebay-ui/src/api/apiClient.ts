@@ -1,7 +1,7 @@
 import { getToken } from "../auth/authStore"
 
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8040"
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8000"
 
 type ApiOptions = RequestInit & {
   timeout?: number

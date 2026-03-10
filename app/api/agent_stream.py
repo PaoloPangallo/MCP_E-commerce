@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------
 
 MAX_QUERY_LENGTH = 500
-WORKER_HARD_TIMEOUT_SECONDS = 45.0
-QUEUE_WAIT_TIMEOUT_SECONDS = 8.0
+WORKER_HARD_TIMEOUT_SECONDS = 90.0
+QUEUE_WAIT_TIMEOUT_SECONDS = 75.0
 
 _ALLOWED_EVENT_TYPES = {
     "start",
@@ -63,7 +63,7 @@ def _normalize_llm_engine(llm_engine: str) -> str:
     llm_engine = (llm_engine or "").strip().lower()
     if llm_engine in {"gemini", "ollama", "rule_based"}:
         return llm_engine
-    return "gemini"
+    return "ollama"
 
 
 def _sanitize_query(query: str) -> str:
@@ -338,7 +338,7 @@ async def agent_event_generator(
 async def agent_stream(
     request: Request,
     query: str = Query(..., min_length=1),
-    llm_engine: str = Query("gemini"),
+    llm_engine: str = Query("ollama"),
     user=Depends(get_optional_user),
 ):
     clean_query = _sanitize_query(query)
