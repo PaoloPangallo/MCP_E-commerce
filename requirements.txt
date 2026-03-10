@@ -1,9 +1,9 @@
-# =========================
+ # =========================
 # Core Backend
 # =========================
 fastapi==0.110.0
-uvicorn[standard]==0.27.1
-pydantic==2.6.1
+uvicorn[standard]~=0.41.0
+pydantic~=2.12.5
 python-dotenv==1.0.1
 
 # =========================
@@ -53,4 +53,6 @@ faiss-cpu
 
 passlib~=1.7.3
 
-jose
+jose~=1.0.0
+mcp~=1.26.0
+redis~=7.3.0

@@ -1,17 +1,42 @@
-
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from app.agent.schemas import ObservationStatus, ObservationQuality
-from app.services.search_pipeline import run_search_pipeline
-from app.services.seller_pipeline import run_seller_pipeline
-
+from app.agent.schemas import LatencyClass, ObservationQuality, ObservationStatus
+from app.tools import (
+    execute_conversation_tool,
+    execute_search_tool,
+    execute_seller_tool,
+)
+from app.tools.search_tool import clean_search_query, normalize_search_arguments
+from app.tools.seller_tool import extract_explicit_seller, normalize_seller_arguments
 
 InputNormalizer = Callable[[Dict[str, Any], Any], Dict[str, Any]]
+
+_QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
+    "conversation": (
+        r"\b(ciao|salve|buongiorno|buonasera|hey)\b",
+        r"\b(come va|come stai|tutto bene)\b",
+        r"\b(cosa ne pensi|che ne pensi|secondo te|mi spieghi|spiegami)\b",
+    ),
+    "seller": (
+        r"\b(venditore|seller)\b",
+        r"\b(feedback|recensioni|reputazione|affidabile|affidabilit[aà]|trust)\b",
+    ),
+    "search": (
+        r"\b(cerca|trova|mostra|compara|confronta|prezzo|prodotto|prodotti|compra|vende|vendita)\b",
+        r"\b\d+[\.,]?\d*\s*(euro|eur|€)\b",
+        r"\b(taglia|misura|numero|colore|modello|marca)\b",
+    ),
+    "multi": (
+        r"\b(e poi|oltre a|assieme a|insieme a|anche|controlla|verifica)\b",
+        r"[,;:].+\b(cerca|trova|analizza|feedback|seller|venditore|vende)\b",
+    ),
+}
 
 
 @dataclass(slots=True)
@@ -30,10 +55,16 @@ class ToolSpec:
 
     tags: tuple[str, ...] = field(default_factory=tuple)
     examples: tuple[str, ...] = field(default_factory=tuple)
-
     required_fields: tuple[str, ...] = field(default_factory=tuple)
     state_key: str = ""
     max_retries: int = 0
+
+    cost: int = 1
+    latency_class: LatencyClass = "medium"
+    dependencies: tuple[str, ...] = field(default_factory=tuple)
+    produced_entities: tuple[str, ...] = field(default_factory=tuple)
+    can_run_in_parallel: bool = True
+    use_cache: bool = True
 
     input_normalizer: Optional[InputNormalizer] = None
     status_resolver: Optional[Callable[[Dict[str, Any]], ObservationStatus]] = None
@@ -64,16 +95,12 @@ def find_tools_by_tags(*tags: str, match_all: bool = False) -> list[str]:
         return []
 
     matched: list[str] = []
-
     for name, spec in TOOLS.items():
         spec_tags = {tag.lower() for tag in spec.tags}
-        if match_all:
-            if wanted.issubset(spec_tags):
-                matched.append(name)
-        else:
-            if wanted & spec_tags:
-                matched.append(name)
-
+        if match_all and wanted.issubset(spec_tags):
+            matched.append(name)
+        elif not match_all and wanted & spec_tags:
+            matched.append(name)
     return matched
 
 
@@ -88,7 +115,6 @@ def get_tool_descriptions() -> Dict[str, str]:
 
 def get_tool_catalog() -> Dict[str, Dict[str, Any]]:
     catalog: Dict[str, Dict[str, Any]] = {}
-
     for name, spec in TOOLS.items():
         catalog[name] = {
             "description": spec.description,
@@ -97,310 +123,351 @@ def get_tool_catalog() -> Dict[str, Dict[str, Any]]:
             "tags": list(spec.tags),
             "examples": list(spec.examples[:2]),
             "state_key": spec.state_key or None,
+            "cost": spec.cost,
+            "latency_class": spec.latency_class,
+            "dependencies": list(spec.dependencies),
+            "produced_entities": list(spec.produced_entities),
+            "can_run_in_parallel": spec.can_run_in_parallel,
+            "use_cache": spec.use_cache,
         }
-
     return catalog
 
 
-def _to_clean_str(value: Any) -> str:
+def _clean_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _to_bounded_int(
-    value: Any,
-    default: int,
-    min_value: int,
-    max_value: int,
-) -> int:
-    try:
-        parsed = int(value)
-        return min(max(parsed, min_value), max_value)
-    except Exception:
-        return default
+def analyze_user_query(query: str) -> Dict[str, Any]:
+    text = _clean_text(query)
+    lowered = text.lower()
+    explicit_seller = extract_explicit_seller(text)
 
-
-def extract_explicit_seller(text: str) -> str | None:
-    import re
-
-    pattern = r"(?:venditore|seller)\s+([A-Za-z0-9._-]{3,})"
-    match = re.search(pattern, text or "", re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return None
-
-
-def clean_search_query(query: str) -> str:
-    import re
-
-    q = (query or "").strip().lower()
-    if not q:
-        return ""
-
-    q = re.sub(r"(venditore|seller)\s+[a-zA-Z0-9._-]+", "", q)
-    q = re.sub(
-        r"(dammi i feedback|analizza il venditore|analizza|controlla se vende|verifica se vende|feedback del venditore)",
-        "",
-        q,
+    conversation_signal = any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["conversation"]
     )
-    q = re.sub(r"\s+", " ", q)
+    seller_signal = bool(explicit_seller) or any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["seller"]
+    )
+    search_signal = any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["search"]
+    )
+    multi_signal = any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["multi"]
+    )
 
-    return q.strip()
-
-
-def _normalize_search_input(action_input: Dict[str, Any]) -> Dict[str, Any]:
-    query = _to_clean_str(action_input.get("query"))
-    if not query:
-        raise ValueError("search_pipeline requires a non-empty 'query'")
-
-    return {"query": query}
-
-
-def _normalize_seller_input(action_input: Dict[str, Any]) -> Dict[str, Any]:
-    seller_name = _to_clean_str(action_input.get("seller_name"))
-    if not seller_name:
-        raise ValueError("seller_pipeline requires a non-empty 'seller_name'")
+    cleaned_search_query = clean_search_query(text)
+    has_budget_signal = bool(re.search(r"\b\d+[\.,]?\d*\s*(euro|eur|€)\b", lowered))
 
     return {
-        "seller_name": seller_name,
-        "page": _to_bounded_int(action_input.get("page", 1), default=1, min_value=1, max_value=999),
-        "limit": _to_bounded_int(action_input.get("limit", 10), default=10, min_value=1, max_value=50),
+        "text": text,
+        "cleaned_search_query": cleaned_search_query,
+        "explicit_seller": explicit_seller,
+        "conversation_signal": conversation_signal,
+        "seller_signal": seller_signal,
+        "search_signal": search_signal,
+        "multi_signal": multi_signal,
+        "has_budget_signal": has_budget_signal,
     }
 
 
 def _normalize_search_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
-    query = _to_clean_str(action_input.get("query") or getattr(memory, "user_query", ""))
-    query = clean_search_query(query)
-    if not query:
-        raise ValueError("search_pipeline requires a usable query")
-    return {"query": query}
+    fallback_query = getattr(memory, "user_query", "")
+    return normalize_search_arguments(action_input, fallback_query=fallback_query)
 
 
 def _normalize_seller_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
-    seller_name = _to_clean_str(
-        action_input.get("seller_name")
-        or getattr(memory, "last_seller_name", None)
-        or extract_explicit_seller(getattr(memory, "user_query", ""))
-        or ""
+    fallback_seller = (
+        _clean_text(action_input.get("seller_name"))
+        or _clean_text(getattr(memory, "last_seller_name", ""))
+        or _clean_text(extract_explicit_seller(getattr(memory, "user_query", "")))
     )
-
-    if not seller_name:
-        raise ValueError("seller_pipeline requires a usable seller_name")
-
-    return {
-        "seller_name": seller_name,
-        "page": _to_bounded_int(action_input.get("page", 1), default=1, min_value=1, max_value=999),
-        "limit": _to_bounded_int(action_input.get("limit", 10), default=10, min_value=1, max_value=50),
-    }
+    return normalize_seller_arguments(action_input, fallback_seller=fallback_seller)
 
 
-def _run_search_pipeline(action_input: Dict[str, Any], context: ToolContext) -> Dict[str, Any]:
-    clean = _normalize_search_input(action_input)
-
-    return run_search_pipeline(
-        query=clean["query"],
-        db=context.db,
-        user=context.user,
-        llm_engine=context.llm_engine,
-    )
-
-
-def _run_seller_pipeline(action_input: Dict[str, Any], context: ToolContext) -> Dict[str, Any]:
-    clean = _normalize_seller_input(action_input)
-
-    result = run_seller_pipeline(
-        seller_name=clean["seller_name"],
-        page=clean["page"],
-        limit=clean["limit"],
-    )
-
-    if not isinstance(result, dict):
-        result = {"result": result}
-
-    return result
+def _normalize_conversation_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+    query = _clean_text(action_input.get("query") or getattr(memory, "user_query", ""))
+    if not query:
+        raise ValueError("conversation richiede una query non vuota.")
+    return {"query": query}
 
 
 def _normalize_search_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(result or {})
-    payload.setdefault("query", _to_clean_str(action_input.get("query")))
-    payload.setdefault("results", [])
-    payload.setdefault("results_count", len(payload.get("results") or []))
-    payload.setdefault("analysis", payload.get("analysis") or "")
-    payload.setdefault("metrics", payload.get("metrics") or payload.get("ir_metrics"))
+    payload.setdefault("query", _clean_text(action_input.get("query")))
+    payload.setdefault("results", payload.get("results") or [])
+    payload.setdefault("results_count", len(payload["results"]))
+    payload.setdefault("status", "ok" if payload["results_count"] > 0 else "no_data")
     return payload
 
 
 def _normalize_seller_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(result or {})
-    payload.setdefault("seller_name", _to_clean_str(action_input.get("seller_name")))
-    payload.setdefault("page", _to_bounded_int(action_input.get("page", 1), default=1, min_value=1, max_value=999))
-    payload.setdefault("limit", _to_bounded_int(action_input.get("limit", 10), default=10, min_value=1, max_value=50))
-    payload.setdefault("count", 0)
-    payload.setdefault("trust_score", None)
-    payload.setdefault("sentiment_score", None)
-    payload.setdefault("feedbacks", [])
+    feedbacks = payload.get("feedbacks") or payload.get("feedback") or []
+    count = int(payload.get("count", len(feedbacks)))
+
+    payload.setdefault("seller_name", _clean_text(action_input.get("seller_name")))
+    payload.setdefault("page", int(action_input.get("page", 1) or 1))
+    payload.setdefault("limit", int(action_input.get("limit", 10) or 10))
+    payload["count"] = count
+    payload["feedbacks"] = feedbacks
+
+    if count > 0:
+        payload["status"] = "ok"
+    else:
+        payload["status"] = "no_data"
+        payload.setdefault("error", "Nessun feedback disponibile per questo venditore.")
+        payload["trust_score"] = None
+        payload["sentiment_score"] = None
+
     return payload
 
 
-def _search_status_resolver(payload: Dict[str, Any]) -> ObservationStatus:
+def _normalize_conversation_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(result or {})
+    payload.setdefault("query", _clean_text(action_input.get("query")))
+    payload.setdefault("answer", "")
+    payload.setdefault("status", "ok" if payload.get("answer") else "error")
+    return payload
+
+
+def _resolve_search_status(payload: Dict[str, Any]) -> ObservationStatus:
     if payload.get("error"):
         return "error"
-    return "ok"
-
-
-def _search_quality_resolver(payload: Dict[str, Any]) -> ObservationQuality:
-    results = payload.get("results") or []
-    return "good" if results else "empty"
-
-
-def _search_terminal_resolver(payload: Dict[str, Any]) -> bool:
-    return True
-
-
-def _seller_status_resolver(payload: Dict[str, Any]) -> ObservationStatus:
-    error = str(payload.get("error") or "").strip()
-    if error:
+    if int(payload.get("results_count", 0)) <= 0:
         return "no_data"
     return "ok"
 
 
-def _seller_quality_resolver(payload: Dict[str, Any]) -> ObservationQuality:
-    if payload.get("error"):
+def _resolve_search_quality(payload: Dict[str, Any]) -> ObservationQuality:
+    count = int(payload.get("results_count", 0))
+    if count <= 0:
         return "empty"
-
-    count = payload.get("count")
-    try:
-        count_value = int(count)
-    except Exception:
-        count_value = 0
-
-    if count_value <= 0:
-        return "empty"
-    if count_value < 3:
+    if count < 3:
         return "partial"
     return "good"
 
 
-def _seller_terminal_resolver(payload: Dict[str, Any]) -> bool:
+def _resolve_search_terminal(payload: Dict[str, Any]) -> bool:
+    return bool(payload.get("error")) or int(payload.get("results_count", 0)) >= 1
+
+
+def _resolve_seller_status(payload: Dict[str, Any]) -> ObservationStatus:
+    if payload.get("error") and payload.get("status") == "error":
+        return "error"
+    if payload.get("status") == "no_data" or int(payload.get("count", 0)) <= 0:
+        return "no_data"
+    return "ok"
+
+
+def _resolve_seller_quality(payload: Dict[str, Any]) -> ObservationQuality:
+    count = int(payload.get("count", 0))
+    if count <= 0:
+        return "empty"
+    if count < 3:
+        return "partial"
+    return "good"
+
+
+def _resolve_seller_terminal(payload: Dict[str, Any]) -> bool:
+    return payload.get("status") in {"ok", "no_data"} or bool(payload.get("error"))
+
+
+def _resolve_conversation_status(payload: Dict[str, Any]) -> ObservationStatus:
+    if payload.get("answer"):
+        return "ok"
+    return "error"
+
+
+def _resolve_conversation_quality(payload: Dict[str, Any]) -> ObservationQuality:
+    if payload.get("answer"):
+        return "good"
+    return "empty"
+
+
+def _resolve_conversation_terminal(payload: Dict[str, Any]) -> bool:
     return True
 
 
-def summarize_search(data: Dict[str, Any]) -> str:
-    results = data.get("results") or []
-    results_count = data.get("results_count", len(results))
-    analysis = (data.get("analysis") or "").strip()
+def _summarize_search(payload: Dict[str, Any]) -> str:
+    count = int(payload.get("results_count", 0))
+    results = payload.get("results") or []
+    if count <= 0:
+        return "Search completata ma senza risultati utili."
 
-    parts = [f"Search completata con {results_count} risultati."]
-    top = results[0] if results else None
+    top = results[0] if results else {}
+    title = _clean_text(top.get("title"))
+    price = top.get("price")
+    currency = _clean_text(top.get("currency") or top.get("price_currency"))
+    seller = _clean_text(top.get("seller_name") or top.get("seller_username"))
+    trust = top.get("trust_score")
 
-    if top:
-        title = top.get("title")
-        price = top.get("price")
-        currency = top.get("currency")
-        seller = top.get("seller_name") or top.get("seller_username")
-        trust = top.get("trust_score")
-
-        if title:
-            parts.append(f"Top result: {title}.")
-        if price is not None:
-            price_text = f"{price} {currency or ''}".strip()
-            parts.append(f"Prezzo: {price_text}.")
-        if seller:
-            parts.append(f"Seller: {seller}.")
-        if trust is not None:
-            try:
-                parts.append(f"Trust: {round(float(trust) * 100)}%.")
-            except Exception:
-                pass
-
-    if analysis:
-        parts.append(analysis[:180])
-
-    return " ".join(parts).strip()
+    chunks = [f"Search completata con {count} risultati."]
+    if title:
+        chunks.append(f"Top result: {title}.")
+    if price is not None:
+        chunks.append(f"Prezzo: {price} {currency or 'EUR'}.")
+    if seller:
+        chunks.append(f"Seller: {seller}.")
+    if trust is not None:
+        try:
+            chunks.append(f"Trust: {round(float(trust) * 100):.0f}%.")
+        except Exception:
+            pass
+    return " ".join(chunks).strip()
 
 
-def summarize_seller(data: Dict[str, Any]) -> str:
-    seller_name = data.get("seller_name")
-    trust_score = data.get("trust_score")
-    sentiment_score = data.get("sentiment_score")
-    count = data.get("count")
-    error = data.get("error")
+def _summarize_seller(payload: Dict[str, Any]) -> str:
+    seller_name = _clean_text(payload.get("seller_name")) or "venditore"
+    count = int(payload.get("count", 0))
+    trust_score = payload.get("trust_score")
+    sentiment_score = payload.get("sentiment_score")
+    error = _clean_text(payload.get("error"))
 
-    if error:
-        return (
-            f"Analisi seller completata senza dati utili per {seller_name or 'seller richiesto'}. "
-            f"Motivo: {error}"
-        )
+    if count <= 0:
+        reason = error or "Nessun feedback disponibile per questo venditore."
+        return f"Analisi seller completata senza dati utili per {seller_name}. Motivo: {reason}"
 
-    parts = []
-
-    if seller_name:
-        parts.append(f"Analizzato seller {seller_name}.")
-    if count is not None:
-        parts.append(f"Feedback totali: {count}.")
+    trust_text = ""
     if trust_score is not None:
         try:
-            parts.append(f"Trust score: {round(float(trust_score) * 100)}%.")
+            trust_text = f" Trust score: {round(float(trust_score) * 100):.0f}%."
         except Exception:
-            pass
+            trust_text = ""
+
+    sentiment_text = ""
     if sentiment_score is not None:
         try:
-            parts.append(f"Sentiment score: {round(float(sentiment_score) * 100)}%.")
+            sentiment_text = f" Sentiment score: {round(float(sentiment_score) * 100):.0f}%."
         except Exception:
-            pass
+            sentiment_text = ""
 
-    return " ".join(parts).strip() or "Analisi seller completata."
+    return (
+        f"Analizzato seller {seller_name}. "
+        f"Feedback totali: {count}."
+        f"{trust_text}{sentiment_text}"
+    ).strip()
 
 
-def _bootstrap_default_tools() -> None:
-    register_tool(
-        ToolSpec(
-            name="search_pipeline",
-            description=(
-                "Use for product discovery, product comparison, budget-based search, "
-                "and checking what products are being sold."
-            ),
-            input_schema={"query": "string"},
-            required_fields=("query",),
-            executor=_run_search_pipeline,
-            state_key="search",
-            max_retries=1,
-            input_normalizer=_normalize_search_action_input,
-            status_resolver=_search_status_resolver,
-            quality_resolver=_search_quality_resolver,
-            terminal_resolver=_search_terminal_resolver,
-            result_normalizer=_normalize_search_result,
-            summarizer=summarize_search,
-            tags=("search", "product", "catalog", "comparison"),
-            examples=("cerca un dyson v8", "confronta iphone 14 e 15"),
-        )
-    )
+def _summarize_conversation(payload: Dict[str, Any]) -> str:
+    answer = _clean_text(payload.get("answer"))
+    if answer:
+        return answer
+    return _clean_text(payload.get("error")) or "Nessuna risposta conversazionale disponibile."
+
+
+def _bootstrap_tools() -> None:
+    TOOLS.clear()
 
     register_tool(
         ToolSpec(
-            name="seller_pipeline",
-            description=(
-                "Use for seller trust, feedback analysis, reliability checks, "
-                "or when the user explicitly asks about a seller."
-            ),
+            name="search_products",
+            description="Cerca prodotti e-commerce usando la pipeline completa di search, ranking e trust.",
             input_schema={
-                "seller_name": "string",
-                "page": "int",
-                "limit": "int",
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                },
+                "required": ["query"],
             },
+            executor=execute_search_tool,
+            tags=("search", "product", "catalog", "ebay"),
+            examples=(
+                "iphone 13 massimo 700 euro",
+                "felpe adidas da donna taglia 42 o 44",
+            ),
+            required_fields=("query",),
+            state_key="search",
+            max_retries=0,
+            cost=2,
+            latency_class="high",
+            dependencies=(),
+            produced_entities=("products", "search_analysis", "metrics", "seller"),
+            can_run_in_parallel=False,
+            use_cache=True,
+            input_normalizer=_normalize_search_action_input,
+            status_resolver=_resolve_search_status,
+            quality_resolver=_resolve_search_quality,
+            terminal_resolver=_resolve_search_terminal,
+            result_normalizer=_normalize_search_result,
+            summarizer=_summarize_search,
+        )
+    )
+
+    register_tool(
+        ToolSpec(
+            name="analyze_seller",
+            description="Analizza un venditore e-commerce usando feedback, trust score e sentiment.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "seller_name": {"type": "string"},
+                    "page": {"type": "integer", "default": 1},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                "required": ["seller_name"],
+            },
+            executor=execute_seller_tool,
+            tags=("seller", "trust", "feedback", "ebay"),
+            examples=(
+                "feedback di mario_store",
+                "analizza il venditore dyson-official",
+            ),
             required_fields=("seller_name",),
-            executor=_run_seller_pipeline,
             state_key="seller",
-            max_retries=1,
+            max_retries=0,
+            cost=1,
+            latency_class="medium",
+            dependencies=(),
+            produced_entities=("seller", "trust_score", "sentiment_score", "feedback"),
+            can_run_in_parallel=True,
+            use_cache=True,
             input_normalizer=_normalize_seller_action_input,
-            status_resolver=_seller_status_resolver,
-            quality_resolver=_seller_quality_resolver,
-            terminal_resolver=_seller_terminal_resolver,
+            status_resolver=_resolve_seller_status,
+            quality_resolver=_resolve_seller_quality,
+            terminal_resolver=_resolve_seller_terminal,
             result_normalizer=_normalize_seller_result,
-            summarizer=summarize_seller,
-            tags=("seller", "trust", "feedback", "reliability"),
-            examples=("analizza il venditore dyson-official", "dammi i feedback di mario_store"),
+            summarizer=_summarize_seller,
+        )
+    )
+
+    register_tool(
+        ToolSpec(
+            name="conversation",
+            description="Risponde a messaggi conversazionali generici quando non serve usare tool eBay.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                },
+                "required": ["query"],
+            },
+            executor=execute_conversation_tool,
+            tags=("conversation", "chat", "general"),
+            examples=(
+                "ciao come stai",
+                "spiegami come funziona ebay",
+            ),
+            required_fields=("query",),
+            state_key="conversation",
+            max_retries=0,
+            cost=1,
+            latency_class="medium",
+            dependencies=(),
+            produced_entities=("answer",),
+            can_run_in_parallel=False,
+            use_cache=False,
+            input_normalizer=_normalize_conversation_action_input,
+            status_resolver=_resolve_conversation_status,
+            quality_resolver=_resolve_conversation_quality,
+            terminal_resolver=_resolve_conversation_terminal,
+            result_normalizer=_normalize_conversation_result,
+            summarizer=_summarize_conversation,
         )
     )
 
 
-_bootstrap_default_tools()
+_bootstrap_tools()

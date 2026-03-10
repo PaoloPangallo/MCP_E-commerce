@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 IntentType = Literal["conversation", "seller_analysis", "product_search", "hybrid"]
 ObservationStatus = Literal["ok", "no_data", "error"]
 ObservationQuality = Literal["empty", "partial", "good"]
+LatencyClass = Literal["low", "medium", "high"]
 
 
 class AgentRequest(BaseModel):
@@ -30,9 +31,18 @@ class PlannerOutput(BaseModel):
 
     thought: str = ""
     action: Optional[ToolCall] = None
+    actions: List[ToolCall] = Field(default_factory=list)
+    run_parallel: bool = False
     should_stop: bool = False
     final_answer: Optional[str] = None
     intent: Optional[IntentType] = None
+
+    def planned_actions(self) -> List[ToolCall]:
+        if self.actions:
+            return list(self.actions)
+        if self.action is not None:
+            return [self.action]
+        return []
 
 
 class Observation(BaseModel):
@@ -50,6 +60,8 @@ class Observation(BaseModel):
     state_update: Dict[str, Any] = Field(default_factory=dict)
     terminal: bool = False
     quality: ObservationQuality = "good"
+    execution_ms: Optional[float] = None
+    cache_hit: bool = False
 
 
 class AgentStep(BaseModel):

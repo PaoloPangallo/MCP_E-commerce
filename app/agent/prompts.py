@@ -1,31 +1,32 @@
-
 from __future__ import annotations
 
 import json
 from typing import Any, Dict
 
-
 PLANNER_SYSTEM_PROMPT = """
-You are ebayGPT, an MCP-style e-commerce assistant.
+You are ebayGPT, an e-commerce agent that plans the NEXT BEST ACTION.
 
-Decide only the NEXT BEST ACTION.
-Use ONLY the tools from the provided catalog.
-Do not invent tool names or parameters.
-Be conservative, short, and deterministic.
+You receive:
+- the user query
+- the current scratchpad/state
+- the catalog of available tools
 
-Available intents:
-- conversation
-- seller_analysis
-- product_search
-- hybrid
+Your job:
+- decide only the next best action
+- use only tools from the catalog
+- prefer deterministic behavior
+- use LLM reasoning only when the next step is genuinely ambiguous
+- do not invent tool names or parameters
+- if the request is already satisfied, finish
 
-Rules:
-- If pending_tasks is not empty, prioritize completing those tasks before finishing.
-- Prefer the tool whose tags and description best match the user's unmet need.
-- Never finish while a required part of the request is still unanswered.
-- If no tool is needed, finish.
-- Always keep the reasoning and any free text in Italian.
-- Return ONLY valid minified JSON.
+Important policy:
+- `search_products` is for product discovery and shopping queries
+- `analyze_seller` is for seller reliability, feedback, trust and reputation
+- `conversation` is for purely conversational requests with no e-commerce tool need
+- for hybrid queries, prefer the unmet need first
+- do not repeat a tool call when its state is already terminal and useful
+- keep free text in Italian
+- return ONLY valid minified JSON
 
 Schema:
 {
@@ -43,27 +44,21 @@ You are ebayGPT.
 
 Write the final answer in Italian.
 Use only the provided data.
-Do not invent prices, sellers, trust scores, metrics, weather, or results.
-If the request was conversational, answer naturally and clearly.
-If no useful result exists, say it clearly.
-If multiple tool outputs are available, integrate them in one coherent answer.
+Do not invent prices, sellers, trust scores, metrics, or results.
+Integrate available tool outputs into one coherent answer.
+If the structured data is enough, be concise and direct.
+If there is no useful result, say it clearly.
 No markdown.
 No bullet points.
 """.strip()
 
 
 def _compact_json(data: Dict[str, Any]) -> str:
-    return json.dumps(
-        data,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        default=str,
-    )
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 def _compact_tool_catalog_for_prompt(tool_catalog: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     compact: Dict[str, Dict[str, Any]] = {}
-
     for name, spec in (tool_catalog or {}).items():
         if not isinstance(spec, dict):
             continue
@@ -75,8 +70,11 @@ def _compact_tool_catalog_for_prompt(tool_catalog: Dict[str, Dict[str, Any]]) ->
             "tags": spec.get("tags") or [],
             "examples": (spec.get("examples") or [])[:2],
             "state_key": spec.get("state_key"),
+            "cost": spec.get("cost"),
+            "latency_class": spec.get("latency_class"),
+            "dependencies": spec.get("dependencies") or [],
+            "produced_entities": spec.get("produced_entities") or [],
         }
-
     return compact
 
 
@@ -94,10 +92,14 @@ def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]
         "top_results": scratchpad.get("top_results") or [],
         "seller_summary": scratchpad.get("seller_summary"),
         "search_analysis": scratchpad.get("search_analysis"),
+        "metrics": scratchpad.get("metrics"),
         "tool_calls": scratchpad.get("tool_calls") or {},
+        "llm_calls": scratchpad.get("llm_calls") or {},
         "tool_states": scratchpad.get("tool_states") or {},
         "recent_observations": scratchpad.get("recent_observations") or [],
         "recent_errors": scratchpad.get("recent_errors") or [],
+        "session_memory": scratchpad.get("session_memory") or {},
+        "long_term_memory": scratchpad.get("long_term_memory") or {},
     }
 
 
@@ -132,6 +134,8 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
         "pending_tasks": final_data.get("pending_tasks") or [],
         "tool_states": final_data.get("tool_states") or {},
         "recent_observations": final_data.get("recent_observations") or [],
+        "session_memory": final_data.get("session_memory") or {},
+        "long_term_memory": final_data.get("long_term_memory") or {},
     }
 
 
@@ -155,11 +159,7 @@ def build_planner_prompt(
     )
 
 
-def build_final_answer_prompt(
-    user_query: str,
-    scratchpad: Dict[str, Any],
-    final_data: Dict[str, Any],
-) -> str:
+def build_final_answer_prompt(user_query: str, scratchpad: Dict[str, Any], final_data: Dict[str, Any]) -> str:
     compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
     compact_final_data = _compact_final_data_for_prompt(final_data)
 

@@ -1,27 +1,28 @@
-
 from __future__ import annotations
 
 import logging
-from typing import Dict, Generator, Optional
+import os
+from typing import Any, Dict, Generator, List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.agent.executor import ToolExecutor
-from app.agent.memory import AgentMemory
+from app.agent.memory import AgentMemory, MemoryService
 from app.agent.planner import ReactPlanner
 from app.agent.prompts import build_final_answer_prompt
 from app.agent.schemas import (
-    AgentResponse,
     AgentRequest,
-    ThinkingEvent,
-    ToolStartEvent,
-    ToolResultEvent,
-    StartEvent,
+    AgentResponse,
     AgentStep,
     FinalEvent,
+    StartEvent,
+    ThinkingEvent,
+    ToolResultEvent,
+    ToolStartEvent,
 )
 from app.agent.task_decomposer import decompose_query
-from app.agent.tool_registry import ToolContext
+from app.agent.tool_registry import ToolContext, analyze_user_query
+from app.mcp.client import MCPToolClient
 from app.services.parser import call_gemini, call_ollama
 
 logger = logging.getLogger(__name__)
@@ -32,12 +33,45 @@ class EbayReactAgent:
         self,
         db: Session,
         user: Optional[object] = None,
-    ):
+        mcp_server_url: Optional[str] = None,
+        strict_mcp: Optional[bool] = None,
+        prefer_mcp: bool = True,
+    ) -> None:
         self.db = db
         self.user = user
+        self.memory_service = MemoryService()
+        self.prefer_mcp = bool(prefer_mcp)
+
+        self.mcp_server_url = (
+            mcp_server_url
+            or os.getenv("MCP_SERVER_URL")
+            or "http://127.0.0.1:8050/mcp"
+        )
+
+        if strict_mcp is None:
+            strict_mcp = os.getenv("STRICT_MCP", "false").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
+        self.strict_mcp = bool(strict_mcp)
+
+        self.mcp_client = MCPToolClient(
+            server_url=self.mcp_server_url,
+            enabled=self.prefer_mcp,
+        )
+
+        logger.info(
+            "EbayReactAgent initialized | prefer_mcp=%s | strict_mcp=%s | mcp_server_url=%s",
+            self.prefer_mcp,
+            self.strict_mcp,
+            self.mcp_server_url,
+        )
 
     def run(self, request: AgentRequest) -> AgentResponse:
-        final_payload: Optional[Dict] = None
+        final_payload: Optional[Dict[str, Any]] = None
 
         for event in self.run_stream(request):
             if event.get("type") == "final":
@@ -60,24 +94,50 @@ class EbayReactAgent:
             steps_used=final_payload.get("steps_used", 0),
         )
 
-    def run_stream(self, request: AgentRequest) -> Generator[Dict, None, None]:
-        max_steps = min(max(int(request.max_steps), 1), 6)
+    def run_stream(self, request: AgentRequest) -> Generator[Dict[str, Any], None, None]:
+        max_steps = min(max(int(request.max_steps or 4), 1), 6)
 
-        memory = AgentMemory(user_query=request.query)
-        tasks = decompose_query(request.query, request.llm_engine)
-        memory.load_tasks(tasks)
+        logger.info(
+            "Agent run_stream started | query=%s | llm_engine=%s | max_steps=%s | prefer_mcp=%s | strict_mcp=%s",
+            request.query,
+            request.llm_engine,
+            max_steps,
+            self.prefer_mcp,
+            self.strict_mcp,
+        )
+
+        memory = self.memory_service.hydrate_request_state(
+            user_query=request.query,
+            user=self.user,
+        )
+
+        try:
+            tasks = decompose_query(request.query, request.llm_engine)
+        except Exception as exc:
+            logger.warning("Task decomposition failed: %s", exc)
+            tasks = []
+
+        try:
+            memory.load_tasks(tasks)
+        except Exception as exc:
+            logger.warning("Unable to load tasks into memory: %s", exc)
 
         planner = ReactPlanner(llm_engine=request.llm_engine)
+
         executor = ToolExecutor(
-            ToolContext(
+            context=ToolContext(
                 db=self.db,
                 user=self.user,
                 llm_engine=request.llm_engine,
-            )
+            ),
+            mcp_client=self.mcp_client,
+            prefer_mcp=self.prefer_mcp,
+            fallback_to_local=not self.strict_mcp,
         )
 
-        trace = []
+        trace: List[AgentStep] = []
         final_answer: Optional[str] = None
+        executed_actions = 0
 
         yield StartEvent(
             query=request.query,
@@ -87,109 +147,214 @@ class EbayReactAgent:
         ).model_dump()
 
         for step_index in range(1, max_steps + 1):
-            decision = planner.decide(
-                memory=memory,
-                step_index=step_index,
-                max_steps=max_steps,
-            )
+            try:
+                decision = planner.decide(
+                    memory=memory,
+                    step_index=step_index,
+                    max_steps=max_steps,
+                )
+            except Exception as exc:
+                logger.exception("Planner failed at step %s: %s", step_index, exc)
+                memory.errors.append(f"Planner error: {exc}")
+                final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+                break
 
-            if decision.intent:
+            if getattr(decision, "intent", None):
                 memory.detected_intent = decision.intent
 
-            if decision.should_stop or decision.action is None:
+            if decision.should_stop or (decision.action is None and not decision.actions):
                 final_answer = decision.final_answer or self._finalize(
                     memory=memory,
                     llm_engine=request.llm_engine,
                 )
-
                 yield ThinkingEvent(
                     step=step_index,
                     message="Sto preparando la risposta.",
                 ).model_dump()
                 break
 
-            memory.register_tool_call(decision.action.tool)
+            planned_actions = decision.planned_actions()
+            thought_action = planned_actions[0].tool if planned_actions else None
 
             yield ThinkingEvent(
                 step=step_index,
                 thought=decision.thought,
-                action=decision.action.tool,
+                action=thought_action,
             ).model_dump()
 
-            yield ToolStartEvent(
-                step=step_index,
-                tool=decision.action.tool,
-                input=decision.action.input,
-            ).model_dump()
-
-            observation = executor.execute(decision.action)
-            memory.apply_observation(observation)
-
-            yield ToolResultEvent(
-                step=step_index,
-                tool=decision.action.tool,
-                ok=observation.ok,
-                status=observation.status,
-                quality=observation.quality,
-                summary=observation.summary,
-            ).model_dump()
-
-            trace.append(
-                AgentStep(
+            for action in planned_actions:
+                memory.register_tool_call(action.tool)
+                yield ToolStartEvent(
                     step=step_index,
-                    thought=decision.thought,
-                    action=decision.action.tool,
-                    action_input=decision.action.input,
-                    observation_summary=observation.summary,
+                    tool=action.tool,
+                    input=action.input,
+                ).model_dump()
+
+            try:
+                observations = executor.execute_many(
+                    planned_actions,
+                    parallel=decision.run_parallel,
+                )
+            except Exception as exc:
+                logger.exception("Executor failed at step %s: %s", step_index, exc)
+                memory.errors.append(f"Executor error: {exc}")
+
+                if self.strict_mcp:
+                    final_answer = (
+                        "L'esecuzione tramite MCP è fallita e la modalità strict è attiva."
+                    )
+                else:
+                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+                break
+
+            for action, observation in zip(planned_actions, observations):
+                memory.apply_observation(observation)
+                executed_actions += 1
+
+                backend = getattr(observation, "backend", None)
+                if backend:
+                    logger.info(
+                        "Tool result | step=%s | tool=%s | backend=%s | ok=%s | status=%s",
+                        step_index,
+                        action.tool,
+                        backend,
+                        observation.ok,
+                        observation.status,
+                    )
+                else:
+                    logger.info(
+                        "Tool result | step=%s | tool=%s | ok=%s | status=%s",
+                        step_index,
+                        action.tool,
+                        observation.ok,
+                        observation.status,
+                    )
+
+                event_payload = ToolResultEvent(
+                    step=step_index,
+                    tool=action.tool,
+                    ok=observation.ok,
                     status=observation.status,
-                )
-            )
+                    quality=observation.quality,
+                    summary=observation.summary,
+                ).model_dump()
 
-            if not observation.ok:
-                logger.warning(
-                    "Tool execution failed at step %s: %s",
-                    step_index,
-                    observation.error,
+                if backend:
+                    event_payload["backend"] = backend
+
+                yield event_payload
+
+                trace.append(
+                    AgentStep(
+                        step=step_index,
+                        thought=decision.thought,
+                        action=action.tool,
+                        action_input=action.input,
+                        observation_summary=observation.summary,
+                        status=observation.status,
+                    )
                 )
 
-                if step_index >= max_steps or planner.should_abort_after_error(memory, decision.action.tool):
-                    final_answer = self._finalize(memory, request.llm_engine)
+                if observation.terminal:
+                    final_answer = observation.summary or self._finalize(
+                        memory=memory,
+                        llm_engine=request.llm_engine,
+                    )
+
+                    self._persist_outcome_safely(memory, final_answer)
+
+                    yield FinalEvent(
+                        final_answer=final_answer,
+                        agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
+                        final_data=memory.final_data(),
+                        steps_used=executed_actions,
+                    ).model_dump()
+                    return
+
+                if not observation.ok:
+                    logger.warning(
+                        "Tool execution failed | step=%s | tool=%s | error=%s",
+                        step_index,
+                        action.tool,
+                        observation.error,
+                    )
+
+            if any(not obs.ok for obs in observations):
+                failed_tools = [obs.tool for obs in observations if not obs.ok]
+
+                try:
+                    should_abort = (
+                        step_index >= max_steps
+                        or any(planner.should_abort_after_error(memory, tool) for tool in failed_tools)
+                    )
+                except Exception as exc:
+                    logger.warning("Planner abort policy failed: %s", exc)
+                    should_abort = step_index >= max_steps
+
+                if should_abort:
+                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
                     break
 
                 continue
 
-            if planner.can_stop_early(memory):
-                final_answer = self._finalize(memory, request.llm_engine)
-                break
+            try:
+                if planner.can_stop_early(memory):
+                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+                    break
+            except Exception as exc:
+                logger.warning("Planner early-stop check failed: %s", exc)
 
         if final_answer is None:
-            final_answer = self._finalize(memory, request.llm_engine)
+            if memory.has_any_terminal_state():
+                last = memory.recent_observations(limit=1)
+                if last:
+                    final_answer = last[0].get("summary") or self._finalize(
+                        memory=memory,
+                        llm_engine=request.llm_engine,
+                    )
+                else:
+                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+            else:
+                final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+
+        self._persist_outcome_safely(memory, final_answer)
 
         yield FinalEvent(
             final_answer=final_answer,
             agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
             final_data=memory.final_data(),
-            steps_used=len(trace),
+            steps_used=executed_actions,
         ).model_dump()
 
+    def _persist_outcome_safely(self, memory: AgentMemory, final_answer: str) -> None:
+        try:
+            self.memory_service.persist_request_outcome(memory, final_answer)
+        except Exception as exc:
+            logger.warning("Persisting memory outcome failed: %s", exc)
+
     def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
-        if memory.detected_intent == "conversation":
-            prompt = f"""
-You are ebayGPT, a helpful conversational assistant.
-Respond in Italian.
-User message:
-{memory.user_query}
+        intent = (memory.detected_intent or "").lower()
 
-Respond naturally and briefly.
-"""
+        if intent == "conversation":
+            prompt = build_final_answer_prompt(
+                user_query=memory.user_query,
+                scratchpad=memory.scratchpad(),
+                final_data=memory.final_data(),
+            )
+
             llm_text = self._call_final_llm(prompt, llm_engine)
-
             if llm_text and llm_text.strip():
+                memory.register_llm_call("final")
                 return llm_text.strip()
+
+            return "Non riesco a generare una risposta conversazionale in questo momento."
 
         fallback = self._fallback_final_answer(memory)
 
         if self._is_fallback_good_enough(memory, fallback):
+            return fallback
+
+        if not self._should_use_llm_for_final(memory, llm_engine):
             return fallback
 
         prompt = build_final_answer_prompt(
@@ -200,6 +365,7 @@ Respond naturally and briefly.
 
         llm_text = self._call_final_llm(prompt, llm_engine)
         if llm_text and llm_text.strip():
+            memory.register_llm_call("final")
             return llm_text.strip()
 
         return fallback
@@ -221,7 +387,7 @@ Respond naturally and briefly.
         if not fallback:
             return False
 
-        if memory.detected_intent == "conversation":
+        if (memory.detected_intent or "").lower() == "conversation":
             return False
 
         if memory.search_payload or memory.seller_payload:
@@ -232,21 +398,37 @@ Respond naturally and briefly.
 
         return False
 
+    @staticmethod
+    def _should_use_llm_for_final(memory: AgentMemory, llm_engine: str) -> bool:
+        if llm_engine == "rule_based":
+            return False
+
+        if memory.llm_call_count("final") >= 1:
+            return False
+
+        if (memory.detected_intent or "").lower() == "conversation":
+            return True
+
+        useful_states = [
+            state
+            for state in memory.tool_states.values()
+            if state.get("quality") in {"partial", "good"}
+        ]
+        if len(useful_states) >= 2 and not memory.errors:
+            return True
+
+        return False
+
     def _fallback_final_answer(self, memory: AgentMemory) -> str:
-        intent = (memory.detected_intent or "").lower()
-        search_payload = memory.search_payload
-        seller_payload = memory.seller_payload
+        profile = analyze_user_query(memory.user_query)
 
-        if intent == "conversation" and not search_payload and not seller_payload:
-            return "Certo, dimmi pure come posso aiutarti."
-
-        if search_payload and seller_payload:
+        if memory.search_payload and memory.seller_payload:
             return self._build_hybrid_answer(memory)
 
-        if search_payload:
+        if memory.search_payload:
             return self._build_search_answer(memory)
 
-        if seller_payload:
+        if memory.seller_payload:
             return self._build_seller_answer(memory)
 
         if memory.errors:
@@ -254,6 +436,13 @@ Respond naturally and briefly.
                 "Non sono riuscito a completare correttamente l'analisi. "
                 f"Ultimo errore: {memory.errors[-1]}"
             )
+
+        if (
+            profile["conversation_signal"]
+            and not profile["seller_signal"]
+            and not profile["search_signal"]
+        ):
+            return "Non riesco a generare una risposta conversazionale in questo momento."
 
         recent = memory.recent_observations(limit=3)
         if recent:
@@ -265,7 +454,7 @@ Respond naturally and briefly.
             if joined:
                 return joined
 
-        if intent == "seller_analysis":
+        if profile["seller_signal"]:
             return "Per analizzare il venditore mi serve il suo nome esatto."
 
         return "Non ho raccolto abbastanza informazioni per produrre una risposta utile."
@@ -295,29 +484,31 @@ Respond naturally and briefly.
         trust_score = top.get("trust_score")
 
         text = f"Il risultato migliore che ho trovato è '{title}'"
-
         if price is not None:
             text += f", al prezzo di {price} {currency}"
-
         if seller_name:
             text += f", venduto da {seller_name}"
-
         if trust_score is not None:
             try:
                 text += f" con trust score {round(float(trust_score) * 100)}%"
             except Exception:
-                pass
-
+                logger.debug("Unable to format trust_score=%s", trust_score)
         text += "."
 
         if analysis:
             text += f" {analysis}"
+        elif search_payload.get("results_count"):
+            text += f" Ho trovato in totale {search_payload.get('results_count')} risultati."
 
         return text.strip()
 
     def _build_seller_answer(self, memory: AgentMemory) -> str:
         seller_payload = memory.seller_payload or {}
-        seller_name = seller_payload.get("seller_name") or memory.last_seller_name or "il venditore"
+        seller_name = (
+            seller_payload.get("seller_name")
+            or memory.last_seller_name
+            or "il venditore"
+        )
         count = seller_payload.get("count")
         trust_score = seller_payload.get("trust_score")
         sentiment = seller_payload.get("sentiment_score")
@@ -330,19 +521,16 @@ Respond naturally and briefly.
             )
 
         details = []
-
         if trust_score is not None:
             try:
                 details.append(f"trust score {round(float(trust_score) * 100)}%")
             except Exception:
-                pass
-
+                logger.debug("Unable to format seller trust_score=%s", trust_score)
         if sentiment is not None:
             try:
                 details.append(f"sentiment {round(float(sentiment) * 100)}%")
             except Exception:
-                pass
-
+                logger.debug("Unable to format sentiment_score=%s", sentiment)
         if count is not None:
             details.append(f"{count} feedback analizzati")
 
@@ -350,5 +538,4 @@ Respond naturally and briefly.
         if details:
             text += " con " + ", ".join(details)
         text += "."
-
         return text

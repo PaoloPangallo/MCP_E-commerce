@@ -11,8 +11,10 @@ _SELLER_CACHE: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
 _SCORE_CACHE: Dict[str, Dict[str, float]] = {}
 
 
+
 def _normalize_seller_name(seller_name: str) -> str:
     return (seller_name or "").strip()
+
 
 
 def _get_feedbacks_cached(seller_name: str, limit: int) -> List[Dict[str, Any]]:
@@ -26,11 +28,20 @@ def _get_feedbacks_cached(seller_name: str, limit: int) -> List[Dict[str, Any]]:
     return feedbacks
 
 
+
 def run_seller_pipeline(
     seller_name: str,
     page: int = 1,
     limit: int = 10,
 ) -> Dict[str, Any]:
+    """
+    Seller analysis service.
+
+    Compatibility notes:
+    - keeps the original public keys
+    - adds `status` and `error` for consumers that need explicit no-data semantics
+    - avoids returning misleading 0.5 trust/sentiment when no feedback exists
+    """
     seller_name = _normalize_seller_name(seller_name)
 
     if not seller_name:
@@ -46,6 +57,19 @@ def run_seller_pipeline(
     end = start + limit
     paginated = feedbacks[start:end]
 
+    if not feedbacks:
+        return {
+            "seller_name": seller_name,
+            "page": page,
+            "limit": limit,
+            "count": 0,
+            "feedbacks": [],
+            "trust_score": None,
+            "sentiment_score": None,
+            "status": "no_data",
+            "error": "Nessun feedback disponibile per questo venditore.",
+        }
+
     seller_key = seller_name.lower()
 
     cached_scores = _SCORE_CACHE.get(seller_key)
@@ -56,7 +80,7 @@ def run_seller_pipeline(
         sentiment_score = compute_sentiment_score(feedbacks, max_texts=20)
         trust_score = compute_trust_score(
             feedbacks,
-            sentiment_score=sentiment_score
+            sentiment_score=sentiment_score,
         )
 
         _SCORE_CACHE[seller_key] = {
@@ -73,4 +97,6 @@ def run_seller_pipeline(
         "feedbacks": paginated,
         "trust_score": round(float(trust_score), 3),
         "sentiment_score": round(float(sentiment_score), 3),
+        "status": "ok",
+        "error": None,
     }

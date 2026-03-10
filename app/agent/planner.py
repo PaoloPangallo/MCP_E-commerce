@@ -1,8 +1,9 @@
-
 from __future__ import annotations
 
 import json
 import logging
+import re
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 from app.agent.memory import AgentMemory
@@ -21,17 +22,111 @@ logger = logging.getLogger(__name__)
 
 VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid"}
 
+QUESTION_WORDS = {
+    "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
+}
+
+CONVERSATION_CUES = {
+    "penso", "pensi", "pensate", "credo", "credi", "sapere", "sai", "spiegami",
+    "raccontami", "parliamo", "dimmi", "opinione", "consiglio", "aiutami",
+    "aiuto", "discutiamo", "intendo", "significa", "vuol", "dire", "bro",
+}
+
+GREETING_CUES = {
+    "ciao", "salve", "buongiorno", "buonasera", "hey", "ehi", "hello",
+}
+
+SELLER_CUES = {
+    "seller", "venditore", "negozio", "shop", "feedback", "affidabile",
+    "reputazione", "trust", "recensioni", "serio", "sicuro",
+}
+
+TRANSACTIONAL_CUES = {
+    "cerca", "cerco", "trova", "trovami", "mostra", "vorrei", "voglio", "mi serve",
+    "compra", "acquistare", "prezzo", "prezzi", "costo", "budget", "massimo",
+    "minimo", "sotto", "meno", "entro", "offerta", "offerte",
+}
+
+ATTRIBUTE_CUES = {
+    "taglia", "numero", "misura", "colore", "materiale", "marca", "modello",
+    "uomo", "donna", "bambino", "bambina", "adulto", "adulti", "nuovo", "usato",
+    "con", "senza", "zip", "cappuccio", "manica", "maniche",
+    "nero", "nera", "bianco", "bianca", "blu", "rosso", "rossa",
+    "verde", "grigio", "grigia", "beige", "m", "l", "xl", "xxl", "xs", "s",
+}
+
+PERSONAL_PRONOUNS = {
+    "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
+}
+
+VERBISH_CUES = {
+    "sei", "sono", "è", "e", "stai", "va", "pensi", "pensa", "credi", "crede",
+    "sai", "sapete", "fai", "fare", "fate", "posso", "puoi", "potresti",
+}
+
+MODEL_CODE_RE = re.compile(r"\b[a-z]{1,6}[\-_]?\d{2,5}[a-z0-9\-_]*\b", re.IGNORECASE)
+PRICE_RE = re.compile(r"\b\d{1,5}(?:[.,]\d{1,2})?\s*(?:€|euro)\b", re.IGNORECASE)
+SIZE_RE = re.compile(
+    r"\b(?:taglia|misura|numero|eu|uk|us|it)\s*[a-z]?\d{1,3}\b|\b(?:xs|s|m|l|xl|xxl)\b",
+    re.IGNORECASE,
+)
+ALT_SIZE_RE = re.compile(r"\b\d{1,3}\s*(?:o|oppure|/|-)\s*\d{1,3}\b", re.IGNORECASE)
+PRICE_BOUND_RE = re.compile(r"\b(?:max|massimo|minimo|budget|entro|sotto|meno di|al massimo)\b", re.IGNORECASE)
+TOKEN_RE = re.compile(r"[\wÀ-ÿ]+", re.UNICODE)
+
+
+@dataclass
+class IntentEvidence:
+    product: float = 0.0
+    seller: float = 0.0
+    conversation: float = 0.0
+    reasons: Dict[str, list[str]] = field(
+        default_factory=lambda: {"product": [], "seller": [], "conversation": []}
+    )
+
+    def add(self, label: str, value: float, reason: str) -> None:
+        if label == "product":
+            self.product += value
+        elif label == "seller":
+            self.seller += value
+        elif label == "conversation":
+            self.conversation += value
+        if reason:
+            self.reasons.setdefault(label, []).append(reason)
+
+    def top_two(self) -> tuple[tuple[str, float], tuple[str, float]]:
+        ordered = sorted(
+            [
+                ("product_search", self.product),
+                ("seller_analysis", self.seller),
+                ("conversation", self.conversation),
+            ],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        return ordered[0], ordered[1]
+
 
 class ReactPlanner:
+    """
+    Planner orientato ai capability-tool.
+    In Fase 1 manteniamo il cuore attuale, ma:
+    - usiamo i nuovi nomi tool (`search_products`, `analyze_seller`, `conversation`)
+    - aggiungiamo uno strato state-based prima del routing più astratto
+    """
+
     def __init__(self, llm_engine: str = "gemini"):
         self.llm_engine = (llm_engine or "gemini").strip().lower()
         self.max_calls_per_tool = 2
+        self.intent_threshold = 0.55
+        self.margin_threshold = 0.18
+        self.hybrid_threshold = 0.62
 
     def decide(
-        self,
-        memory: AgentMemory,
-        step_index: int,
-        max_steps: int,
+            self,
+            memory: AgentMemory,
+            step_index: int,
+            max_steps: int,
     ) -> PlannerOutput:
         explicit_seller = extract_explicit_seller(memory.user_query)
         if explicit_seller and not memory.last_seller_name:
@@ -42,18 +137,66 @@ class ReactPlanner:
             if decision:
                 return decision
 
+        # FIX B:
+        # fast path conversazionale prima di qualunque possibile chiamata lenta al planner LLM
+        conversation_fast_path = self._conversation_fast_path(memory)
+        if conversation_fast_path:
+            return conversation_fast_path
+
+        deterministic = self._deterministic_decide(memory)
+        if deterministic:
+            return deterministic
+
         llm_decision = self._llm_decide(memory, step_index, max_steps)
         if llm_decision:
             return llm_decision
 
         return self._safe_fallback_decide(memory)
 
+    def _conversation_fast_path(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+
+        text = (memory.user_query or "").strip().lower()
+
+        if text in {"ciao", "hey", "hello", "salve"}:
+            return PlannerOutput(
+                thought="Saluto semplice.",
+                should_stop=True,
+                intent="conversation",
+            )
+
+        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
+
+        if intent != "conversation":
+            return None
+
+        # alta confidenza conversazionale
+        if confidence >= self.intent_threshold:
+            return PlannerOutput(
+                thought="La richiesta è chiaramente conversazionale.",
+                should_stop=True,
+                intent="conversation",
+            )
+
+        # anche con confidenza media, se non ci sono segnali seller/search,
+        # evitiamo di mandare una banalità a Ollama solo per decidere.
+        if (
+                evidence.conversation >= 0.40
+                and evidence.product < 0.30
+                and evidence.seller < 0.30
+        ):
+            return PlannerOutput(
+                thought="La richiesta sembra conversazionale.",
+                should_stop=True,
+                intent="conversation",
+            )
+
+        return None
+
     def can_stop_early(self, memory: AgentMemory) -> bool:
         if memory.has_pending_tasks():
             return False
 
         intent = (memory.detected_intent or "").lower()
-
         if intent == "conversation":
             return True
 
@@ -61,6 +204,102 @@ class ReactPlanner:
 
     def should_abort_after_error(self, memory: AgentMemory, failed_tool: str) -> bool:
         return memory.tool_call_count(failed_tool) >= self.max_calls_per_tool
+
+    def _state_based_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+        intent = (memory.detected_intent or self._infer_intent(memory)).lower()
+
+        search_tool = self._search_tool_name()
+        seller_tool = self._seller_tool_name()
+
+        if intent == "conversation":
+            return PlannerOutput(
+                thought="La richiesta è conversazionale.",
+                should_stop=True,
+                intent="conversation",
+            )
+
+        if intent == "seller_analysis":
+            if seller_tool and not self._tool_state_is_terminal(memory, seller_tool):
+                normalized = self._normalize_action_input(seller_tool, {}, memory)
+                if normalized is not None and not self._exceeds_tool_budget(memory, seller_tool):
+                    return PlannerOutput(
+                        thought="Devo ancora analizzare il venditore.",
+                        action=ToolCall(tool=seller_tool, input=normalized),
+                        intent="seller_analysis",
+                    )
+
+        if intent == "product_search":
+            if search_tool and not self._tool_state_is_terminal(memory, search_tool):
+                normalized = self._normalize_action_input(search_tool, {}, memory)
+                if normalized is not None and not self._exceeds_tool_budget(memory, search_tool):
+                    return PlannerOutput(
+                        thought="Devo ancora cercare i prodotti.",
+                        action=ToolCall(tool=search_tool, input=normalized),
+                        intent="product_search",
+                    )
+
+        if intent == "hybrid":
+            if search_tool and not self._tool_state_is_terminal(memory, search_tool):
+                normalized = self._normalize_action_input(search_tool, {}, memory)
+                if normalized is not None and not self._exceeds_tool_budget(memory, search_tool):
+                    return PlannerOutput(
+                        thought="Prima completo la ricerca prodotti.",
+                        action=ToolCall(tool=search_tool, input=normalized),
+                        intent="hybrid",
+                    )
+
+            if seller_tool and not self._tool_state_is_terminal(memory, seller_tool):
+                normalized = self._normalize_action_input(seller_tool, {}, memory)
+                if normalized is not None and not self._exceeds_tool_budget(memory, seller_tool):
+                    return PlannerOutput(
+                        thought="Ora controllo il venditore.",
+                        action=ToolCall(tool=seller_tool, input=normalized),
+                        intent="hybrid",
+                    )
+
+        return None
+
+    def _deterministic_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
+
+        if intent == "conversation" and confidence >= self.intent_threshold:
+            return PlannerOutput(
+                thought="La richiesta è conversazionale.",
+                should_stop=True,
+                intent="conversation",
+            )
+
+        if intent not in VALID_INTENTS:
+            return None
+
+        if confidence < self.intent_threshold:
+            return None
+
+        if self._intent_is_satisfied(memory, intent):
+            return PlannerOutput(
+                thought="Ho già raccolto dati sufficienti.",
+                should_stop=True,
+                intent=intent,
+            )
+
+        for tool_name in self._ordered_tools_for_intent(intent):
+            if self._tool_state_is_terminal(memory, tool_name):
+                continue
+            if self._exceeds_tool_budget(memory, tool_name):
+                continue
+
+            normalized_input = self._normalize_action_input(tool_name, {}, memory)
+            if normalized_input is None:
+                continue
+
+            why = self._reason_summary(intent, evidence)
+            return PlannerOutput(
+                thought=why or f"Uso il tool più adatto: {tool_name}.",
+                action=ToolCall(tool=tool_name, input=normalized_input),
+                intent=intent,
+            )
+
+        return None
 
     def _decide_from_task_queue(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         task = memory.peek_task()
@@ -92,10 +331,10 @@ class ReactPlanner:
         )
 
     def _llm_decide(
-        self,
-        memory: AgentMemory,
-        step_index: int,
-        max_steps: int,
+            self,
+            memory: AgentMemory,
+            step_index: int,
+            max_steps: int,
     ) -> Optional[PlannerOutput]:
         if self.llm_engine == "rule_based":
             return None
@@ -130,12 +369,10 @@ class ReactPlanner:
         action_input = payload.get("action_input") or {}
 
         if intent not in VALID_INTENTS:
-            logger.info("Planner LLM omitted/invalid intent=%r, inferring from state.", intent)
             intent = self._infer_intent(memory)
 
         if action in {"finish", "stop"}:
             if memory.has_pending_tasks():
-                logger.info("Planner wanted to stop but pending tasks are still present.")
                 return self._safe_fallback_decide(memory, forced_intent=intent)
 
             if not self._intent_is_satisfied(memory, intent):
@@ -167,9 +404,9 @@ class ReactPlanner:
         )
 
     def _safe_fallback_decide(
-        self,
-        memory: AgentMemory,
-        forced_intent: Optional[str] = None,
+            self,
+            memory: AgentMemory,
+            forced_intent: Optional[str] = None,
     ) -> PlannerOutput:
         intent = (forced_intent or memory.detected_intent or self._infer_intent(memory)).lower()
 
@@ -189,7 +426,6 @@ class ReactPlanner:
         for tool_name in self._ordered_tools_for_intent(intent):
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
-
             if self._exceeds_tool_budget(memory, tool_name):
                 continue
 
@@ -203,7 +439,7 @@ class ReactPlanner:
                 intent=intent if intent in VALID_INTENTS else self._infer_intent(memory),
             )
 
-        if memory.has_any_terminal_state():
+        if self._intent_is_satisfied(memory, intent):
             return PlannerOutput(
                 thought="Ho già abbastanza informazioni.",
                 should_stop=True,
@@ -228,20 +464,17 @@ class ReactPlanner:
         try:
             if self.llm_engine == "gemini":
                 return call_gemini(prompt)
-
             if self.llm_engine == "ollama":
                 return call_ollama(prompt)
-
         except Exception as exc:
             logger.warning("Planner LLM failed: %s", exc)
-
         return None
 
     def _normalize_action_input(
-        self,
-        action: str,
-        action_input: Dict[str, Any],
-        memory: AgentMemory,
+            self,
+            action: str,
+            action_input: Dict[str, Any],
+            memory: AgentMemory,
     ) -> Optional[Dict[str, Any]]:
         spec = get_tool_spec(action)
         if spec is None:
@@ -275,9 +508,15 @@ class ReactPlanner:
 
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
+    def _search_tool_name(self) -> Optional[str]:
+        return find_first_tool_by_tags("search", "product", "catalog")
+
+    def _seller_tool_name(self) -> Optional[str]:
+        return find_first_tool_by_tags("seller", "trust", "feedback")
+
     def _ordered_tools_for_intent(self, intent: str) -> list[str]:
-        seller_tool = find_first_tool_by_tags("seller", "trust", "feedback")
-        search_tool = find_first_tool_by_tags("search", "product", "catalog")
+        seller_tool = self._seller_tool_name()
+        search_tool = self._search_tool_name()
 
         if intent == "seller_analysis":
             return [tool for tool in [seller_tool] if tool]
@@ -286,7 +525,7 @@ class ReactPlanner:
             return [tool for tool in [search_tool] if tool]
 
         if intent == "hybrid":
-            ordered = [tool for tool in [seller_tool, search_tool] if tool]
+            ordered = [tool for tool in [search_tool, seller_tool] if tool]
             seen: set[str] = set()
             unique: list[str] = []
             for tool in ordered:
@@ -310,38 +549,142 @@ class ReactPlanner:
         return bool({tag.lower() for tag in spec.tags} & tags)
 
     def _infer_intent(self, memory: AgentMemory) -> str:
+        return self._infer_intent_with_confidence(memory)[0]
+
+    def _infer_intent_with_confidence(self, memory: AgentMemory) -> tuple[str, float, IntentEvidence]:
         if memory.tasks:
             tools = [str(task.get("tool") or "").strip() for task in memory.tasks]
             has_seller = any(self._tool_matches_any_tag(tool, {"seller", "trust", "feedback"}) for tool in tools)
             has_search = any(self._tool_matches_any_tag(tool, {"search", "product", "catalog"}) for tool in tools)
 
             if has_search and has_seller:
-                return "hybrid"
+                return "hybrid", 1.0, IntentEvidence(product=1.0, seller=1.0)
             if has_seller:
-                return "seller_analysis"
+                return "seller_analysis", 1.0, IntentEvidence(seller=1.0)
             if has_search:
-                return "product_search"
+                return "product_search", 1.0, IntentEvidence(product=1.0)
 
-        q = (memory.user_query or "").lower()
+        evidence = self._score_query(memory.user_query or "", memory)
+        top, second = evidence.top_two()
+        label, score = top
+        margin = score - second[1]
 
-        greeting_words = ["ciao", "salve", "buongiorno", "hey", "come va", "come stai", "tutto bene"]
-        seller_words = ["seller", "venditore", "feedback", "affidabile", "reputazione", "trust", "recensioni"]
-        search_words = ["cerca", "trova", "mostra", "vende", "selling", "prodotto", "prodotti", "prezzo", "compra"]
+        if evidence.product >= self.hybrid_threshold and evidence.seller >= self.hybrid_threshold:
+            return "hybrid", min(evidence.product, evidence.seller), evidence
 
-        has_greeting = any(word in q for word in greeting_words)
-        has_seller = any(word in q for word in seller_words) or bool(extract_explicit_seller(q))
-        has_search = any(word in q for word in search_words)
+        if score >= self.intent_threshold and margin >= self.margin_threshold:
+            return label, score, evidence
 
-        if has_seller and has_search:
-            return "hybrid"
-        if has_seller:
-            return "seller_analysis"
-        if has_search:
-            return "product_search"
-        if has_greeting:
-            return "conversation"
+        if label == "seller_analysis" and evidence.seller >= self.intent_threshold:
+            return label, evidence.seller, evidence
+        if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
+            return label, evidence.conversation, evidence
+        if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
+            return label, evidence.product, evidence
 
-        return "conversation"
+        return label, max(score, 0.0), evidence
+
+    def _score_query(self, text: str, memory: AgentMemory) -> IntentEvidence:
+        q = (text or "").strip().lower()
+        ev = IntentEvidence()
+
+        if not q:
+            ev.add("conversation", 0.8, "empty_query")
+            return ev
+
+        tokens = [t for t in TOKEN_RE.findall(q) if t]
+        token_set = set(tokens)
+        token_count = len(tokens)
+
+        explicit_seller = extract_explicit_seller(q)
+        if explicit_seller:
+            ev.add("seller", 0.9, "explicit_seller")
+
+        seller_hits = len(token_set & SELLER_CUES)
+        if seller_hits:
+            ev.add("seller", min(0.25 + 0.12 * seller_hits, 0.6), "seller_lexicon")
+
+        transactional_hits = len(token_set & TRANSACTIONAL_CUES)
+        if transactional_hits:
+            ev.add("product", min(0.18 + 0.08 * transactional_hits, 0.45), "transactional_lexicon")
+
+        attribute_hits = len(token_set & ATTRIBUTE_CUES)
+        if attribute_hits:
+            ev.add("product", min(0.12 + 0.06 * attribute_hits, 0.42), "attribute_lexicon")
+
+        greeting_hits = len(token_set & GREETING_CUES)
+        if greeting_hits:
+            ev.add("conversation", min(0.15 + 0.08 * greeting_hits, 0.28), "greeting")
+
+        conversation_hits = len(token_set & CONVERSATION_CUES)
+        if conversation_hits:
+            ev.add("conversation", min(0.2 + 0.08 * conversation_hits, 0.5), "conversation_lexicon")
+
+        pronoun_hits = len(token_set & PERSONAL_PRONOUNS)
+        if pronoun_hits:
+            ev.add("conversation", min(0.08 + 0.04 * pronoun_hits, 0.18), "personal_pronouns")
+
+        if any(tok in QUESTION_WORDS for tok in tokens[:2]):
+            ev.add("conversation", 0.18, "question_word_prefix")
+
+        if q.endswith("?"):
+            ev.add("conversation", 0.08, "question_mark")
+
+        if PRICE_RE.search(q):
+            ev.add("product", 0.34, "price")
+        if PRICE_BOUND_RE.search(q):
+            ev.add("product", 0.24, "price_bound")
+        if SIZE_RE.search(q) or ALT_SIZE_RE.search(q):
+            ev.add("product", 0.26, "size_or_variant")
+        if MODEL_CODE_RE.search(q):
+            ev.add("product", 0.16, "model_code")
+
+        if re.search(r"\b(?:con|senza)\b", q) and attribute_hits:
+            ev.add("product", 0.12, "attribute_composition")
+
+        if re.search(r"\b(?:da|per)\s+(?:uomo|donna|bambin[oa]|adult[io])\b", q):
+            ev.add("product", 0.22, "demographic_filter")
+
+        has_conversation_structure = bool(token_set & VERBISH_CUES) or any(tok in QUESTION_WORDS for tok in tokens)
+        has_product_constraints = bool(
+            PRICE_RE.search(q)
+            or PRICE_BOUND_RE.search(q)
+            or SIZE_RE.search(q)
+            or ALT_SIZE_RE.search(q)
+            or (token_set & ATTRIBUTE_CUES)
+            or (token_set & TRANSACTIONAL_CUES)
+        )
+
+        if 2 <= token_count <= 9 and has_product_constraints and not has_conversation_structure:
+            ev.add("product", 0.24, "short_keyword_like_query")
+
+        if token_count >= 5 and has_conversation_structure and not has_product_constraints and not explicit_seller:
+            ev.add("conversation", 0.26, "open_ended_sentence")
+
+        if explicit_seller and has_product_constraints:
+            ev.add("product", 0.18, "seller_plus_product_constraints")
+
+        return ev
+
+    def _reason_summary(self, intent: str, evidence: IntentEvidence) -> str:
+        mapping = {
+            "product_search": evidence.reasons.get("product", []),
+            "seller_analysis": evidence.reasons.get("seller", []),
+            "conversation": evidence.reasons.get("conversation", []),
+            "hybrid": evidence.reasons.get("seller", []) + evidence.reasons.get("product", []),
+        }
+        reasons = [r for r in mapping.get(intent, []) if r]
+        if not reasons:
+            return "Uso il tool più adatto."
+        compact = ", ".join(reasons[:3])
+
+        if intent == "hybrid":
+            return f"La richiesta combina segnali seller+product ({compact})."
+        if intent == "product_search":
+            return f"La richiesta ha struttura da ricerca prodotto ({compact})."
+        if intent == "seller_analysis":
+            return f"La richiesta ha struttura da analisi venditore ({compact})."
+        return "La richiesta è conversazionale."
 
     def _exceeds_tool_budget(self, memory: AgentMemory, tool_name: str) -> bool:
         return memory.tool_call_count(tool_name) >= self.max_calls_per_tool
