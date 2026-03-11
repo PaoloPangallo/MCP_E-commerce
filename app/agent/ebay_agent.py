@@ -36,6 +36,7 @@ class EbayReactAgent:
         mcp_server_url: Optional[str] = None,
         strict_mcp: Optional[bool] = None,
         prefer_mcp: bool = True,
+        mcp_client: Optional[object] = None,  # inject app-level singleton if available
     ) -> None:
         self.db = db
         self.user = user
@@ -58,10 +59,15 @@ class EbayReactAgent:
 
         self.strict_mcp = bool(strict_mcp)
 
-        self.mcp_client = MCPToolClient(
-            server_url=self.mcp_server_url,
-            enabled=self.prefer_mcp,
-        )
+        if mcp_client is not None:
+            # Use the externally provided (app-level) MCP client
+            self.mcp_client = mcp_client
+        else:
+            # Fallback: create a per-request client (previous behaviour)
+            self.mcp_client = MCPToolClient(
+                server_url=self.mcp_server_url,
+                enabled=self.prefer_mcp,
+            )
 
         logger.info(
             "EbayReactAgent initialized | prefer_mcp=%s | strict_mcp=%s | mcp_server_url=%s",
@@ -351,6 +357,9 @@ class EbayReactAgent:
 
             return "Non riesco a generare una risposta conversazionale in questo momento."
 
+        if intent == "comparison":
+            return self._build_comparison_answer(memory)
+
         fallback = self._fallback_final_answer(memory)
 
         if self._is_fallback_good_enough(memory, fallback):
@@ -542,3 +551,27 @@ class EbayReactAgent:
             text += " con " + ", ".join(details)
         text += "."
         return text
+
+    def _build_comparison_answer(self, memory: AgentMemory) -> str:
+        payload = memory.compare_payload or {}
+        winner = payload.get("winner") or {}
+        items_count = payload.get("candidates_found", 0)
+        winner_reason = payload.get("winner_reason")
+
+        if not winner or items_count == 0:
+            return "Ho provato a confrontare i prodotti ma non ho trovato abbastanza dati per un consiglio affidabile."
+
+        title = winner.get("title") or "prodotto"
+        price = winner.get("price")
+        currency = winner.get("currency") or "EUR"
+
+        text = f"Ho confrontato {items_count} prodotti per te. "
+        text += f"Il vincitore consigliato è '{title}'"
+        if price is not None:
+            text += f", al prezzo di {price} {currency}"
+        text += "."
+
+        if winner_reason:
+            text += f" {winner_reason}"
+
+        return text.strip()

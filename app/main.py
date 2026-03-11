@@ -22,8 +22,26 @@ from app.mcp.asgi import app as mcp_app
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
+    import asyncio
+    from app.services.model_singleton import preload as _preload_model
+    from app.mcp.client import MCPToolClient
+    import os
+
+    # 1) Warm up the SentenceTransformer on the main thread before serving requests
+    logger.info("Pre-loading SentenceTransformer model...")
+    await asyncio.to_thread(_preload_model)
+    logger.info("SentenceTransformer model ready.")
+
+    # 2) Start app-level MCP client (stays connected for the entire server lifetime)
+    mcp_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8050/mcp/mcp")
+    app.state.mcp_client = MCPToolClient(server_url=mcp_url, enabled=True)
+    logger.info("App-level MCP client created | url=%s", mcp_url)
+
     async with mcp_app.router.lifespan_context(app):
         yield
+
+    # Cleanup (MCPToolClient used as context manager per-request, nothing to close here)
+    logger.info("App shutdown complete.")
 
 app = FastAPI(title="MCP E-Commerce API", lifespan=app_lifespan)
 

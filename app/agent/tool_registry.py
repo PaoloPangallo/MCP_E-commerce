@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.agent.schemas import LatencyClass, ObservationQuality, ObservationStatus
 from app.tools import (
+    execute_compare_tool,
     execute_conversation_tool,
     execute_search_tool,
     execute_seller_tool,
@@ -195,6 +196,38 @@ def _normalize_conversation_action_input(action_input: Dict[str, Any], memory: A
     return {"query": query}
 
 
+def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+    queries_raw = _clean_text(action_input.get("queries"))
+    if queries_raw and ("," in queries_raw or ";" in queries_raw):
+        return {"queries": queries_raw}
+
+    user_query = getattr(memory, "user_query", "")
+    text = _clean_text(user_query).lower()
+
+    # Pattern per "compara X e Y" o "differenza tra X e Y"
+    comparison_patterns = [
+        r"(?:compara|compari|confronta|vs|versus|differenza tra|differenze tra)\s+(.+)\s+(?:e|con|vs|versus)\s+(.+)",
+        r"(.+)\s+(?:vs|versus)\s+(.+)",
+    ]
+
+    for pattern in comparison_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            q1, q2 = match.groups()
+            return {"queries": f"{q1.strip()}, {q2.strip()}"}
+
+    # Fallback: se ci sono almeno 2 codici modello, proviamo a estrarli
+    from app.agent.planner import MODEL_CODE_RE
+    models = MODEL_CODE_RE.findall(text)
+    if len(models) >= 2:
+        # Se abbiamo "iphone 15" e "iphone 17", MODEL_CODE_RE potrebbe estrarre solo i numeri se non sono ben formati.
+        # Ma di solito cattura il nome del prodotto se include numeri.
+        # Proviamo a vedere se possiamo fare di meglio.
+        pass
+
+    return {"queries": queries_raw or user_query}
+
+
 def _normalize_search_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(result or {})
     payload.setdefault("query", _clean_text(action_input.get("query")))
@@ -234,7 +267,42 @@ def _normalize_conversation_result(result: Dict[str, Any], action_input: Dict[st
     return payload
 
 
+def _normalize_compare_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(result or {})
+    payload.setdefault("winner", {})
+    payload.setdefault("comparison_matrix", [])
+    payload.setdefault("status", payload.get("status", "ok"))
+    return payload
+
+
+def _resolve_compare_status(payload: Dict[str, Any]) -> ObservationStatus:
+    if payload.get("status") == "error":
+        return "error"
+    if not payload.get("comparison_matrix"):
+        return "no_data"
+    return "ok"
+
+
+def _summarize_compare(payload: Dict[str, Any]) -> str:
+    winner = payload.get("winner") or {}
+    winner_title = winner.get("title", "N/A")
+    winner_reason = payload.get("winner_reason", "")
+    matrix = payload.get("comparison_matrix") or []
+
+    if not matrix:
+        return "Confronto completato senza risultati."
+
+    summary = f"Confrontati {len(matrix)} prodotti. "
+    if winner_title != "N/A":
+        summary += f"Vincitore: {winner_title}. "
+    if winner_reason:
+        summary += winner_reason
+
+    return summary
+
+
 def _resolve_search_status(payload: Dict[str, Any]) -> ObservationStatus:
+
     if payload.get("error"):
         return "error"
     if int(payload.get("results_count", 0)) <= 0:
@@ -466,6 +534,39 @@ def _bootstrap_tools() -> None:
             terminal_resolver=_resolve_conversation_terminal,
             result_normalizer=_normalize_conversation_result,
             summarizer=_summarize_conversation,
+        )
+    )
+    register_tool(
+        ToolSpec(
+            name="compare_products",
+            description="Confronta più prodotti e-commerce cercando ognuno in parallelo. Restituisce una matrice di confronto e il vincitore consigliato.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "queries": {"type": "string", "description": "Query separate da virgola, es: 'iphone 13, iphone 14'"},
+                },
+                "required": ["queries"],
+            },
+            executor=execute_compare_tool,
+            tags=("compare", "product", "ebay"),
+            examples=(
+                "compara iphone 13 e 14",
+                "confronta scarpe nike air vs adidas ultraboost",
+            ),
+            required_fields=("queries",),
+            state_key="compare",
+            max_retries=0,
+            cost=4,
+            latency_class="high",
+            dependencies=("search_products",),
+            produced_entities=("winner", "comparison_matrix"),
+            can_run_in_parallel=False,
+            use_cache=True,
+            input_normalizer=_normalize_compare_action_input,
+            status_resolver=_resolve_compare_status,
+            terminal_resolver=lambda _: True,
+            result_normalizer=_normalize_compare_result,
+            summarizer=_summarize_compare,
         )
     )
 

@@ -6,7 +6,6 @@ from functools import lru_cache
 from typing import Dict, List, Sequence
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +13,8 @@ logger = logging.getLogger(__name__)
 # MODEL (lazy singleton)
 # ============================================================
 
-_MODEL: SentenceTransformer | None = None
+from app.services.model_singleton import get_sentence_transformer as _get_model
 
-
-def _get_model() -> SentenceTransformer:
-    global _MODEL
-    if _MODEL is None:
-        logger.info("Loading SentenceTransformer model: all-MiniLM-L6-v2")
-        _MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-    return _MODEL
 
 
 # ============================================================

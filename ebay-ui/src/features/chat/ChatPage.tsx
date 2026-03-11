@@ -11,6 +11,7 @@ import ChatInput from "./ChatInput.tsx"
 import MessageBubble from "./MessageBubble.tsx"
 import SellerTrustGauge from "../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../seller/component/SellerFeedbackPanel.tsx"
+import ComparisonDisplay from "../search/components/ComparisonDisplay.tsx"
 
 function SellerSummaryCard({
   sellerName,
@@ -91,6 +92,7 @@ function SearchBlockView({ search }: { search: SearchBlock }) {
   const hasSeller = !!search.seller_summary?.seller_name
   const hasResults = Array.isArray(search.results) && search.results.length > 0
   const hasAnalysis = !!search.analysis || !!search.metrics || !!search.rag_context
+  const hasComparison = !!search.comparison && Array.isArray(search.comparison.comparison_matrix) && search.comparison.comparison_matrix.length > 0
   const hasTrace = Array.isArray(search.agent_trace) && search.agent_trace.length > 0
 
   const showSellerCard =
@@ -138,6 +140,12 @@ function SearchBlockView({ search }: { search: SearchBlock }) {
           sentimentScore={search.seller_summary?.sentiment_score}
           count={search.seller_summary?.count}
         />
+      ) : null}
+
+      {hasComparison ? (
+        <Box mt={2.5}>
+          <ComparisonDisplay data={search.comparison!} />
+        </Box>
       ) : null}
 
       {search.errors && search.errors.length > 0 ? (
@@ -318,11 +326,11 @@ export default function ChatPage() {
         ) : null}
 
         {!running &&
-        finalPayload &&
-        !finalPayload.results?.length &&
-        !finalPayload.sellerSummary?.seller_name &&
-        !finalPayload.analysis &&
-        !chat.some((entry) => entry.type === "search") ? (
+          finalPayload &&
+          !finalPayload.results?.length &&
+          !finalPayload.sellerSummary?.seller_name &&
+          !finalPayload.analysis &&
+          !chat.some((entry) => entry.type === "search") ? (
           <Box mt={1.5} mb={3}>
             <MessageBubble role="assistant">
               {finalPayload.finalAnswer || "Ho completato l’analisi della richiesta."}

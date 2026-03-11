@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 import redis
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from app.services.model_singleton import get_sentence_transformer
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -96,7 +96,9 @@ def save_user_memory(db: Session, user_key: str, key: str, value: Any):
 # FAISS (SEMANTIC MEMORY)
 # ============================================================
 
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+def _embedding_model():
+    """Return the shared SentenceTransformer singleton."""
+    return get_sentence_transformer()
 
 VECTOR_DIM = 384
 
@@ -107,7 +109,7 @@ semantic_store: List[Dict[str, Any]] = []
 
 def add_semantic_memory(text_data: str, metadata: Dict[str, Any]):
 
-    vector = embedding_model.encode([text_data])[0]
+    vector = _embedding_model().encode([text_data])[0]
     vector = np.array([vector]).astype("float32")
 
     faiss_index.add(vector)
@@ -125,7 +127,7 @@ def search_semantic_memory(query: str, k: int = 5):
     if faiss_index.ntotal == 0:
         return []
 
-    q_vector = embedding_model.encode([query])[0]
+    q_vector = _embedding_model().encode([query])[0]
     q_vector = np.array([q_vector]).astype("float32")
 
     distances, indices = faiss_index.search(q_vector, k)

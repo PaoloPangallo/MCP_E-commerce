@@ -12,8 +12,10 @@ import { useSidebarStore } from "../features/chat/store/sidebarStore.ts"
 
 function detectMode(
   resultsCount: number,
-  hasSeller: boolean
-): "search" | "seller" | "hybrid" {
+  hasSeller: boolean,
+  hasComparison: boolean
+): "search" | "seller" | "hybrid" | "comparison" {
+  if (hasComparison) return "comparison"
   if (resultsCount > 0 && hasSeller) return "hybrid"
   if (hasSeller) return "seller"
   return "search"
@@ -84,8 +86,9 @@ export function useChatSession() {
 
     const sellerSummary = finalPayload.sellerSummary || null
     const results = finalPayload.results || []
+    const hasComparison = !!finalPayload.comparison
 
-    const mode = detectMode(results.length, !!sellerSummary?.seller_name)
+    const mode = detectMode(results.length, !!sellerSummary?.seller_name, hasComparison)
 
     const newSearch: SearchBlock = {
       query,
@@ -96,6 +99,7 @@ export function useChatSession() {
       timings: undefined,
       agent_trace: finalPayload.trace?.length ? finalPayload.trace : steps,
       seller_summary: sellerSummary,
+      comparison: finalPayload.comparison || null,
       final_answer:
         finalPayload.finalAnswer ||
         "Ho completato l’analisi della richiesta.",
@@ -109,9 +113,10 @@ export function useChatSession() {
       !!newSearch.analysis ||
       !!newSearch.agent_trace?.length ||
       !!newSearch.errors?.length ||
+      !!newSearch.comparison ||
       !!finalPayload.plannedTasks?.length ||
       !!finalPayload.toolStates &&
-        Object.keys(finalPayload.toolStates).length > 0
+      Object.keys(finalPayload.toolStates).length > 0
 
     setCachedSearch(cacheKey, newSearch)
     addHistory({ query, results: results.length })
@@ -137,14 +142,14 @@ export function useChatSession() {
   ])
 
   return {
-  chat,
-  steps,
-  running,
-  finalPayload,
-  plannedTasks,
-  loadingQuery,
-  hasSearches,
-  handleSend,
-  resetChat
-}
+    chat,
+    steps,
+    running,
+    finalPayload,
+    plannedTasks,
+    loadingQuery,
+    hasSearches,
+    handleSend,
+    resetChat
+  }
 }

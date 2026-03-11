@@ -1,13 +1,7 @@
-from sentence_transformers import SentenceTransformer
+from app.services.model_singleton import get_sentence_transformer as _get_model
+
 import numpy as np
 from functools import lru_cache
-
-
-# ============================================================
-# MODEL LOAD
-# ============================================================
-
-_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 # ============================================================
@@ -21,16 +15,13 @@ def embed(text: str):
         return np.zeros(384, dtype="float32")
 
     try:
-
-        vec = _model.encode(
+        vec = _get_model().encode(
             text,
             normalize_embeddings=True
         )
-
         return np.array(vec).astype("float32")
 
     except Exception:
-
         return np.zeros(384, dtype="float32")
 
 
@@ -44,14 +35,11 @@ def embed_batch(texts):
         return []
 
     try:
-
-        vectors = _model.encode(
+        vectors = _get_model().encode(
             texts,
             normalize_embeddings=True
         )
-
         return [np.array(v).astype("float32") for v in vectors]
 
     except Exception:
-
         return [np.zeros(384, dtype="float32") for _ in texts]

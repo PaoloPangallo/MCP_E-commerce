@@ -17,6 +17,33 @@ export interface SearchItem {
   explanations?: string[]
   rag_feedback?: Feedback[]
   _already_in_db?: boolean
+  _scores?: {
+    overall?: number
+    price?: number
+    trust?: number
+    relevance?: number
+    condition?: number
+  }
+}
+
+export interface ComparisonCandidate extends SearchItem {
+  query: string
+  scores?: {
+    price: number
+    trust: number
+    relevance: number
+    condition: number
+    overall: number
+  }
+}
+
+export interface ComparisonData {
+  status: string
+  queries_compared: number
+  candidates_found: number
+  winner: ComparisonCandidate
+  winner_reason: string
+  comparison_matrix: ComparisonCandidate[]
 }
 
 export interface IRMetrics {
@@ -37,6 +64,7 @@ export interface SearchBlock {
   timings?: Record<string, number>
   agent_trace?: AgentStep[]
   seller_summary?: SellerSummaryBlock | null
+  comparison?: ComparisonData | null
   final_answer?: string | null
   mode?: AppMode
   errors?: string[]

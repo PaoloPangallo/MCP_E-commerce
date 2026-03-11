@@ -10,7 +10,11 @@ from mcp.server.fastmcp import FastMCP
 from app.services.parser import parse_query_service
 from app.services.search_pipeline import run_search_pipeline
 from app.services.seller_pipeline import run_seller_pipeline
-from app.tools import execute_conversation_tool
+from app.tools import (
+    execute_conversation_tool,
+    execute_compare_tool,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -147,10 +151,6 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "retrieval, reranking, trust scoring e analisi finale."
     ),
 )
-@mcp.tool(
-    name="search_products",
-    description="Search products using the full ecommerce pipeline"
-)
 def search_products(query: str) -> str:
 
     db = None
@@ -264,6 +264,61 @@ def conversation(query: str, llm_engine: str = "ollama") -> str:
     except Exception as exc:
         logger.exception("MCP conversation failed")
         return _tool_error(query=query, error=str(exc))
+    finally:
+        _close_db(db)
+
+
+@mcp.tool(
+    name="compare_products",
+    description=(
+        "Confronta più prodotti e-commerce cercando ognuno in parallelo e "
+        "restituisce una matrice di confronto (prezzo, trust, rilevanza, condizione) "
+        "con il prodotto vincitore e la motivazione. "
+        "Input: lista di query separate da virgola o punto e virgola, ad esempio "
+        "'iphone 13, samsung galaxy s22'. Min 2, max 4 query."
+    ),
+)
+def compare_products(queries: str, llm_engine: str = "ollama") -> str:
+    """
+    queries: stringa con le query separate da virgola o punto e virgola.
+    Esempio: 'nike air max, adidas ultraboost'
+    """
+    import asyncio
+    from app.services.compare_pipeline import run_compare_pipeline
+
+    db = None
+    try:
+        # Parse the comma/semicolon-separated query string
+        sep_queries = [
+            q.strip()
+            for q in queries.replace(";", ",").split(",")
+            if q.strip()
+        ]
+
+        if len(sep_queries) < 2:
+            return _tool_error(
+                error="Fornisci almeno 2 query separate da virgola per confrontare i prodotti.",
+                example="iphone 13, samsung galaxy s22",
+            )
+
+        db = _get_db()
+        context = _build_context(db=db, llm_engine=llm_engine)
+
+        logger.info("MCP TOOL compare_products START | queries=%s", queries)
+
+        result = execute_compare_tool(
+            {"queries": queries},
+            context
+        )
+
+        result["_backend"] = "mcp"
+        logger.info("MCP TOOL compare_products END")
+        return _safe_json(result)
+
+
+    except Exception as exc:
+        logger.exception("MCP compare_products failed")
+        return _tool_error(queries=queries, error=str(exc))
     finally:
         _close_db(db)
 

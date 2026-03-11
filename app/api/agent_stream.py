@@ -162,7 +162,10 @@ async def agent_event_generator(
     try:
         db = SessionLocal()
 
-        agent = EbayReactAgent(db=db, user=user)
+        # Use the app-level MCP client singleton if available
+        app_mcp_client = getattr(request.app.state, "mcp_client", None)
+
+        agent = EbayReactAgent(db=db, user=user, mcp_client=app_mcp_client)
 
         logger.info(
             "Agent created | mcp_server_url=%s | prefer_mcp=%s | strict_mcp=%s",

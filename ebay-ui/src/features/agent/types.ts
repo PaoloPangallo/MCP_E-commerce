@@ -23,14 +23,14 @@ export interface AgentStep {
 
 export interface AgentEvent {
   type:
-    | "start"
-    | "thinking"
-    | "tool_start"
-    | "tool_result"
-    | "final"
-    | "error"
-    | "heartbeat"
-    | "done"
+  | "start"
+  | "thinking"
+  | "tool_start"
+  | "tool_result"
+  | "final"
+  | "error"
+  | "heartbeat"
+  | "done"
 
   step?: number
   message?: string
@@ -59,6 +59,7 @@ export type FinalPayload = {
   metrics?: import("../search/types").IRMetrics
   ragContext?: import("../search/types").RagContext
   sellerSummary?: import("../seller/types").SellerSummaryBlock | null
+  comparison?: import("../search/types").ComparisonData | null
   trace: AgentStep[]
   errors?: string[]
 

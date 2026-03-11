@@ -21,7 +21,7 @@ from app.services.parser import call_gemini, call_ollama, extract_first_json_obj
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -46,6 +46,11 @@ TRANSACTIONAL_CUES = {
     "cerca", "cerco", "trova", "trovami", "mostra", "vorrei", "voglio", "mi serve",
     "compra", "acquistare", "prezzo", "prezzi", "costo", "budget", "massimo",
     "minimo", "sotto", "meno", "entro", "offerta", "offerte",
+}
+
+COMPARISON_CUES = {
+    "compara", "compari", "confronta", "confronto", "differenza", "differenze",
+    "meglio", "peggio", "versus", "vs", "comparazione",
 }
 
 ATTRIBUTE_CUES = {
@@ -81,8 +86,9 @@ class IntentEvidence:
     product: float = 0.0
     seller: float = 0.0
     conversation: float = 0.0
+    comparison: float = 0.0
     reasons: Dict[str, list[str]] = field(
-        default_factory=lambda: {"product": [], "seller": [], "conversation": []}
+        default_factory=lambda: {"product": [], "seller": [], "conversation": [], "comparison": []}
     )
 
     def add(self, label: str, value: float, reason: str) -> None:
@@ -92,6 +98,8 @@ class IntentEvidence:
             self.seller += value
         elif label == "conversation":
             self.conversation += value
+        elif label == "comparison":
+            self.comparison += value
         if reason:
             self.reasons.setdefault(label, []).append(reason)
 
@@ -101,6 +109,7 @@ class IntentEvidence:
                 ("product_search", self.product),
                 ("seller_analysis", self.seller),
                 ("conversation", self.conversation),
+                ("comparison", self.comparison),
             ],
             key=lambda x: x[1],
             reverse=True,
@@ -211,6 +220,7 @@ class ReactPlanner:
 
         search_tool = self._search_tool_name()
         seller_tool = self._seller_tool_name()
+        compare_tool = self._compare_tool_name()
 
         if intent == "conversation":
             return PlannerOutput(
@@ -237,6 +247,16 @@ class ReactPlanner:
                         thought="Devo ancora cercare i prodotti.",
                         action=ToolCall(tool=search_tool, input=normalized),
                         intent="product_search",
+                    )
+
+        if intent == "comparison":
+            if compare_tool and not self._tool_state_is_terminal(memory, compare_tool):
+                normalized = self._normalize_action_input(compare_tool, {}, memory)
+                if normalized is not None and not self._exceeds_tool_budget(memory, compare_tool):
+                    return PlannerOutput(
+                        thought="Devo ancora confrontare i prodotti.",
+                        action=ToolCall(tool=compare_tool, input=normalized),
+                        intent="comparison",
                     )
 
         if intent == "hybrid":
@@ -516,9 +536,16 @@ class ReactPlanner:
     def _seller_tool_name(self) -> Optional[str]:
         return find_first_tool_by_tags("seller", "trust", "feedback")
 
+    def _compare_tool_name(self) -> Optional[str]:
+        return find_first_tool_by_tags("compare", "product")
+
     def _ordered_tools_for_intent(self, intent: str) -> list[str]:
         seller_tool = self._seller_tool_name()
         search_tool = self._search_tool_name()
+        compare_tool = self._compare_tool_name()
+
+        if intent == "comparison":
+            return [tool for tool in [compare_tool] if tool]
 
         if intent == "seller_analysis":
             return [tool for tool in [seller_tool] if tool]
@@ -610,6 +637,11 @@ class ReactPlanner:
         if transactional_hits:
             ev.add("product", min(0.18 + 0.08 * transactional_hits, 0.45), "transactional_lexicon")
 
+        comparison_hits = len(token_set & COMPARISON_CUES)
+        if comparison_hits:
+            ev.add("comparison", min(0.35 + 0.15 * comparison_hits, 0.8), "comparison_lexicon")
+            ev.add("product", 0.2, "comparison_implies_product")
+
         attribute_hits = len(token_set & ATTRIBUTE_CUES)
         if attribute_hits:
             ev.add("product", min(0.12 + 0.06 * attribute_hits, 0.42), "attribute_lexicon")
@@ -640,6 +672,9 @@ class ReactPlanner:
             ev.add("product", 0.26, "size_or_variant")
         if MODEL_CODE_RE.search(q):
             ev.add("product", 0.16, "model_code")
+            # Multiple model codes strongly imply comparison
+            if len(MODEL_CODE_RE.findall(q)) >= 2:
+                ev.add("comparison", 0.45, "multiple_model_codes")
 
         if re.search(r"\b(?:con|senza)\b", q) and attribute_hits:
             ev.add("product", 0.12, "attribute_composition")
@@ -673,6 +708,7 @@ class ReactPlanner:
             "product_search": evidence.reasons.get("product", []),
             "seller_analysis": evidence.reasons.get("seller", []),
             "conversation": evidence.reasons.get("conversation", []),
+            "comparison": evidence.reasons.get("comparison", []),
             "hybrid": evidence.reasons.get("seller", []) + evidence.reasons.get("product", []),
         }
         reasons = [r for r in mapping.get(intent, []) if r]

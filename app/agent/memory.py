@@ -301,6 +301,7 @@ class RequestState:
     last_seller_name: Optional[str] = None
     search_analysis: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
+    compare_payload: Optional[Dict[str, Any]] = None
     final_answer: Optional[str] = None
 
     def load_tasks(self, tasks: List[Dict[str, Any]]) -> None:
@@ -375,6 +376,14 @@ class RequestState:
 
         if observation.tool == "analyze_seller" and observation.ok:
             self._apply_seller_payload(observation.data)
+
+        if observation.tool == "compare_products" and observation.ok:
+            self._apply_compare_payload(observation.data)
+
+    def _apply_compare_payload(self, payload: Dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            return
+        self.compare_payload = payload
 
     def _apply_search_payload(self, payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
@@ -523,6 +532,7 @@ class RequestState:
             "intent": self.detected_intent,
             "search": self.search_payload,
             "seller": self.seller_payload,
+            "compare": self.compare_payload,
             "top_result": compact_top,
             "last_seller_name": self.last_seller_name,
             "search_analysis": self.search_analysis,

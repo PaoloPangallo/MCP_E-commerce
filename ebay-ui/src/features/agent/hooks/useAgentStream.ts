@@ -184,6 +184,7 @@ export function useAgentStream() {
           metrics: search.metrics || finalData.metrics,
           ragContext: search.rag_context,
           sellerSummary: seller,
+          comparison: finalData.compare || null,
           trace: finalTrace,
           errors: Array.isArray(finalData.errors) ? finalData.errors : [],
           plannedTasks: localPlannedTasks,
