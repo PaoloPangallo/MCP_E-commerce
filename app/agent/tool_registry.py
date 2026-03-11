@@ -37,6 +37,10 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
         r"\b(e poi|oltre a|assieme a|insieme a|anche|controlla|verifica)\b",
         r"[,;:].+\b(cerca|trova|analizza|feedback|seller|venditore|vende)\b",
     ),
+    "comparison": (
+        r"\b(compara|compari|confronta|confronto|versus|vs|differenza|differenze)\b",
+        r"\b(meglio|peggio)\b",
+    ),
 }
 
 
@@ -159,6 +163,10 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
         re.search(pattern, lowered, re.IGNORECASE)
         for pattern in _QUERY_PATTERNS["multi"]
     )
+    comparison_signal = any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["comparison"]
+    )
 
     cleaned_search_query = clean_search_query(text)
     has_budget_signal = bool(re.search(r"\b\d+[\.,]?\d*\s*(euro|eur|€)\b", lowered))
@@ -170,6 +178,7 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
         "conversation_signal": conversation_signal,
         "seller_signal": seller_signal,
         "search_signal": search_signal,
+        "comparison_signal": comparison_signal,
         "multi_signal": multi_signal,
         "has_budget_signal": has_budget_signal,
     }
@@ -220,10 +229,7 @@ def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -
     from app.agent.planner import MODEL_CODE_RE
     models = MODEL_CODE_RE.findall(text)
     if len(models) >= 2:
-        # Se abbiamo "iphone 15" e "iphone 17", MODEL_CODE_RE potrebbe estrarre solo i numeri se non sono ben formati.
-        # Ma di solito cattura il nome del prodotto se include numeri.
-        # Proviamo a vedere se possiamo fare di meglio.
-        pass
+        return {"queries": ", ".join([m.strip() for m in models[:3]])}
 
     return {"queries": queries_raw or user_query}
 
@@ -373,19 +379,21 @@ def _summarize_search(payload: Dict[str, Any]) -> str:
     seller = _clean_text(top.get("seller_name") or top.get("seller_username"))
     trust = top.get("trust_score")
 
-    chunks = [f"Search completata con {count} risultati."]
-    if title:
-        chunks.append(f"Top result: {title}.")
+    if not title:
+        return f"Ricerca completata: trovati {count} prodotti pertinenti."
+
+    summary = f"Ho individuato {count} prodotti. Il miglior match è '{title}'"
     if price is not None:
-        chunks.append(f"Prezzo: {price} {currency or 'EUR'}.")
+        summary += f" a {price} {currency or 'EUR'}"
     if seller:
-        chunks.append(f"Seller: {seller}.")
+        summary += f" (venduto da {seller})"
     if trust is not None:
         try:
-            chunks.append(f"Trust: {round(float(trust) * 100):.0f}%.")
+            summary += f" con affidabilità {round(float(trust) * 100):.0f}%"
         except Exception:
             pass
-    return " ".join(chunks).strip()
+    summary += "."
+    return summary
 
 
 def _summarize_seller(payload: Dict[str, Any]) -> str:
@@ -399,25 +407,25 @@ def _summarize_seller(payload: Dict[str, Any]) -> str:
         reason = error or "Nessun feedback disponibile per questo venditore."
         return f"Analisi seller completata senza dati utili per {seller_name}. Motivo: {reason}"
 
-    trust_text = ""
+    analysis = f"Analisi completata per {seller_name} ({count} feedback)."
     if trust_score is not None:
         try:
-            trust_text = f" Trust score: {round(float(trust_score) * 100):.0f}%."
+            p = round(float(trust_score) * 100)
+            if p >= 85: analysis += f" Profilo eccellente (Trust: {p}%)."
+            elif p >= 70: analysis += f" Profilo affidabile (Trust: {p}%)."
+            else: analysis += f" Attenzione: affidabilità limitata ({p}%)."
         except Exception:
-            trust_text = ""
+            pass
 
-    sentiment_text = ""
     if sentiment_score is not None:
         try:
-            sentiment_text = f" Sentiment score: {round(float(sentiment_score) * 100):.0f}%."
+            s = round(float(sentiment_score) * 100)
+            if s >= 70: analysis += " Feedback molto positivi."
+            elif s < 40: analysis += " Segnali di insoddisfazione nei commenti."
         except Exception:
-            sentiment_text = ""
+            pass
 
-    return (
-        f"Analizzato seller {seller_name}. "
-        f"Feedback totali: {count}."
-        f"{trust_text}{sentiment_text}"
-    ).strip()
+    return analysis.strip()
 
 
 def _summarize_conversation(payload: Dict[str, Any]) -> str:

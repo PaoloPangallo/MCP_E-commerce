@@ -32,7 +32,7 @@ def _get_feedbacks_cached(seller_name: str, limit: int) -> List[Dict[str, Any]]:
 def run_seller_pipeline(
     seller_name: str,
     page: int = 1,
-    limit: int = 10,
+    limit: int = 50,
 ) -> Dict[str, Any]:
     """
     Seller analysis service.
@@ -48,7 +48,7 @@ def run_seller_pipeline(
         raise ValueError("seller_name vuoto")
 
     page = max(1, int(page))
-    limit = min(max(int(limit), 1), 50)
+    limit = min(max(int(limit), 1), 100)
 
     needed = page * limit
     feedbacks = _get_feedbacks_cached(seller_name, limit=needed)
@@ -77,7 +77,7 @@ def run_seller_pipeline(
         sentiment_score = cached_scores["sentiment_score"]
         trust_score = cached_scores["trust_score"]
     else:
-        sentiment_score = compute_sentiment_score(feedbacks, max_texts=20)
+        sentiment_score = compute_sentiment_score(feedbacks, max_texts=50)
         trust_score = compute_trust_score(
             feedbacks,
             sentiment_score=sentiment_score,

@@ -209,6 +209,7 @@ async def run_compare_pipeline(
                 "seller_name": c["seller_name"],
                 "trust_score": c["trust_score"],
                 "url": c["url"],
+                "image_url": c.get("image_url"),
                 "scores": c["_scores"],
             }
             for c in scored

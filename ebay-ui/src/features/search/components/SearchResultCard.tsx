@@ -76,12 +76,20 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
 
           <Box mt={1.6}><SellerInfo seller_name={item.seller_name} seller_rating={item.seller_rating} /></Box>
           {typeof item.trust_score === "number" ? <Box mt={1.35}><SellerTrustGauge score={item.trust_score} /></Box> : null}
-          {item.explanations?.length ? <Box mt={1.5}><ExplanationChips explanations={item.explanations} /></Box> : null}
+          {item.explanations?.length ? (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: "#f0f4ff", borderRadius: 3, border: "1px solid #dbe4ff" }}>
+              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                <AutoAwesomeIcon sx={{ fontSize: 14, color: "#3b82f6" }} />
+                <Typography sx={{ fontSize: 11, fontWeight: 800, color: "#1e40af", textTransform: "uppercase" }}>Perché questo risultato?</Typography>
+              </Box>
+              <ExplanationChips explanations={item.explanations} />
+            </Box>
+          ) : null}
 
           {ragFeedbackPreview.length > 0 ? (
-            <Box sx={{ mt: 1.75, border: "1px solid #eef1f4", bgcolor: "#fafbfc", borderRadius: 3, px: 1.5, py: 1.3 }}>
-              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: "#111827", mb: 0.85 }}>Segnali retrieval sul venditore</Typography>
-              {ragFeedbackPreview.map((text, index) => <Typography key={`${item.ebay_id}-rag-${index}`} sx={{ fontSize: 13, color: "#4b5563", lineHeight: 1.65, mb: index === ragFeedbackPreview.length - 1 ? 0 : 0.7 }}>“{text}”</Typography>)}
+            <Box sx={{ mt: 1.5, border: "1px solid #f1f5f9", bgcolor: "#f8fafc", borderRadius: 3, px: 1.5, py: 1.2 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, color: "#64748b", mb: 0.5, textTransform: "uppercase" }}>Segnali dal mercato</Typography>
+              {ragFeedbackPreview.map((text, index) => <Typography key={`${item.ebay_id}-rag-${index}`} sx={{ fontSize: 12.5, color: "#475569", lineHeight: 1.5, fontStyle: "italic" }}>“{text}”</Typography>)}
             </Box>
           ) : null}
 

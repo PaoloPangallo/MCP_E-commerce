@@ -20,13 +20,13 @@ def _feedback_ratio(feedbacks: List[Dict]) -> float:
 
         r = f.get("rating")
 
-        if r == "Positive":
+        if r == 5: # Positive
             score += 1
 
-        elif r == "Neutral":
+        elif r == 3: # Neutral
             score += 0.5
 
-        elif r == "Negative":
+        elif r == 1: # Negative
             score += 0
 
     return score / total
@@ -64,11 +64,11 @@ def _recency_score(feedbacks: List[Dict]) -> float:
 
             r = f.get("rating")
 
-            if r == "Positive":
+            if r == 5: # Positive
                 val = 1
-            elif r == "Neutral":
+            elif r == 3: # Neutral
                 val = 0.5
-            else:
+            else: # Negative (1)
                 val = 0
 
             weights.append(weight)

@@ -82,7 +82,7 @@ def normalize_seller_arguments(
     return {
         "seller_name": seller_name,
         "page": _bounded_int(action_input.get("page", 1), default=1, min_value=1, max_value=999),
-        "limit": _bounded_int(action_input.get("limit", 10), default=10, min_value=1, max_value=50),
+        "limit": _bounded_int(action_input.get("limit", 50), default=50, min_value=1, max_value=100),
     }
 
 

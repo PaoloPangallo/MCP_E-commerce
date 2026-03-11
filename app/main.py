@@ -37,6 +37,14 @@ async def app_lifespan(app: FastAPI):
     app.state.mcp_client = MCPToolClient(server_url=mcp_url, enabled=True)
     logger.info("App-level MCP client created | url=%s", mcp_url)
 
+    # 3) Check Redis Connectivity for session memory
+    from app.services.memory_service import redis_client
+    try:
+        if redis_client.ping():
+            logger.info("Connected to Redis at localhost:6379 (session memory ready)")
+    except Exception as e:
+        logger.warning("Could not connect to Redis: %s. Session memory/history will be disabled or fallback to mock.", e)
+
     async with mcp_app.router.lifespan_context(app):
         yield
 

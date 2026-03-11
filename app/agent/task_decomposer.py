@@ -35,8 +35,7 @@ def should_decompose_query(query: str) -> bool:
     if not profile["seller_signal"]:
         return False
 
-    lowered = profile["text"].lower()
-    if profile["multi_signal"]:
+    if profile["multi_signal"] or profile["comparison_signal"]:
         return True
 
     return any(connector in lowered for connector in MULTI_STEP_CONNECTORS)
@@ -46,6 +45,7 @@ def _select_capability_tools() -> Dict[str, str | None]:
     return {
         "seller": find_first_tool_by_tags("seller", "trust", "feedback"),
         "search": find_first_tool_by_tags("search", "product", "catalog"),
+        "compare": find_first_tool_by_tags("compare", "product"),
     }
 
 
@@ -81,12 +81,25 @@ def _build_deterministic_tasks(query: str) -> List[Dict]:
 
     seller_tool = tools["seller"]
     search_tool = tools["search"]
+    compare_tool = tools["compare"]
     explicit_seller = profile["explicit_seller"]
 
     tasks: List[Dict] = []
 
+    # Priorità: se è un confronto, usiamo il tool dedicato
+    if profile["comparison_signal"] and compare_tool:
+        normalized = _normalize_task(
+            compare_tool,
+            {"queries": query},
+            query=query,
+            explicit_seller=explicit_seller,
+        )
+        if normalized:
+            return [normalized]
+
     # Nei casi ibridi espliciti vogliamo prima la ricerca, poi il controllo seller.
     if profile["search_signal"] and search_tool:
+        # Se abbiamo già un compare_tool pianificato, non aggiungiamo search generico
         normalized = _normalize_task(
             search_tool,
             {"query": profile["cleaned_search_query"] or query},

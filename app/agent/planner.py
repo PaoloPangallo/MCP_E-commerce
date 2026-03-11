@@ -70,7 +70,7 @@ VERBISH_CUES = {
     "sai", "sapete", "fai", "fare", "fate", "posso", "puoi", "potresti",
 }
 
-MODEL_CODE_RE = re.compile(r"\b[a-z]{1,6}[\-_]?\d{2,5}[a-z0-9\-_]*\b", re.IGNORECASE)
+MODEL_CODE_RE = re.compile(r"\b[a-z]{1,10}[\-_\s]?\d{1,5}[a-z0-9\-_]*\b", re.IGNORECASE)
 PRICE_RE = re.compile(r"\b\d{1,5}(?:[.,]\d{1,2})?\s*(?:€|euro)\b", re.IGNORECASE)
 SIZE_RE = re.compile(
     r"\b(?:taglia|misura|numero|eu|uk|us|it)\s*[a-z]?\d{1,3}\b|\b(?:xs|s|m|l|xl|xxl)\b",

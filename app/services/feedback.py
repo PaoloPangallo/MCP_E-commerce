@@ -81,10 +81,21 @@ def _parse_feedback_page(xml_text: str) -> List[Dict]:
     feedbacks: List[Dict] = []
 
     for fb in root.findall(".//e:FeedbackDetail", _NS):
+        raw_rating = _safe_find_text(fb, "e:CommentType", "Neutral")
+        
+        # Mapping eBay string to numeric rating for frontend/NLP consistency
+        # 5 = Positive, 3 = Neutral, 1 = Negative
+        rating_map = {
+            "Positive": 5,
+            "Neutral": 3,
+            "Negative": 1
+        }
+        numeric_rating = rating_map.get(raw_rating, 3)
+
         feedbacks.append(
             {
                 "user": _safe_find_text(fb, "e:CommentingUser", ""),
-                "rating": _safe_find_text(fb, "e:CommentType", ""),
+                "rating": numeric_rating,
                 "comment": _safe_find_text(fb, "e:CommentText", ""),
                 "time": _safe_find_text(fb, "e:CommentTime", ""),
             }

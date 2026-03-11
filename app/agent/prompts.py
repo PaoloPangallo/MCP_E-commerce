@@ -25,13 +25,13 @@ Important policy:
 - `conversation` is for purely conversational requests with no e-commerce tool need
 - for hybrid queries, prefer the unmet need first
 - do not repeat a tool call when its state is already terminal and useful
-- keep free text in Italian
+- keep ALL free text and thoughts ONLY in Italian
 - return ONLY valid minified JSON
 
 Schema:
 {
-  "thought":"short reasoning",
-  "intent":"conversation|seller_analysis|product_search|hybrid",
+  "thought":"Strategia attuale e perché questo step è utile (in ITALIANO)",
+  "intent":"conversation|seller_analysis|product_search|hybrid|comparison",
   "action":"tool_name|finish",
   "action_input":{},
   "final_answer":null
@@ -126,6 +126,7 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
         "intent": final_data.get("intent"),
         "search": compact_search,
         "seller": compact_seller,
+        "compare": final_data.get("compare"),
         "top_result": final_data.get("top_result"),
         "last_seller_name": final_data.get("last_seller_name"),
         "search_analysis": final_data.get("search_analysis"),
