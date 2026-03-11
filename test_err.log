@@ -1,0 +1,48 @@
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\paolo\MCP_ECOM\app\test\test_mcp.py", line 34, in <module>
+  |     asyncio.run(test())
+  |   File "C:\Users\paolo\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 190, in run
+  |     return runner.run(main)
+  |            ^^^^^^^^^^^^^^^^
+  |   File "C:\Users\paolo\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118, in run
+  |     return self._loop.run_until_complete(task)
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "C:\Users\paolo\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 654, in run_until_complete
+  |     return future.result()
+  |            ^^^^^^^^^^^^^^^
+  |   File "C:\Users\paolo\MCP_ECOM\app\test\test_mcp.py", line 11, in test
+  |     async with streamable_http_client(url) as (read, write, _):
+  |   File "C:\Users\paolo\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 231, in __aexit__
+  |     await self.gen.athrow(typ, value, traceback)
+  |   File "C:\Users\paolo\MCP_ECOM\.venv\Lib\site-packages\mcp\client\streamable_http.py", line 647, in streamable_http_client
+  |     async with anyio.create_task_group() as tg:
+  |   File "C:\Users\paolo\MCP_ECOM\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Exception Group Traceback (most recent call last):
+    |   File "C:\Users\paolo\MCP_ECOM\.venv\Lib\site-packages\mcp\client\streamable_http.py", line 670, in streamable_http_client
+    |     yield (
+    |   File "C:\Users\paolo\MCP_ECOM\app\test\test_mcp.py", line 13, in test
+    |     async with ClientSession(read, write) as session:
+    |   File "C:\Users\paolo\MCP_ECOM\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+    |     raise BaseExceptionGroup(
+    | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+    +-+---------------- 1 ----------------
+      | Traceback (most recent call last):
+      |   File "C:\Users\paolo\MCP_ECOM\app\test\test_mcp.py", line 30, in test
+      |     print(result)
+      |   File "C:\Users\paolo\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+      |     return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+      |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      | UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 24411: character maps to <undefined>
+      +------------------------------------
+
+TOOLS DISPONIBILI:
+- search_products
+- analyze_seller
+- profile_query
+- conversation
+
+TEST search_products
+

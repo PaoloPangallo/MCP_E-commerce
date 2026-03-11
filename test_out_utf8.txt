@@ -1,0 +1,120 @@
+﻿.\.venv\Scripts\python.exe :   + 
+Exception Group Traceback (most 
+recent call last):
+In riga:1 car:1
++ .\.venv\Scripts\python.exe 
+app/test/test_mcp.py > 
+test_out.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~
+    + CategoryInfo          : Not 
+   Specified: (  + Exception G..  
+  .ent call last)::String) [],    
+ RemoteException
+    + FullyQualifiedErrorId : Nat 
+   iveCommandError
+ 
+  |   File "C:\Users\paolo\MCP_ECO
+M\app\test\test_mcp.py", line 34, 
+in <module>
+  |     asyncio.run(test())
+  |   File "C:\Users\paolo\AppData
+\Local\Programs\Python\Python311\L
+ib\asyncio\runners.py", line 190, 
+in run
+  |     return runner.run(main)
+  |            ^^^^^^^^^^^^^^^^
+  |   File "C:\Users\paolo\AppData
+\Local\Programs\Python\Python311\L
+ib\asyncio\runners.py", line 118, 
+in run
+  |     return self._loop.run_unti
+l_complete(task)
+  |            ^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+  |   File "C:\Users\paolo\AppData
+\Local\Programs\Python\Python311\L
+ib\asyncio\base_events.py", line 
+654, in run_until_complete
+  |     return future.result()
+  |            ^^^^^^^^^^^^^^^
+  |   File "C:\Users\paolo\MCP_ECO
+M\app\test\test_mcp.py", line 11, 
+in test
+  |     async with 
+streamable_http_client(url) as 
+(read, write, _):
+  |   File "C:\Users\paolo\AppData
+\Local\Programs\Python\Python311\L
+ib\contextlib.py", line 231, in 
+__aexit__
+  |     await 
+self.gen.athrow(typ, value, 
+traceback)
+  |   File "C:\Users\paolo\MCP_ECO
+M\.venv\Lib\site-packages\mcp\clie
+nt\streamable_http.py", line 647, 
+in streamable_http_client
+  |     async with 
+anyio.create_task_group() as tg:
+  |   File "C:\Users\paolo\MCP_ECO
+M\.venv\Lib\site-packages\anyio\_b
+ackends\_asyncio.py", line 783, 
+in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled 
+errors in a TaskGroup (1 
+sub-exception)
+  +-+---------------- 1 
+----------------
+    | Exception Group Traceback 
+(most recent call last):
+    |   File "C:\Users\paolo\MCP_E
+COM\.venv\Lib\site-packages\mcp\cl
+ient\streamable_http.py", line 
+670, in streamable_http_client
+    |     yield (
+    |   File "C:\Users\paolo\MCP_E
+COM\app\test\test_mcp.py", line 
+13, in test
+    |     async with 
+ClientSession(read, write) as 
+session:
+    |   File "C:\Users\paolo\MCP_E
+COM\.venv\Lib\site-packages\anyio\
+_backends\_asyncio.py", line 783, 
+in __aexit__
+    |     raise 
+BaseExceptionGroup(
+    | ExceptionGroup: unhandled 
+errors in a TaskGroup (1 
+sub-exception)
+    +-+---------------- 1 
+----------------
+      | Traceback (most recent 
+call last):
+      |   File "C:\Users\paolo\MCP
+_ECOM\app\test\test_mcp.py", line 
+15, in test
+      |     await 
+session.initialize()
+      |   File "C:\Users\paolo\MCP
+_ECOM\.venv\Lib\site-packages\mcp\
+client\session.py", line 171, in 
+initialize
+      |     result = await 
+self.send_request(
+      |              
+^^^^^^^^^^^^^^^^^^^^^^^^
+      |   File "C:\Users\paolo\MCP
+_ECOM\.venv\Lib\site-packages\mcp\
+shared\session.py", line 306, in 
+send_request
+      |     raise 
+McpError(response_or_error.error)
+      | 
+mcp.shared.exceptions.McpError: 
+Session terminated
+      +---------------------------
+---------

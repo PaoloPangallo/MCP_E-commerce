@@ -1,0 +1,37 @@
+﻿.\.venv\Scripts\python.exe : C:\Us
+ers\paolo\MCP_ECOM\.venv\Lib\site-
+packages\huggingface_hub\file_down
+load.py:949: FutureWarning: 
+`resume_download` is deprecated 
+and will be removed in version 
+1.0.0. Downloads always resume 
+when possible. If you want to 
+force a new download, use 
+`force_download=True`.
+In riga:1 car:1
++ .\.venv\Scripts\python.exe 
+inspect_routes.py > routes.txt 
+2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : Not 
+   Specified: (C:\Users\paolo\..  
+  .download=True`.:String) [],    
+ RemoteException
+    + FullyQualifiedErrorId : Nat 
+   iveCommandError
+ 
+  warnings.warn(
+[03/11/26 10:17:21] WARNING  Tool 
+already exists:            
+tool_manager.py:70
+                             
+search_products                   
+                
+                    INFO     MCP 
+configured | db_factory=True |    
+server.py:45
+                             
+user_resolver=False               
+                
+Route: /mcp - <class 'starlette.routing.Route'>

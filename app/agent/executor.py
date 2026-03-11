@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import json
+import logging
+import time
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.agent.schemas import Observation, ObservationQuality, ObservationStatus, ToolCall
@@ -29,7 +32,7 @@ class ToolExecutor:
         self.prefer_mcp = bool(prefer_mcp)
         self.fallback_to_local = bool(fallback_to_local)
 
-    def execute(self, tool_call: ToolCall) -> Observation:
+    async def execute(self, tool_call: ToolCall) -> Observation:
         spec = TOOLS.get(tool_call.tool)
         if spec is None:
             logger.warning("Unknown tool requested: %s", tool_call.tool)
@@ -65,7 +68,7 @@ class ToolExecutor:
             start = time.perf_counter()
 
             try:
-                result = self._execute_once(tool_call=tool_call, spec=spec)
+                result = await self._execute_once(tool_call=tool_call, spec=spec)
 
                 result = self._normalize_result_payload(result)
                 result["_tool_attempts"] = attempt
@@ -130,63 +133,23 @@ class ToolExecutor:
             cache_hit=False,
         )
 
-    def execute_many(self, tool_calls: Iterable[ToolCall], parallel: bool = False) -> List[Observation]:
+    async def execute_many(self, tool_calls: Iterable[ToolCall], parallel: bool = False) -> List[Observation]:
         calls = list(tool_calls)
         if not calls:
             return []
 
         if not parallel or len(calls) <= 1:
-            return [self.execute(call) for call in calls]
+            results = []
+            for call in calls:
+                results.append(await self.execute(call))
+            return results
 
         logger.info("ToolExecutor execute_many | parallel=%s | count=%s", parallel, len(calls))
 
-        results: Dict[int, Observation] = {}
-        max_workers = min(6, len(calls))
+        tasks = [self.execute(call) for call in calls]
+        return list(await asyncio.gather(*tasks, return_exceptions=False))
 
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            future_to_index = {
-                pool.submit(self.execute, call): idx
-                for idx, call in enumerate(calls)
-            }
-
-            for future in as_completed(future_to_index):
-                idx = future_to_index[future]
-                call = calls[idx]
-
-                try:
-                    results[idx] = future.result()
-                except Exception as exc:
-                    logger.exception(
-                        "ToolExecutor execute_many future failed | tool=%s | error=%s",
-                        call.tool,
-                        exc,
-                    )
-                    spec = get_tool_spec(call.tool)
-                    results[idx] = Observation(
-                        tool=call.tool,
-                        ok=False,
-                        status="error",
-                        error=str(exc),
-                        summary=f"{call.tool} failed: {exc}",
-                        retryable=False,
-                        state_key=spec.state_key if spec else None,
-                        terminal=False,
-                        quality="empty",
-                        data={
-                            "_backend": None,
-                            "error": str(exc),
-                        },
-                        state_update={
-                            "_backend": None,
-                            "error": str(exc),
-                        },
-                        execution_ms=None,
-                        cache_hit=False,
-                    )
-
-        return [results[idx] for idx in range(len(calls))]
-
-    def _execute_once(self, tool_call: ToolCall, spec: Any) -> Dict[str, Any]:
+    async def _execute_once(self, tool_call: ToolCall, spec: Any) -> Dict[str, Any]:
         if self._should_use_mcp(tool_call.tool):
             try:
                 logger.info(
@@ -195,7 +158,7 @@ class ToolExecutor:
                     tool_call.input,
                 )
                 assert self.mcp_client is not None
-                result = self.mcp_client.call_tool(tool_call.tool, tool_call.input)
+                result = await self.mcp_client.call_tool_async(tool_call.tool, tool_call.input)
                 result = self._normalize_result_payload(result)
                 result.setdefault("_backend", "mcp")
                 logger.info("ToolExecutor MCP success | tool=%s", tool_call.tool)
@@ -217,7 +180,7 @@ class ToolExecutor:
             tool_call.tool,
             tool_call.input,
         )
-        result = spec.executor(tool_call.input, self.context)
+        result = await asyncio.to_thread(spec.executor, tool_call.input, self.context)
         result = self._normalize_result_payload(result)
         result.setdefault("_backend", "local")
         logger.info("ToolExecutor LOCAL success | tool=%s", tool_call.tool)

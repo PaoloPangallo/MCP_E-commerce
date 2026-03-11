@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.agent.memory import AgentMemory
 from app.agent.prompts import build_planner_prompt
@@ -122,7 +123,7 @@ class ReactPlanner:
         self.margin_threshold = 0.18
         self.hybrid_threshold = 0.62
 
-    def decide(
+    async def decide(
             self,
             memory: AgentMemory,
             step_index: int,
@@ -147,7 +148,7 @@ class ReactPlanner:
         if deterministic:
             return deterministic
 
-        llm_decision = self._llm_decide(memory, step_index, max_steps)
+        llm_decision = await self._llm_decide(memory, step_index, max_steps)
         if llm_decision:
             return llm_decision
 
@@ -330,7 +331,7 @@ class ReactPlanner:
             intent=self._infer_intent(memory),
         )
 
-    def _llm_decide(
+    async def _llm_decide(
             self,
             memory: AgentMemory,
             step_index: int,
@@ -347,7 +348,7 @@ class ReactPlanner:
             tool_catalog=get_tool_catalog(),
         )
 
-        raw = self._call_llm(prompt)
+        raw = await self._call_llm(prompt)
         if not raw:
             logger.info("Planner LLM returned empty output.")
             return None
@@ -460,12 +461,13 @@ class ReactPlanner:
             intent=intent if intent in VALID_INTENTS else self._infer_intent(memory),
         )
 
-    def _call_llm(self, prompt: str) -> Optional[str]:
+    async def _call_llm(self, prompt: str) -> Optional[str]:
+        import asyncio
         try:
             if self.llm_engine == "gemini":
-                return call_gemini(prompt)
+                return await asyncio.to_thread(call_gemini, prompt)
             if self.llm_engine == "ollama":
-                return call_ollama(prompt)
+                return await asyncio.to_thread(call_ollama, prompt)
         except Exception as exc:
             logger.warning("Planner LLM failed: %s", exc)
         return None

@@ -6,7 +6,19 @@ export default defineConfig({
   server: {
     proxy: {
       '/seller': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8050',
+        changeOrigin: true,
+      },
+      '/agent': {
+        target: 'http://localhost:8050',
+        changeOrigin: true,
+      },
+      '/search': {
+        target: 'http://localhost:8050',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:8050',
         changeOrigin: true,
       },
     },

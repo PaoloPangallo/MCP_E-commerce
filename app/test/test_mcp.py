@@ -6,7 +6,7 @@ from mcp.client.streamable_http import streamable_http_client
 
 async def test():
 
-    url = "http://127.0.0.1:8050/mcp"
+    url = "http://127.0.0.1:8050/mcp/mcp"
 
     async with streamable_http_client(url) as (read, write, _):
 
@@ -30,4 +30,5 @@ async def test():
             print(result)
 
 
-asyncio.run(test())
+if __name__ == "__main__":
+    asyncio.run(test())

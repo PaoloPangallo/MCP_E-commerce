@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import re
-import threading
 from typing import Any, Dict, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -138,59 +137,6 @@ def _validate_event(event: Dict[str, Any]) -> Dict[str, Any]:
     return event
 
 
-def _run_agent_stream_sync(
-    query: str,
-    llm_engine: str,
-    user: Any,
-    stop_event: threading.Event,
-) -> Iterator[Dict[str, Any]]:
-    db: Optional[Session] = None
-
-    try:
-        db = SessionLocal()
-
-        agent = EbayReactAgent(db=db, user=user)
-
-
-        logger.info(
-            "Agent created | mcp_server_url=%s | prefer_mcp=%s | strict_mcp=%s",
-            getattr(agent, "mcp_server_url", None),
-            getattr(agent, "prefer_mcp", None),
-            getattr(agent, "strict_mcp", None),
-        )
-
-        agent_request = AgentRequest(
-            query=query,
-            llm_engine=llm_engine,
-            max_steps=6,
-            return_trace=True,
-        )
-
-        logger.info(
-            "Starting sync agent stream | query=%s | llm_engine=%s",
-            query,
-            llm_engine,
-        )
-
-        for event in agent.run_stream(agent_request):
-            if stop_event.is_set():
-                logger.info("Stop event detected: interrompo stream agente")
-                break
-
-            yield _validate_event(event)
-
-    except Exception as exc:
-        logger.exception("Synchronous agent execution failed: %s", exc)
-        raise
-
-    finally:
-        if db is not None:
-            try:
-                db.close()
-            except Exception:
-                logger.warning("Failed closing DB session in agent stream")
-
-
 async def agent_event_generator(
     request: Request,
     query: str,
@@ -210,105 +156,52 @@ async def agent_event_generator(
         yield _sse({"type": "done"})
         return
 
-    queue: asyncio.Queue[Dict[str, Any] | None] = asyncio.Queue()
-    stop_event = threading.Event()
-    loop = asyncio.get_running_loop()
+    db: Optional[Session] = None
     done_sent = False
 
-    def worker() -> None:
-        try:
-            for event in _run_agent_stream_sync(query, llm_engine, user, stop_event):
-                if stop_event.is_set():
-                    logger.info("Worker noticed stop_event, stopping")
-                    break
-
-                fut = asyncio.run_coroutine_threadsafe(queue.put(event), loop)
-                try:
-                    fut.result(timeout=2)
-                except Exception:
-                    logger.exception("Impossibile pushare evento nella coda SSE")
-                    break
-
-        except Exception as exc:
-            logger.exception("Agent stream worker failed: %s", exc)
-            try:
-                fut = asyncio.run_coroutine_threadsafe(
-                    queue.put(
-                        {
-                            "type": "error",
-                            "message": str(exc),
-                        }
-                    ),
-                    loop,
-                )
-                fut.result(timeout=2)
-            except Exception:
-                logger.exception("Impossibile pushare errore nella coda SSE")
-
-        finally:
-            try:
-                fut = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
-                fut.result(timeout=2)
-            except Exception:
-                logger.exception("Impossibile chiudere la coda SSE")
-
-    background_task = asyncio.create_task(asyncio.to_thread(worker))
-
     try:
-        started_at = loop.time()
+        db = SessionLocal()
 
-        while True:
+        agent = EbayReactAgent(db=db, user=user)
+
+        logger.info(
+            "Agent created | mcp_server_url=%s | prefer_mcp=%s | strict_mcp=%s",
+            getattr(agent, "mcp_server_url", None),
+            getattr(agent, "prefer_mcp", None),
+            getattr(agent, "strict_mcp", None),
+        )
+
+        agent_request = AgentRequest(
+            query=query,
+            llm_engine=llm_engine,
+            max_steps=6,
+            return_trace=True,
+        )
+
+        logger.info(
+            "Starting async agent stream | query=%s | llm_engine=%s",
+            query,
+            llm_engine,
+        )
+
+        async for event in agent.run_stream(agent_request):
             if await request.is_disconnected():
                 logger.info("Client disconnected from /agent/stream")
-                stop_event.set()
                 break
-
-            elapsed = loop.time() - started_at
-            if elapsed > WORKER_HARD_TIMEOUT_SECONDS:
-                logger.warning("Agent stream hard timeout reached after %.2fs", elapsed)
-                stop_event.set()
-
-                yield _sse(
-                    {
-                        "type": "error",
-                        "message": "Timeout interno dell'agente.",
-                    }
-                )
-                break
-
-            try:
-                event = await asyncio.wait_for(
-                    queue.get(),
-                    timeout=QUEUE_WAIT_TIMEOUT_SECONDS,
-                )
-            except asyncio.TimeoutError:
-                yield _sse(
-                    {
-                        "type": "heartbeat",
-                        "message": "still running",
-                    }
-                )
-                await asyncio.sleep(0)
-                continue
-
-            if event is None:
-                logger.info("Agent stream queue closed")
-                break
-
-            yield _sse(event)
-            await asyncio.sleep(0)
+                
+            yield _sse(_validate_event(event))
+            await asyncio.sleep(0)  # Yield control to event loop
 
         if not done_sent and not await request.is_disconnected():
             done_sent = True
             yield _sse({"type": "done"})
 
     except asyncio.CancelledError:
-        stop_event.set()
         logger.info("SSE stream cancelled by server/client")
-        raise
+        # Do NOT re-raise inside an async generator — ASGI handles the cleanup
+        # Raising here causes "ASGI callable returned without completing response"
 
     except Exception as exc:
-        stop_event.set()
         logger.exception("SSE generator error: %s", exc)
 
         if not await request.is_disconnected():
@@ -324,14 +217,11 @@ async def agent_event_generator(
                 yield _sse({"type": "done"})
 
     finally:
-        stop_event.set()
-
-        if not background_task.done():
-            background_task.cancel()
+        if db is not None:
             try:
-                await background_task
+                db.close()
             except Exception:
-                pass
+                logger.warning("Failed closing DB session in agent stream")
 
 
 @router.get("/agent/stream")

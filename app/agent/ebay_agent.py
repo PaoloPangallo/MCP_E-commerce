@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -45,7 +45,7 @@ class EbayReactAgent:
         self.mcp_server_url = (
             mcp_server_url
             or os.getenv("MCP_SERVER_URL")
-            or "http://127.0.0.1:8040/mcp"
+            or "http://127.0.0.1:8050/mcp/mcp"
         )
 
         if strict_mcp is None:
@@ -70,10 +70,10 @@ class EbayReactAgent:
             self.mcp_server_url,
         )
 
-    def run(self, request: AgentRequest) -> AgentResponse:
+    async def run(self, request: AgentRequest) -> AgentResponse:
         final_payload: Optional[Dict[str, Any]] = None
 
-        for event in self.run_stream(request):
+        async for event in self.run_stream(request):
             if event.get("type") == "final":
                 final_payload = event
 
@@ -94,7 +94,7 @@ class EbayReactAgent:
             steps_used=final_payload.get("steps_used", 0),
         )
 
-    def run_stream(self, request: AgentRequest) -> Generator[Dict[str, Any], None, None]:
+    async def run_stream(self, request: AgentRequest) -> AsyncGenerator[Dict[str, Any], None]:
         max_steps = min(max(int(request.max_steps or 4), 1), 6)
 
         logger.info(
@@ -146,185 +146,187 @@ class EbayReactAgent:
             planned_tasks=tasks,
         ).model_dump()
 
-        for step_index in range(1, max_steps + 1):
-            try:
-                decision = planner.decide(
-                    memory=memory,
-                    step_index=step_index,
-                    max_steps=max_steps,
-                )
-            except Exception as exc:
-                logger.exception("Planner failed at step %s: %s", step_index, exc)
-                memory.errors.append(f"Planner error: {exc}")
-                final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
-                break
-
-            if getattr(decision, "intent", None):
-                memory.detected_intent = decision.intent
-
-            if decision.should_stop or (decision.action is None and not decision.actions):
-                final_answer = decision.final_answer or self._finalize(
-                    memory=memory,
-                    llm_engine=request.llm_engine,
-                )
-                yield ThinkingEvent(
-                    step=step_index,
-                    message="Sto preparando la risposta.",
-                ).model_dump()
-                break
-
-            planned_actions = decision.planned_actions()
-            thought_action = planned_actions[0].tool if planned_actions else None
-
-            yield ThinkingEvent(
-                step=step_index,
-                thought=decision.thought,
-                action=thought_action,
-            ).model_dump()
-
-            for action in planned_actions:
-                memory.register_tool_call(action.tool)
-                yield ToolStartEvent(
-                    step=step_index,
-                    tool=action.tool,
-                    input=action.input,
-                ).model_dump()
-
-            try:
-                observations = executor.execute_many(
-                    planned_actions,
-                    parallel=decision.run_parallel,
-                )
-            except Exception as exc:
-                logger.exception("Executor failed at step %s: %s", step_index, exc)
-                memory.errors.append(f"Executor error: {exc}")
-
-                if self.strict_mcp:
-                    final_answer = (
-                        "L'esecuzione tramite MCP è fallita e la modalità strict è attiva."
-                    )
-                else:
-                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
-                break
-
-            for action, observation in zip(planned_actions, observations):
-                memory.apply_observation(observation)
-                executed_actions += 1
-
-                backend = getattr(observation, "backend", None)
-                if backend:
-                    logger.info(
-                        "Tool result | step=%s | tool=%s | backend=%s | ok=%s | status=%s",
-                        step_index,
-                        action.tool,
-                        backend,
-                        observation.ok,
-                        observation.status,
-                    )
-                else:
-                    logger.info(
-                        "Tool result | step=%s | tool=%s | ok=%s | status=%s",
-                        step_index,
-                        action.tool,
-                        observation.ok,
-                        observation.status,
-                    )
-
-                event_payload = ToolResultEvent(
-                    step=step_index,
-                    tool=action.tool,
-                    ok=observation.ok,
-                    status=observation.status,
-                    quality=observation.quality,
-                    summary=observation.summary,
-                ).model_dump()
-
-                if backend:
-                    event_payload["backend"] = backend
-
-                yield event_payload
-
-                trace.append(
-                    AgentStep(
-                        step=step_index,
-                        thought=decision.thought,
-                        action=action.tool,
-                        action_input=action.input,
-                        observation_summary=observation.summary,
-                        status=observation.status,
-                    )
-                )
-
-                if observation.terminal:
-                    final_answer = observation.summary or self._finalize(
-                        memory=memory,
-                        llm_engine=request.llm_engine,
-                    )
-
-                    self._persist_outcome_safely(memory, final_answer)
-
-                    yield FinalEvent(
-                        final_answer=final_answer,
-                        agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
-                        final_data=memory.final_data(),
-                        steps_used=executed_actions,
-                    ).model_dump()
-                    return
-
-                if not observation.ok:
-                    logger.warning(
-                        "Tool execution failed | step=%s | tool=%s | error=%s",
-                        step_index,
-                        action.tool,
-                        observation.error,
-                    )
-
-            if any(not obs.ok for obs in observations):
-                failed_tools = [obs.tool for obs in observations if not obs.ok]
-
+        async with self.mcp_client:
+            for step_index in range(1, max_steps + 1):
                 try:
-                    should_abort = (
-                        step_index >= max_steps
-                        or any(planner.should_abort_after_error(memory, tool) for tool in failed_tools)
+                    decision = await planner.decide(
+                        memory=memory,
+                        step_index=step_index,
+                        max_steps=max_steps,
                     )
                 except Exception as exc:
-                    logger.warning("Planner abort policy failed: %s", exc)
-                    should_abort = step_index >= max_steps
-
-                if should_abort:
-                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+                    logger.exception("Planner failed at step %s: %s", step_index, exc)
+                    memory.errors.append(f"Planner error: {exc}")
+                    final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                     break
 
-                continue
+                if getattr(decision, "intent", None):
+                    memory.detected_intent = decision.intent
 
-            try:
-                if planner.can_stop_early(memory):
-                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
-                    break
-            except Exception as exc:
-                logger.warning("Planner early-stop check failed: %s", exc)
-
-        if final_answer is None:
-            if memory.has_any_terminal_state():
-                last = memory.recent_observations(limit=1)
-                if last:
-                    final_answer = last[0].get("summary") or self._finalize(
+                if decision.should_stop or (decision.action is None and not decision.actions):
+                    final_answer = decision.final_answer or await self._finalize(
                         memory=memory,
                         llm_engine=request.llm_engine,
                     )
+                    yield ThinkingEvent(
+                        step=step_index,
+                        message="Sto preparando la risposta.",
+                    ).model_dump()
+                    break
+
+                planned_actions = decision.planned_actions()
+                thought_action = planned_actions[0].tool if planned_actions else None
+
+                yield ThinkingEvent(
+                    step=step_index,
+                    thought=decision.thought,
+                    action=thought_action,
+                ).model_dump()
+
+                for action in planned_actions:
+                    memory.register_tool_call(action.tool)
+                    yield ToolStartEvent(
+                        step=step_index,
+                        tool=action.tool,
+                        input=action.input,
+                    ).model_dump()
+
+                try:
+                    observations = await executor.execute_many(
+                        planned_actions,
+                        parallel=decision.run_parallel,
+                    )
+                except Exception as exc:
+                    logger.exception("Executor failed at step %s: %s", step_index, exc)
+                    memory.errors.append(f"Executor error: {exc}")
+
+                    if self.strict_mcp:
+                        final_answer = (
+                            "L'esecuzione tramite MCP è fallita e la modalità strict è attiva."
+                        )
+                    else:
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+                    break
+
+                for action, observation in zip(planned_actions, observations):
+                    memory.apply_observation(observation)
+                    executed_actions += 1
+
+                    backend = getattr(observation, "backend", None)
+                    if backend:
+                        logger.info(
+                            "Tool result | step=%s | tool=%s | backend=%s | ok=%s | status=%s",
+                            step_index,
+                            action.tool,
+                            backend,
+                            observation.ok,
+                            observation.status,
+                        )
+                    else:
+                        logger.info(
+                            "Tool result | step=%s | tool=%s | ok=%s | status=%s",
+                            step_index,
+                            action.tool,
+                            observation.ok,
+                            observation.status,
+                        )
+
+                    event_payload = ToolResultEvent(
+                        step=step_index,
+                        tool=action.tool,
+                        ok=observation.ok,
+                        status=observation.status,
+                        quality=observation.quality,
+                        summary=observation.summary,
+                    ).model_dump()
+
+                    if backend:
+                        event_payload["backend"] = backend
+
+                    yield event_payload
+
+                    trace.append(
+                        AgentStep(
+                            step=step_index,
+                            thought=decision.thought,
+                            action=action.tool,
+                            action_input=action.input,
+                            observation_summary=observation.summary,
+                            status=observation.status,
+                        )
+                    )
+
+                    if observation.terminal:
+                        final_answer = observation.summary or await self._finalize(
+                            memory=memory,
+                            llm_engine=request.llm_engine,
+                        )
+
+                        self._persist_outcome_safely(memory, final_answer)
+
+                        yield FinalEvent(
+                            final_answer=final_answer,
+                            agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
+                            final_data=memory.final_data(),
+                            steps_used=executed_actions,
+                        ).model_dump()
+                        return
+
+                    if not observation.ok:
+                        logger.warning(
+                            "Tool execution failed | step=%s | tool=%s | error=%s",
+                            step_index,
+                            action.tool,
+                            observation.error,
+                        )
+
+                if any(not obs.ok for obs in observations):
+                    failed_tools = [obs.tool for obs in observations if not obs.ok]
+
+                    try:
+                        should_abort = (
+                            step_index >= max_steps
+                            or any(planner.should_abort_after_error(memory, tool) for tool in failed_tools)
+                        )
+                    except Exception as exc:
+                        logger.warning("Planner abort policy failed: %s", exc)
+                        should_abort = step_index >= max_steps
+
+                    if should_abort:
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+                        break
+
+                    continue
+
+                try:
+                    if planner.can_stop_early(memory):
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+                        break
+                except Exception as exc:
+                    logger.warning("Planner early-stop check failed: %s", exc)
+
+            if final_answer is None:
+                if memory.has_any_terminal_state():
+                    last = memory.recent_observations(limit=1)
+                    if last:
+                        final_answer = last[0].get("summary") or await self._finalize(
+                            memory=memory,
+                            llm_engine=request.llm_engine,
+                        )
+                    else:
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                 else:
-                    final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
-            else:
-                final_answer = self._finalize(memory=memory, llm_engine=request.llm_engine)
+                    final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
 
-        self._persist_outcome_safely(memory, final_answer)
+            import asyncio
+            await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)
 
-        yield FinalEvent(
-            final_answer=final_answer,
-            agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
-            final_data=memory.final_data(),
-            steps_used=executed_actions,
-        ).model_dump()
+            yield FinalEvent(
+                final_answer=final_answer,
+                agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
+                final_data=memory.final_data(),
+                steps_used=executed_actions,
+            ).model_dump()
 
     def _persist_outcome_safely(self, memory: AgentMemory, final_answer: str) -> None:
         try:
@@ -332,7 +334,7 @@ class EbayReactAgent:
         except Exception as exc:
             logger.warning("Persisting memory outcome failed: %s", exc)
 
-    def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
+    async def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
         intent = (memory.detected_intent or "").lower()
 
         if intent == "conversation":
@@ -342,7 +344,7 @@ class EbayReactAgent:
                 final_data=memory.final_data(),
             )
 
-            llm_text = self._call_final_llm(prompt, llm_engine)
+            llm_text = await self._call_final_llm(prompt, llm_engine)
             if llm_text and llm_text.strip():
                 memory.register_llm_call("final")
                 return llm_text.strip()
@@ -363,7 +365,7 @@ class EbayReactAgent:
             final_data=memory.final_data(),
         )
 
-        llm_text = self._call_final_llm(prompt, llm_engine)
+        llm_text = await self._call_final_llm(prompt, llm_engine)
         if llm_text and llm_text.strip():
             memory.register_llm_call("final")
             return llm_text.strip()
@@ -371,12 +373,13 @@ class EbayReactAgent:
         return fallback
 
     @staticmethod
-    def _call_final_llm(prompt: str, llm_engine: str) -> Optional[str]:
+    async def _call_final_llm(prompt: str, llm_engine: str) -> Optional[str]:
+        import asyncio
         try:
             if llm_engine == "gemini":
-                return call_gemini(prompt)
+                return await asyncio.to_thread(call_gemini, prompt)
             if llm_engine == "ollama":
-                return call_ollama(prompt)
+                return await asyncio.to_thread(call_ollama, prompt)
             return None
         except Exception as exc:
             logger.warning("Final answer LLM failed: %s", exc)
