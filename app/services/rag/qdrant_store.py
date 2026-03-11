@@ -10,49 +10,65 @@ from fastembed import SparseTextEmbedding
 from app.services.rag.embedding import embed_batch, embed
 from app.services.rag.schemas import make_doc_id
 
+import threading
+
 QDRANT_PATH = "qdrant_storage"
 COLLECTION_NAME = "ecommerce_rag"
 DENSE_DIM = 384
 
-_client = QdrantClient(path=QDRANT_PATH)
-_sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+_client: Optional[QdrantClient] = None
+_sparse_model: Optional[SparseTextEmbedding] = None
+_init_lock = threading.Lock()
 
-def _init_collection():
-    try:
-        if not _client.collection_exists(COLLECTION_NAME):
-            _client.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config={
-                    "dense": models.VectorParams(
-                        size=DENSE_DIM,
-                        distance=models.Distance.COSINE
-                    )
-                },
-                sparse_vectors_config={
-                    "sparse": models.SparseVectorParams(
-                        modifier=models.Modifier.IDF
-                    )
-                }
-            )
-            # Create indexing for the 'type' field
-            _client.create_payload_index(
-                collection_name=COLLECTION_NAME,
-                field_name="type",
-                field_schema=models.PayloadSchemaType.KEYWORD
-            )
-    except Exception as e:
-        print(f"Error initializing Qdrant collection: {e}")
-
-_init_collection()
+def _get_qdrant() -> tuple[QdrantClient, SparseTextEmbedding]:
+    global _client, _sparse_model
+    if _client is not None and _sparse_model is not None:
+        return _client, _sparse_model
+        
+    with _init_lock:
+        if _client is not None and _sparse_model is not None:
+            return _client, _sparse_model
+            
+        _client = QdrantClient(path=QDRANT_PATH)
+        _sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+        
+        try:
+            if not _client.collection_exists(COLLECTION_NAME):
+                _client.create_collection(
+                    collection_name=COLLECTION_NAME,
+                    vectors_config={
+                        "dense": models.VectorParams(
+                            size=DENSE_DIM,
+                            distance=models.Distance.COSINE
+                        )
+                    },
+                    sparse_vectors_config={
+                        "sparse": models.SparseVectorParams(
+                            modifier=models.Modifier.IDF
+                        )
+                    }
+                )
+                # Create indexing for the 'type' field
+                _client.create_payload_index(
+                    collection_name=COLLECTION_NAME,
+                    field_name="type",
+                    field_schema=models.PayloadSchemaType.KEYWORD
+                )
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).warning("Error initializing Qdrant collection: %s", e)
+            
+        return _client, _sparse_model
 
 def add_documents(texts: List[str], metadata: List[Dict]):
     if not texts or not metadata:
         return
 
+    client, sparse_model = _get_qdrant()
     points = []
     
     dense_ebs = embed_batch(texts)
-    sparse_ebs = list(_sparse_model.embed(texts))
+    sparse_ebs = list(sparse_model.embed(texts))
     
     for i, (text, meta) in enumerate(zip(texts, metadata)):
         clean = " ".join(str(text).split()).strip()
@@ -92,7 +108,7 @@ def add_documents(texts: List[str], metadata: List[Dict]):
         )
         
     if points:
-        _client.upsert(
+        client.upsert(
             collection_name=COLLECTION_NAME,
             points=points
         )
@@ -106,8 +122,10 @@ def search(query: str, k: int = 5, doc_type: Optional[str] = None) -> List[Dict]
     if not query:
         return []
     
+    client, sparse_model = _get_qdrant()
+    
     q_dense = embed(query)
-    q_sparse = list(_sparse_model.embed([query]))[0]
+    q_sparse = list(sparse_model.embed([query]))[0]
     
     filter_cond = None
     if doc_type:
@@ -137,7 +155,7 @@ def search(query: str, k: int = 5, doc_type: Optional[str] = None) -> List[Dict]
         ),
     ]
 
-    results = _client.query_points(
+    results = client.query_points(
         collection_name=COLLECTION_NAME,
         prefetch=prefetch,
         query=models.FusionQuery(fusion=models.Fusion.RRF),

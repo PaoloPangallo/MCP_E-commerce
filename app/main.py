@@ -32,10 +32,12 @@ async def app_lifespan(app: FastAPI):
     await asyncio.to_thread(_preload_model)
     logger.info("SentenceTransformer model ready.")
 
-    # 2) Start app-level MCP client (stays connected for the entire server lifetime)
+    # 2) Create app-level MCP client (lazy connection — the MCP server is
+    #    mounted on the same process, so it's not reachable during startup).
+    #    The executor falls back to local tools if MCP is not connected.
     mcp_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8050/mcp/mcp")
     app.state.mcp_client = MCPToolClient(server_url=mcp_url, enabled=True)
-    logger.info("App-level MCP client created | url=%s", mcp_url)
+    logger.info("App-level MCP client created (lazy) | url=%s", mcp_url)
 
     # 3) Check Redis Connectivity for session memory
     from app.services.memory_service import redis_client
@@ -48,7 +50,6 @@ async def app_lifespan(app: FastAPI):
     async with mcp_app.router.lifespan_context(app):
         yield
 
-    # Cleanup (MCPToolClient used as context manager per-request, nothing to close here)
     logger.info("App shutdown complete.")
 
 app = FastAPI(title="MCP E-Commerce API", lifespan=app_lifespan)

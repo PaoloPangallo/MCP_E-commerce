@@ -40,10 +40,59 @@ export function useChatSession() {
     (state) => state.appendAssistantMessage
   )
   const appendSearchBlock = useChatStore((state) => state.appendSearchBlock)
-  const setCachedSearch = useChatStore((state) => state.setCachedSearch)
   const switchSession = useChatStore((state) => state.switchSession)
 
-  const { steps, running, finalPayload, plannedTasks, run, reset } = useAgentStream()
+  const { steps, running, finalPayload, plannedTasks, run, reset } = useAgentStream({
+    onDone: (payload, query) => {
+      const cacheKey = query.toLowerCase()
+
+      const sellerSummary = payload.sellerSummary || null
+      const results = payload.results || []
+      const hasComparison = !!payload.comparison
+
+      const mode = detectMode(results.length, !!sellerSummary?.seller_name, hasComparison)
+
+      const newSearch: SearchBlock = {
+        query,
+        results,
+        analysis: payload.analysis,
+        metrics: payload.metrics,
+        rag_context: payload.ragContext,
+        timings: undefined,
+        agent_trace: payload.trace?.length ? payload.trace : [], // Fixed to use the reliable payload trace directly
+        seller_summary: sellerSummary,
+        comparison: payload.comparison || null,
+        final_answer:
+          payload.finalAnswer ||
+          "Ho completato l’analisi della richiesta.",
+        mode,
+        errors: payload.errors
+      }
+
+      const hasStructuredBlock =
+        results.length > 0 ||
+        !!sellerSummary?.seller_name ||
+        !!newSearch.analysis ||
+        !!newSearch.agent_trace?.length ||
+        !!newSearch.errors?.length ||
+        !!newSearch.comparison ||
+        !!payload.plannedTasks?.length ||
+        !!payload.toolStates &&
+        Object.keys(payload.toolStates).length > 0
+
+      useChatStore.getState().setCachedSearch(cacheKey, newSearch)
+
+      useChatStore.getState().appendAssistantMessage(
+        newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
+      )
+
+      if (hasStructuredBlock) {
+        useChatStore.getState().appendSearchBlock(newSearch)
+      }
+
+      useChatStore.getState().setLoadingQuery(null)
+    }
+  })
 
   // Ensure an active session is set on mount if missing
   useEffect(() => {
@@ -88,67 +137,6 @@ export function useChatSession() {
     setLoadingQuery(query)
     run(query)
   }
-
-  useEffect(() => {
-    if (!finalPayload || !loadingQuery) return
-
-    const query = loadingQuery
-    const cacheKey = query.toLowerCase()
-
-    const sellerSummary = finalPayload.sellerSummary || null
-    const results = finalPayload.results || []
-    const hasComparison = !!finalPayload.comparison
-
-    const mode = detectMode(results.length, !!sellerSummary?.seller_name, hasComparison)
-
-    const newSearch: SearchBlock = {
-      query,
-      results,
-      analysis: finalPayload.analysis,
-      metrics: finalPayload.metrics,
-      rag_context: finalPayload.ragContext,
-      timings: undefined,
-      agent_trace: finalPayload.trace?.length ? finalPayload.trace : steps,
-      seller_summary: sellerSummary,
-      comparison: finalPayload.comparison || null,
-      final_answer:
-        finalPayload.finalAnswer ||
-        "Ho completato l’analisi della richiesta.",
-      mode,
-      errors: finalPayload.errors
-    }
-
-    const hasStructuredBlock =
-      results.length > 0 ||
-      !!sellerSummary?.seller_name ||
-      !!newSearch.analysis ||
-      !!newSearch.agent_trace?.length ||
-      !!newSearch.errors?.length ||
-      !!newSearch.comparison ||
-      !!finalPayload.plannedTasks?.length ||
-      !!finalPayload.toolStates &&
-      Object.keys(finalPayload.toolStates).length > 0
-
-    setCachedSearch(cacheKey, newSearch)
-
-    appendAssistantMessage(
-      newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
-    )
-
-    if (hasStructuredBlock) {
-      appendSearchBlock(newSearch)
-    }
-
-    setLoadingQuery(null)
-  }, [
-    finalPayload,
-    loadingQuery,
-    steps,
-    setCachedSearch,
-    appendAssistantMessage,
-    appendSearchBlock,
-    setLoadingQuery
-  ])
 
   return {
     chat,

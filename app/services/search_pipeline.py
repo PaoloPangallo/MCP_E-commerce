@@ -24,11 +24,13 @@ from app.services.user_profiling import update_user_profile
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# IN-MEMORY CACHES
+# IN-MEMORY CACHES (with TTL eviction)
 # ============================================================
 
-_SELLER_FEEDBACK_CACHE: Dict[str, List[Dict[str, Any]]] = {}
-_SELLER_TRUST_CACHE: Dict[str, Dict[str, float]] = {}
+_CACHE_TTL = 300.0  # 5 minutes
+
+_SELLER_FEEDBACK_CACHE: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
+_SELLER_TRUST_CACHE: Dict[str, tuple[float, Dict[str, float]]] = {}
 
 MAX_RESULTS_FROM_EBAY = 20
 MAX_SELLERS_FOR_TRUST = 5
@@ -73,12 +75,17 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
 
 def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
     key = seller_name.strip().lower()
+    now = time.time()
 
-    if key in _SELLER_FEEDBACK_CACHE:
-        return _SELLER_FEEDBACK_CACHE[key]
+    cached = _SELLER_FEEDBACK_CACHE.get(key)
+    if cached is not None:
+        ts, data = cached
+        if now - ts < _CACHE_TTL:
+            return data
+        del _SELLER_FEEDBACK_CACHE[key]
 
     feedbacks = get_seller_feedback(seller_name, limit=limit) or []
-    _SELLER_FEEDBACK_CACHE[key] = feedbacks
+    _SELLER_FEEDBACK_CACHE[key] = (now, feedbacks)
     return feedbacks
 
 
@@ -89,18 +96,21 @@ def _compute_seller_trust_cached(seller_name: str) -> Optional[float]:
     if not feedbacks:
         return None
 
+    now = time.time()
     cached = _SELLER_TRUST_CACHE.get(seller_key)
-    if cached and int(cached.get("count", -1)) == len(feedbacks):
-        return round(float(cached["trust_score"]), 3)
+    if cached is not None:
+        ts, scores = cached
+        if now - ts < _CACHE_TTL and int(scores.get("count", -1)) == len(feedbacks):
+            return round(float(scores["trust_score"]), 3)
 
     sentiment_score = compute_sentiment_score(feedbacks, max_texts=20)
     trust_score = compute_trust_score(feedbacks, sentiment_score=sentiment_score)
 
-    _SELLER_TRUST_CACHE[seller_key] = {
+    _SELLER_TRUST_CACHE[seller_key] = (now, {
         "count": float(len(feedbacks)),
         "sentiment_score": float(sentiment_score),
         "trust_score": float(trust_score),
-    }
+    })
 
     return round(float(trust_score), 3)
 
@@ -279,7 +289,7 @@ def run_search_pipeline(
     # 1) PARSE QUERY
     # ============================================================
 
-    logger.info("PIPELINE STEP 1 parse_query")
+    logger.info("PIPELINE STEP 1: parse_query")
 
     t = time.time()
     parsed = parse_query_service(
@@ -292,9 +302,9 @@ def run_search_pipeline(
     ebay_query_used = _build_ebay_query(parsed, query)
 
     # ============================================================
-    # 2) USER PROFILE UPDATE (NO INTERNAL COMMIT)
+    # 2) USER PROFILE UPDATE
     # ============================================================
-    logger.info("PIPELINE STEP 2 ebay_search")
+    logger.info("PIPELINE STEP 2: user_profile")
     if user:
         try:
             update_user_profile(user, parsed, db)
@@ -304,7 +314,7 @@ def run_search_pipeline(
     # ============================================================
     # 3) EBAY SEARCH
     # ============================================================
-    logger.info("PIPELINE STEP 3 rerank")
+    logger.info("PIPELINE STEP 3: ebay_search")
 
     t = time.time()
     items = search_items(parsed_query=parsed, limit=MAX_RESULTS_FROM_EBAY) or []
@@ -313,31 +323,53 @@ def run_search_pipeline(
     items = _dedupe_items(items)
 
     # ============================================================
-    # 4) RERANK EARLY
+    # 4) RAG RETRIEVAL (once, shared with reranker)
     # ============================================================
-    logger.info("PIPELINE STEP 4 seller_trust")
+    logger.info("PIPELINE STEP 4: rag_retrieve")
+
+    t = time.time()
+    try:
+        expanded_query = expand_query(query)
+        logger.info("Query expansion: '%s' -> '%s'", query, expanded_query)
+        rag_docs = retrieve_context(expanded_query, k=10)
+    except Exception as e:
+        logger.warning("RAG retrieve failed: %s", e)
+        expanded_query = query
+        rag_docs = []
+
+    # Split RAG docs by type for the reranker
+    product_docs = [d for d in rag_docs if d.get("type") == "product"]
+    seller_docs = [d for d in rag_docs if d.get("type") == "seller_feedback"]
+    timings["rag_retrieve_s"] = round(time.time() - t, 3)
+
+    # ============================================================
+    # 5) RERANK (with pre-fetched RAG docs)
+    # ============================================================
+    logger.info("PIPELINE STEP 5: rerank")
 
     t = time.time()
     if items:
         try:
-            items = rerank_products(query, items, user=user)
+            items = rerank_products(
+                query, items, user=user,
+                product_docs=product_docs,
+                seller_docs=seller_docs,
+            )
         except Exception:
             logger.warning("Rerank failed, keeping original order")
     timings["rerank_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 5) TRUST ONLY FOR TOP SELLERS
+    # 6) TRUST ONLY FOR TOP SELLERS
     # ============================================================
-
-    t = time.time()
+    logger.info("PIPELINE STEP 6: seller_trust")
     seller_trust_map = _prefetch_top_sellers_feedback(items[:MAX_SELLERS_FOR_TRUST * 2])
     timings["seller_trust_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 6) SAVE DB + PREP RESULTS
+    # 7) SAVE DB + PREP RESULTS
     # ============================================================
-
-    t = time.time()
+    logger.info("PIPELINE STEP 7: db_persist")
     results_out, saved_count = _prepare_and_persist_items(
         db=db,
         items=items,
@@ -346,42 +378,34 @@ def run_search_pipeline(
     timings["db_prepare_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 7) FINAL RANKING
+    # 8) FINAL RANKING (user personalization on top of rerank scores)
     # ============================================================
+    logger.info("PIPELINE STEP 8: final_ranking")
 
     _apply_final_ranking(results_out, user=user)
 
     # ============================================================
-    # 8) RAG RETRIEVE ONLY
-    # NOTE: removed runtime ingest_seller_feedback
+    # 9) ATTACH RAG FEEDBACK TO RESULTS
     # ============================================================
-
-    t = time.time()
-    try:
-        expanded_query = expand_query(query)
-        logger.info(f"Query expansion: '{query}' -> '{expanded_query}'")
-        rag_docs_after = retrieve_context(expanded_query, k=10)
-    except Exception as e:
-        logger.warning(f"RAG retrieve failed: {e}")
-        rag_docs_after = []
-    timings["rag_retrieve_s"] = round(time.time() - t, 3)
+    logger.info("PIPELINE STEP 9: rag_attach")
 
     for item in results_out:
         seller_name = item.get("seller_name")
         if not seller_name:
-            item["rag_feedback"] = []
+            item.setdefault("rag_feedback", [])
             continue
 
-        item["rag_feedback"] = [
-            d for d in rag_docs_after
+        item.setdefault("rag_feedback", [
+            d for d in rag_docs
             if d.get("seller") == seller_name
-        ][:3]
+        ][:3])
 
-    rag_context_text = build_context(query, results_out, rag_docs_after)
+    rag_context_text = build_context(query, results_out, rag_docs)
 
     # ============================================================
-    # 9) OPTIONAL EXPLANATION
+    # 10) OPTIONAL EXPLANATION
     # ============================================================
+    logger.info("PIPELINE STEP 10: explain")
 
     t = time.time()
     try:
@@ -391,7 +415,7 @@ def run_search_pipeline(
     timings["explain_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 10) IR METRICS
+    # 11) IR METRICS
     # ============================================================
 
     binary_relevance = [

@@ -16,8 +16,6 @@ from app.services.search_pipeline import run_search_pipeline
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-print("SEARCH ROUTER FILE:", os.path.abspath(__file__))
-
 
 class SearchRequest(BaseModel):
     query: str
@@ -72,7 +70,7 @@ def search(
 
 
 @router.post("/agent")
-def agent_search(
+async def agent_search(
     request: AgentRequest,
     db: Session = Depends(get_db),
     user=Depends(get_optional_user),
@@ -82,7 +80,8 @@ def agent_search(
 
     try:
         agent = EbayReactAgent(db=db, user=user)
-        return agent.run(request)
+        result = await agent.run(request)
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

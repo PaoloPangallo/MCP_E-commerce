@@ -38,6 +38,7 @@ def should_decompose_query(query: str) -> bool:
     if profile["multi_signal"] or profile["comparison_signal"]:
         return True
 
+    lowered = query.lower()
     return any(connector in lowered for connector in MULTI_STEP_CONNECTORS)
 
 

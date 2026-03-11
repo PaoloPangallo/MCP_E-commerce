@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
-import time
 import asyncio
 import json
 import logging
@@ -202,6 +199,7 @@ class ToolExecutor:
             "analyze_seller",
             "conversation",
             "profile_query",
+            "compare_products",
         }
 
     @classmethod

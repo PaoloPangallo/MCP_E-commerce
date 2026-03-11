@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
     Dialog,
     DialogTitle,
@@ -7,7 +7,6 @@ import {
     Button,
     TextField,
     Typography,
-    Box,
     CircularProgress
 } from "@mui/material"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
@@ -27,14 +26,12 @@ export function CustomInstructionsModal({ open, onClose }: CustomInstructionsMod
     const [error, setError] = useState<string | null>(null)
 
     // Re-sync on open if needed
-    import("react").then(React => {
-        React.useEffect(() => {
-            if (open) {
-                setInstructions(user?.custom_instructions || "")
-                setError(null)
-            }
-        }, [open, user?.custom_instructions])
-    })
+    useEffect(() => {
+        if (open) {
+            setInstructions(user?.custom_instructions || "")
+            setError(null)
+        }
+    }, [open, user?.custom_instructions])
 
     const handleSave = async () => {
         setLoading(true)

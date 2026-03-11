@@ -379,6 +379,18 @@ def tools_catalog() -> str:
                         "required": ["query"],
                     },
                 },
+                {
+                    "name": "compare_products",
+                    "description": "Confronta più prodotti e-commerce",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "queries": {"type": "string"},
+                            "llm_engine": {"type": "string", "default": "ollama"},
+                        },
+                        "required": ["queries"],
+                    },
+                },
             ]
         }
     )

@@ -227,7 +227,9 @@ def _compute_seller_rag_signal(item: Dict, seller_docs: List[Dict]) -> Tuple[flo
 def rerank_products(
     query: str,
     items: List[Dict],
-    user: Optional[object] = None
+    user: Optional[object] = None,
+    product_docs: Optional[List[Dict]] = None,
+    seller_docs: Optional[List[Dict]] = None,
 ) -> List[Dict]:
 
     if not items:
@@ -242,10 +244,11 @@ def rerank_products(
     q_vec = embed(query)
 
     # --------------------------------------------------------
-    # RAG EVIDENCE
+    # RAG EVIDENCE (use pre-fetched if available)
     # --------------------------------------------------------
 
-    product_docs, seller_docs = _retrieve_rag_evidence(query)
+    if product_docs is None or seller_docs is None:
+        product_docs, seller_docs = _retrieve_rag_evidence(query)
 
     # --------------------------------------------------------
     # PRICE STATISTICS

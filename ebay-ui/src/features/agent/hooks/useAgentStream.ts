@@ -52,7 +52,9 @@ function normalizeFinalTrace(trace: AgentStep[] | undefined, fallback: AgentStep
   return fallback
 }
 
-export function useAgentStream() {
+export function useAgentStream(options?: {
+  onDone?: (payload: FinalPayload, originalQuery: string) => void
+}) {
   const sourceRef = useRef<EventSource | null>(null)
   const runIdRef = useRef(0)
 
@@ -102,7 +104,7 @@ export function useAgentStream() {
 
       if (event.type === "error") {
         setRunning(false)
-        setFinalPayload({
+        const errorPayload: FinalPayload = {
           finalAnswer:
             event.message || "Si è verificato un errore nello stream agentico.",
           results: [],
@@ -115,7 +117,9 @@ export function useAgentStream() {
           toolStates: {},
           toolCalls: {},
           finalData: null
-        })
+        }
+        setFinalPayload(errorPayload)
+        options?.onDone?.(errorPayload, query)
 
         if (sourceRef.current) {
           sourceRef.current.close()
@@ -176,8 +180,7 @@ export function useAgentStream() {
           ? finalData.pending_tasks
           : []
 
-        setResults(finalResults)
-        setFinalPayload({
+        const payload: FinalPayload = {
           finalAnswer: event.final_answer || null,
           results: finalResults,
           analysis: search.analysis || finalData.search_analysis || null,
@@ -192,7 +195,11 @@ export function useAgentStream() {
           toolStates: toolStates as Record<string, ToolStatePayload>,
           toolCalls,
           finalData
-        })
+        }
+
+        setResults(finalResults)
+        setFinalPayload(payload)
+        options?.onDone?.(payload, query)
 
         setSteps(finalTrace)
         setRunning(false)

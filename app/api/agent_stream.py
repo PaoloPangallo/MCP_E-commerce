@@ -4,7 +4,8 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any, Dict, Iterator, Optional
+import time
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 MAX_QUERY_LENGTH = 500
 WORKER_HARD_TIMEOUT_SECONDS = 90.0
 QUEUE_WAIT_TIMEOUT_SECONDS = 75.0
+HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 _ALLOWED_EVENT_TYPES = {
     "start",
@@ -158,6 +160,7 @@ async def agent_event_generator(
 
     db: Optional[Session] = None
     done_sent = False
+    last_heartbeat = time.monotonic()
 
     try:
         db = SessionLocal()
@@ -191,8 +194,21 @@ async def agent_event_generator(
             if await request.is_disconnected():
                 logger.info("Client disconnected from /agent/stream")
                 break
-                
-            yield _sse(_validate_event(event))
+
+            validated = _validate_event(event)
+            event_type = validated.get("type", "")
+
+            yield _sse(validated)
+
+            if event_type == "done":
+                done_sent = True
+
+            # Send heartbeats during gaps
+            now = time.monotonic()
+            if now - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
+                yield _sse({"type": "heartbeat"})
+                last_heartbeat = now
+
             await asyncio.sleep(0)  # Yield control to event loop
 
         if not done_sent and not await request.is_disconnected():

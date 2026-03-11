@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Tuple
 
 from app.services.feedback import get_seller_feedback
 from app.services.nlp_sentiment import compute_sentiment_score
 from app.services.trust import compute_trust_score
 
-# Simple in-process cache
-_SELLER_CACHE: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
-_SCORE_CACHE: Dict[str, Dict[str, float]] = {}
-
+# Simple in-process cache with TTL
+_CACHE_TTL = 300.0  # 5 minutes
+_SELLER_CACHE: Dict[Tuple[str, int], Tuple[float, List[Dict[str, Any]]]] = {}
+_SCORE_CACHE: Dict[str, Tuple[float, Dict[str, float]]] = {}
 
 
 def _normalize_seller_name(seller_name: str) -> str:
@@ -19,12 +20,17 @@ def _normalize_seller_name(seller_name: str) -> str:
 
 def _get_feedbacks_cached(seller_name: str, limit: int) -> List[Dict[str, Any]]:
     key = (seller_name.lower(), limit)
+    now = time.time()
 
-    if key in _SELLER_CACHE:
-        return _SELLER_CACHE[key]
+    cached = _SELLER_CACHE.get(key)
+    if cached is not None:
+        ts, data = cached
+        if now - ts < _CACHE_TTL:
+            return data
+        del _SELLER_CACHE[key]
 
     feedbacks = get_seller_feedback(seller_name, limit=limit) or []
-    _SELLER_CACHE[key] = feedbacks
+    _SELLER_CACHE[key] = (now, feedbacks)
     return feedbacks
 
 
@@ -71,11 +77,26 @@ def run_seller_pipeline(
         }
 
     seller_key = seller_name.lower()
+    now = time.time()
 
-    cached_scores = _SCORE_CACHE.get(seller_key)
-    if cached_scores and cached_scores.get("count") == len(feedbacks):
-        sentiment_score = cached_scores["sentiment_score"]
-        trust_score = cached_scores["trust_score"]
+    cached_entry = _SCORE_CACHE.get(seller_key)
+    if cached_entry is not None:
+        ts, cached_scores = cached_entry
+        if now - ts < _CACHE_TTL and cached_scores.get("count") == len(feedbacks):
+            sentiment_score = cached_scores["sentiment_score"]
+            trust_score = cached_scores["trust_score"]
+        else:
+            sentiment_score = compute_sentiment_score(feedbacks, max_texts=50)
+            trust_score = compute_trust_score(
+                feedbacks,
+                sentiment_score=sentiment_score,
+            )
+
+            _SCORE_CACHE[seller_key] = (now, {
+                "count": float(len(feedbacks)),
+                "sentiment_score": float(sentiment_score),
+                "trust_score": float(trust_score),
+            })
     else:
         sentiment_score = compute_sentiment_score(feedbacks, max_texts=50)
         trust_score = compute_trust_score(
@@ -83,11 +104,11 @@ def run_seller_pipeline(
             sentiment_score=sentiment_score,
         )
 
-        _SCORE_CACHE[seller_key] = {
+        _SCORE_CACHE[seller_key] = (now, {
             "count": float(len(feedbacks)),
             "sentiment_score": float(sentiment_score),
             "trust_score": float(trust_score),
-        }
+        })
 
     return {
         "seller_name": seller_name,

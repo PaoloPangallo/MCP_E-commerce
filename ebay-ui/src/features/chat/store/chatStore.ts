@@ -159,10 +159,32 @@ export const useChatStore = create<ChatStore>()(
         },
         removeItem: (name) => localStorage.removeItem(name)
       })),
-      partialize: (state) => ({
-        sessions: state.sessions,
-        activeSessionId: state.activeSessionId
-      })
+      partialize: (state) => {
+        const recentSessions = state.sessions.slice(0, 5)
+
+        const trimmedSessions = recentSessions.map(sess => {
+          const trimmedChat = sess.chat.slice(-20).map(entry => {
+            if (entry.type === "search" && entry.search) {
+              return {
+                ...entry,
+                search: {
+                  ...entry.search,
+                  agent_trace: [], // strip trace from disk
+                  rag_context: undefined // strip contexts
+                }
+              }
+            }
+            return entry
+          })
+
+          return { ...sess, chat: trimmedChat }
+        })
+
+        return {
+          sessions: trimmedSessions,
+          activeSessionId: state.activeSessionId
+        }
+      }
     }
   )
 )

@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional, List
+import time
+from collections import defaultdict
 
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
@@ -21,6 +23,29 @@ router = APIRouter(
     prefix="/auth",
     tags=["auth"]
 )
+
+
+# ---------------------------------------------------
+# Rate Limiting
+# ---------------------------------------------------
+
+_RATE_LIMIT_WINDOW = 60.0  # 1 minute
+_RATE_LIMIT_MAX = 5  # max attempts per window
+_rate_store: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(key: str) -> None:
+    """Raise 429 if too many requests from this key in the time window."""
+    now = time.time()
+    bucket = _rate_store[key]
+    # Purge old entries
+    _rate_store[key] = [t for t in bucket if now - t < _RATE_LIMIT_WINDOW]
+    if len(_rate_store[key]) >= _RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail="Troppi tentativi. Riprova tra un minuto."
+        )
+    _rate_store[key].append(now)
 
 
 # ---------------------------------------------------
@@ -60,6 +85,7 @@ def register(
 ):
 
     email = request.email.lower().strip()
+    _check_rate_limit(f"register:{email}")
 
     existing = db.query(User).filter(User.email == email).first()
 
@@ -101,6 +127,7 @@ def login(
 ):
 
     email = request.email.lower().strip()
+    _check_rate_limit(f"login:{email}")
 
     user = db.query(User).filter(User.email == email).first()
 
@@ -138,6 +165,7 @@ def token(
 ):
 
     email = form_data.username.lower().strip()
+    _check_rate_limit(f"token:{email}")
 
     user = db.query(User).filter(User.email == email).first()
 

@@ -77,21 +77,6 @@ function getActionIcon(action?: string) {
   }
 }
 
-function formatInput(input?: Record<string, unknown>) {
-  if (!input) return null
-  const keys = Object.keys(input)
-  if (keys.length === 0) return null
-
-  // Custom labels for premium feel
-  if (input.query) return `Parametri: ${input.query}`
-  if (input.seller_name) return `Target: ${input.seller_name}`
-
-  try {
-    return JSON.stringify(input)
-  } catch {
-    return null
-  }
-}
 
 function getStatus(step: AgentStep) {
   if (step.status === "error") {
