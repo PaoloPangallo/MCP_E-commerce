@@ -3,13 +3,15 @@ import { useState } from "react"
 
 import LoginDialog from "./LoginDialog"
 import RegisterDialog from "./RegisterDialog"
-import {useAuth} from "../useAuth.ts";
+import { CustomInstructionsModal } from "./CustomInstructionsModal"
+import { useAuth } from "../useAuth"
 
 export default function AuthPanel() {
   const { user, loggedIn, logout, loadingUser } = useAuth()
 
   const [loginOpen, setLoginOpen] = useState(false)
   const [registerOpen, setRegisterOpen] = useState(false)
+  const [instructionsOpen, setInstructionsOpen] = useState(false)
 
   if (loggedIn && user) {
     return (
@@ -88,6 +90,24 @@ export default function AuthPanel() {
 
         <Button
           fullWidth
+          variant="outlined"
+          size="small"
+          onClick={() => setInstructionsOpen(true)}
+          sx={{
+            mb: 1.25,
+            textTransform: "none",
+            borderRadius: 2,
+            fontWeight: 600,
+            color: "#1976d2",
+            borderColor: "rgba(25, 118, 210, 0.5)",
+            "&:hover": { borderColor: "#1976d2" }
+          }}
+        >
+          Impostazioni Istruzioni (Gems)
+        </Button>
+
+        <Button
+          fullWidth
           variant="text"
           onClick={logout}
           sx={{
@@ -101,6 +121,11 @@ export default function AuthPanel() {
         >
           Esci
         </Button>
+
+        <CustomInstructionsModal
+          open={instructionsOpen}
+          onClose={() => setInstructionsOpen(false)}
+        />
       </Box>
     )
   }

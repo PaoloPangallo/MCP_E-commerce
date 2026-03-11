@@ -137,6 +137,7 @@ class ReactPlanner:
             memory: AgentMemory,
             step_index: int,
             max_steps: int,
+            custom_instructions: Optional[str] = None
     ) -> PlannerOutput:
         explicit_seller = extract_explicit_seller(memory.user_query)
         if explicit_seller and not memory.last_seller_name:
@@ -157,7 +158,7 @@ class ReactPlanner:
         if deterministic:
             return deterministic
 
-        llm_decision = await self._llm_decide(memory, step_index, max_steps)
+        llm_decision = await self._llm_decide(memory, step_index, max_steps, custom_instructions=custom_instructions)
         if llm_decision:
             return llm_decision
 
@@ -356,6 +357,7 @@ class ReactPlanner:
             memory: AgentMemory,
             step_index: int,
             max_steps: int,
+            custom_instructions: Optional[str] = None
     ) -> Optional[PlannerOutput]:
         if self.llm_engine == "rule_based":
             return None
@@ -366,6 +368,7 @@ class ReactPlanner:
             step_index=step_index,
             max_steps=max_steps,
             tool_catalog=get_tool_catalog(),
+            custom_instructions=custom_instructions
         )
 
         raw = await self._call_llm(prompt)

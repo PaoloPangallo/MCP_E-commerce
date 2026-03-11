@@ -45,6 +45,11 @@ class User(Base):
         nullable=True
     )
 
+    custom_instructions = Column(
+        String(1000),
+        nullable=True
+    )
+
     # -------------------------
     # Metadata
     # -------------------------

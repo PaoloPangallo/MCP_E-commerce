@@ -159,6 +159,7 @@ class EbayReactAgent:
                         memory=memory,
                         step_index=step_index,
                         max_steps=max_steps,
+                        custom_instructions=getattr(self.user, "custom_instructions", None)
                     )
                 except Exception as exc:
                     logger.exception("Planner failed at step %s: %s", step_index, exc)
@@ -348,6 +349,7 @@ class EbayReactAgent:
                 user_query=memory.user_query,
                 scratchpad=memory.scratchpad(),
                 final_data=memory.final_data(),
+                custom_instructions=getattr(self.user, "custom_instructions", None)
             )
 
             llm_text = await self._call_final_llm(prompt, llm_engine)
@@ -372,6 +374,7 @@ class EbayReactAgent:
             user_query=memory.user_query,
             scratchpad=memory.scratchpad(),
             final_data=memory.final_data(),
+            custom_instructions=getattr(self.user, "custom_instructions", None)
         )
 
         llm_text = await self._call_final_llm(prompt, llm_engine)

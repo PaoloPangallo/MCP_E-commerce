@@ -8,7 +8,6 @@ import type {
 
 import { useAgentStream } from "../features/agent/hooks/useAgentStream.ts"
 import { useChatStore } from "../features/chat/store/chatStore.ts"
-import { useSidebarStore } from "../features/chat/store/sidebarStore.ts"
 
 function detectMode(
   resultsCount: number,
@@ -22,9 +21,17 @@ function detectMode(
 }
 
 export function useChatSession() {
-  const chat = useChatStore((state) => state.chat)
+  const sessions = useChatStore((state) => state.sessions)
+  const activeSessionId = useChatStore((state) => state.activeSessionId)
   const loadingQuery = useChatStore((state) => state.loadingQuery)
   const cache = useChatStore((state) => state.cache)
+
+  const activeSession = useMemo(() => {
+    const sid = activeSessionId || sessions[0]?.id
+    return sessions.find(s => s.id === sid) || sessions[0]
+  }, [sessions, activeSessionId])
+
+  const chat = activeSession?.chat || []
 
   const resetConversation = useChatStore((state) => state.resetConversation)
   const setLoadingQuery = useChatStore((state) => state.setLoadingQuery)
@@ -34,10 +41,16 @@ export function useChatSession() {
   )
   const appendSearchBlock = useChatStore((state) => state.appendSearchBlock)
   const setCachedSearch = useChatStore((state) => state.setCachedSearch)
-
-  const addHistory = useSidebarStore((state) => state.addHistory)
+  const switchSession = useChatStore((state) => state.switchSession)
 
   const { steps, running, finalPayload, plannedTasks, run, reset } = useAgentStream()
+
+  // Ensure an active session is set on mount if missing
+  useEffect(() => {
+    if (!activeSessionId && sessions.length > 0) {
+      switchSession(sessions[0].id)
+    }
+  }, [activeSessionId, sessions, switchSession])
 
   const hasSearches = useMemo(
     () => chat.some((entry: ChatEntry) => entry.type === "search"),
@@ -65,8 +78,6 @@ export function useChatSession() {
     const cached = cache[cacheKey]
 
     if (cached) {
-      addHistory({ query, results: cached.results.length })
-
       appendAssistantMessage(
         cached.final_answer || "Ho recuperato la risposta dalla cache."
       )
@@ -119,7 +130,6 @@ export function useChatSession() {
       Object.keys(finalPayload.toolStates).length > 0
 
     setCachedSearch(cacheKey, newSearch)
-    addHistory({ query, results: results.length })
 
     appendAssistantMessage(
       newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
@@ -135,7 +145,6 @@ export function useChatSession() {
     loadingQuery,
     steps,
     setCachedSearch,
-    addHistory,
     appendAssistantMessage,
     appendSearchBlock,
     setLoadingQuery
@@ -143,6 +152,7 @@ export function useChatSession() {
 
   return {
     chat,
+    activeSessionId: activeSession?.id,
     steps,
     running,
     finalPayload,

@@ -1,8 +1,6 @@
-import { useMemo } from "react"
 import {
   Box,
   Button,
-  Divider,
   Drawer,
   IconButton,
   List,
@@ -10,7 +8,8 @@ import {
   ListItemButton,
   ListItemText,
   Typography,
-  useMediaQuery
+  useMediaQuery,
+  Tooltip
 } from "@mui/material"
 import { useTheme } from "@mui/material/styles"
 
@@ -18,16 +17,15 @@ import AddIcon from "@mui/icons-material/Add"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
 import MenuIcon from "@mui/icons-material/Menu"
-import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined"
-import SearchIcon from "@mui/icons-material/Search"
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 
+import { useChatStore } from "./store/chatStore"
 import { useSidebarStore } from "./store/sidebarStore"
 import AuthPanel from "../../auth/ui/AuthPanel"
 
 interface Props {
   children: React.ReactNode
   composer?: React.ReactNode
-  onSearch?: (query: string) => void
   onNewChat?: () => void
   sidebarTopSlot?: React.ReactNode
 }
@@ -52,54 +50,59 @@ function SidebarSectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SidebarItem({
-  query,
+function SessionItem({
+  title,
+  active,
   onClick,
-  onPin,
-  isPinned = false
+  onDelete
 }: {
-  query: string
+  title: string
+  active?: boolean
   onClick: () => void
-  onPin?: () => void
-  isPinned?: boolean
+  onDelete: () => void
 }) {
   return (
-    <ListItem disablePadding sx={{ px: 1 }}>
+    <ListItem disablePadding sx={{ px: 1, mb: 0.5 }}>
       <ListItemButton
         onClick={onClick}
         sx={{
           borderRadius: 3,
-          py: 1.1,
+          py: 1,
           px: 1.25,
-          alignItems: "center",
+          bgcolor: active ? "#eceff3" : "transparent",
           "&:hover": { bgcolor: "#eceff3" }
         }}
       >
-        <SearchIcon sx={{ fontSize: 16, color: "#6b7280", mr: 1.25 }} />
+        <ChatBubbleOutlineIcon sx={{ fontSize: 16, color: active ? "#111827" : "#6b7280", mr: 1.25 }} />
 
         <ListItemText
-          primary={query}
+          primary={title}
           primaryTypographyProps={{
             fontSize: 13,
-            color: "#111827",
+            fontWeight: active ? 600 : 500,
+            color: active ? "#111827" : "#4b5563",
             noWrap: true
           }}
         />
 
-        {onPin && (
+        <Tooltip title="Elimina chat">
           <IconButton
             size="small"
             onClick={(e) => {
               e.stopPropagation()
-              onPin()
+              onDelete()
             }}
             sx={{
-              color: isPinned ? "#111827" : "#9ca3af"
+              opacity: active ? 1 : 0,
+              transition: "opacity 0.2s",
+              ".MuiListItemButton-root:hover &": { opacity: 1 },
+              color: "#9ca3af",
+              "&:hover": { color: "#ef4444" }
             }}
           >
-            <PushPinOutlinedIcon sx={{ fontSize: 16 }} />
+            <DeleteOutlineIcon sx={{ fontSize: 16 }} />
           </IconButton>
-        )}
+        </Tooltip>
       </ListItemButton>
     </ListItem>
   )
@@ -108,7 +111,6 @@ function SidebarItem({
 export default function ChatLayout({
   children,
   composer,
-  onSearch,
   onNewChat,
   sidebarTopSlot
 }: Props) {
@@ -116,23 +118,19 @@ export default function ChatLayout({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down("md"))
 
+  const sessions = useChatStore((s) => s.sessions)
+  const activeSessionId = useChatStore((s) => s.activeSessionId)
+
+  const createSession = useChatStore((s) => s.createSession)
+  const switchSession = useChatStore((s) => s.switchSession)
+  const deleteSession = useChatStore((s) => s.deleteSession)
+
   const mobileOpen = useSidebarStore((s) => s.mobileOpen)
-  const history = useSidebarStore((s) => s.history)
-  const pinned = useSidebarStore((s) => s.pinned)
-
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen)
-  const clearHistory = useSidebarStore((s) => s.clearHistory)
-  const pinSearch = useSidebarStore((s) => s.pinSearch)
-  const unpinSearch = useSidebarStore((s) => s.unpinSearch)
 
-  const visibleHistory = useMemo(() => history.slice(0, 20), [history])
-
-  const handleSidebarSearch = (query: string) => {
-    onSearch?.(query)
-
-    if (isMobile) {
-      setMobileOpen(false)
-    }
+  const handleNewChat = () => {
+    createSession()
+    onNewChat?.()
   }
 
   const sidebarContent = (
@@ -181,7 +179,7 @@ export default function ChatLayout({
           fullWidth
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={onNewChat}
+          onClick={handleNewChat}
           sx={{
             justifyContent: "flex-start",
             textTransform: "none",
@@ -205,68 +203,19 @@ export default function ChatLayout({
 
       {/* HISTORY */}
       <Box sx={{ flex: 1, overflowY: "auto" }}>
+        <SidebarSectionTitle>Le tue Chat</SidebarSectionTitle>
 
-        {pinned.length > 0 && (
-          <>
-            <SidebarSectionTitle>Pinned</SidebarSectionTitle>
-
-            <List dense disablePadding>
-              {pinned.map((query) => (
-                <SidebarItem
-                  key={query}
-                  query={query}
-                  onClick={() => handleSidebarSearch(query)}
-                  onPin={() => unpinSearch(query)}
-                  isPinned
-                />
-              ))}
-            </List>
-
-            <Divider sx={{ mx: 2, my: 1 }} />
-          </>
-        )}
-
-        <Box display="flex" justifyContent="space-between" px={2}>
-          <SidebarSectionTitle>Recenti</SidebarSectionTitle>
-
-          {visibleHistory.length > 0 && (
-            <IconButton size="small" onClick={clearHistory}>
-              <DeleteOutlineIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          )}
-        </Box>
-
-        {visibleHistory.length > 0 ? (
-          <List dense disablePadding>
-            {visibleHistory.map((item) => {
-
-              const isPinned = pinned.some(
-                (p) => p.toLowerCase() === item.query.toLowerCase()
-              )
-
-              return (
-                <SidebarItem
-                  key={item.query}
-                  query={item.query}
-                  onClick={() => handleSidebarSearch(item.query)}
-                  onPin={() =>
-                    isPinned
-                      ? unpinSearch(item.query)
-                      : pinSearch(item.query)
-                  }
-                  isPinned={isPinned}
-                />
-              )
-            })}
-          </List>
-        ) : (
-          <Box px={2}>
-            <Typography fontSize={13} color="#6b7280">
-              Le tue ricerche compariranno qui.
-            </Typography>
-          </Box>
-        )}
-
+        <List dense disablePadding>
+          {sessions.map((session) => (
+            <SessionItem
+              key={session.id}
+              title={session.title}
+              active={(activeSessionId || sessions[0]?.id) === session.id}
+              onClick={() => switchSession(session.id)}
+              onDelete={() => deleteSession(session.id)}
+            />
+          ))}
+        </List>
       </Box>
 
     </Box>

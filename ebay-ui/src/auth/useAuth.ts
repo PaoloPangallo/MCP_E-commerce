@@ -16,6 +16,7 @@ export interface AuthUser {
   email: string
   favorite_brands?: string | null
   price_preference?: string | null
+  custom_instructions?: string | null
 }
 
 export function useAuth() {

@@ -441,7 +441,6 @@ export default function ChatPage() {
 
   return (
     <ChatLayout
-      onSearch={handleSend}
       onNewChat={resetChat}
       composer={<ChatInput onSend={handleSend} disabled={running} />}
     >

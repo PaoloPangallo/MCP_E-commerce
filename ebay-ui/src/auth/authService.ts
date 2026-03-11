@@ -49,3 +49,10 @@ export async function getCurrentUser(): Promise<AuthUser> {
     method: "GET"
   })
 }
+
+export async function updateCustomInstructions(instructions: string): Promise<{ status: string, custom_instructions: string }> {
+  return apiFetch<{ status: string, custom_instructions: string }>("/auth/me/instructions", {
+    method: "PATCH",
+    body: JSON.stringify({ custom_instructions: instructions })
+  })
+}

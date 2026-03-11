@@ -165,8 +165,12 @@ def token(
 
 
 # ---------------------------------------------------
-# ME
+# ME / PREFERENCES
 # ---------------------------------------------------
+
+class CustomInstructionsUpdate(BaseModel):
+    custom_instructions: Optional[str] = None
+
 
 @router.get("/me")
 def get_me(user=Depends(get_current_user)):
@@ -175,5 +179,22 @@ def get_me(user=Depends(get_current_user)):
         "id": user.id,
         "email": user.email,
         "favorite_brands": user.favorite_brands,
-        "price_preference": user.price_preference
+        "price_preference": user.price_preference,
+        "custom_instructions": user.custom_instructions
     }
+
+
+@router.patch("/me/instructions")
+def update_instructions(
+    request: CustomInstructionsUpdate,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        user.custom_instructions = request.custom_instructions
+        db.commit()
+        db.refresh(user)
+        return {"status": "success", "custom_instructions": user.custom_instructions}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

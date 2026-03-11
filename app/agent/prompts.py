@@ -146,12 +146,17 @@ def build_planner_prompt(
     step_index: int,
     max_steps: int,
     tool_catalog: Dict[str, Dict[str, Any]],
+    custom_instructions: Optional[str] = None
 ) -> str:
     compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
     compact_tool_catalog = _compact_tool_catalog_for_prompt(tool_catalog)
 
+    system_prompt = PLANNER_SYSTEM_PROMPT
+    if custom_instructions:
+        system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}"
+
     return (
-        f"{PLANNER_SYSTEM_PROMPT}\n\n"
+        f"{system_prompt}\n\n"
         f"Step:{step_index}/{max_steps}\n"
         f"Available tools:{_compact_json(compact_tool_catalog)}\n"
         f"User query:{user_query}\n"
@@ -160,12 +165,21 @@ def build_planner_prompt(
     )
 
 
-def build_final_answer_prompt(user_query: str, scratchpad: Dict[str, Any], final_data: Dict[str, Any]) -> str:
+def build_final_answer_prompt(
+    user_query: str, 
+    scratchpad: Dict[str, Any], 
+    final_data: Dict[str, Any],
+    custom_instructions: Optional[str] = None
+) -> str:
     compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
     compact_final_data = _compact_final_data_for_prompt(final_data)
 
+    system_prompt = FINAL_ANSWER_SYSTEM_PROMPT
+    if custom_instructions:
+        system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS (Apply these specifically to your tone/style/content):\n{custom_instructions}"
+
     return (
-        f"{FINAL_ANSWER_SYSTEM_PROMPT}\n\n"
+        f"{system_prompt}\n\n"
         f"User query:{user_query}\n"
         f"Scratchpad:{_compact_json(compact_scratchpad)}\n"
         f"Final data:{_compact_json(compact_final_data)}\n"
