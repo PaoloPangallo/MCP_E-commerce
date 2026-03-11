@@ -50,28 +50,33 @@ def execute_compare_tool(action_input: Dict[str, Any], context: Any) -> Dict[str
     # we run the async pipeline synchronously.
     # Note: If called from an async context, this might need care with loop management.
     try:
-        # Check if we are already in an event loop
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
 
+        def _run_in_new_loop():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(
+                    run_compare_pipeline(
+                        queries=sep_queries,
+                        db=db,
+                        llm_engine=llm_engine
+                    )
+                )
+            finally:
+                new_loop.close()
+
         if loop and loop.is_running():
-            # This is tricky if called from an async function that isn't awaited.
-            # But the local executor and MCP server.py use sync wrappers.
-            # In our case, EbayReactAgent.execute (local) is async, so we'll need an async version too.
-            # For now, let's provide a sync-friendly wrapper that calls asyncio.run if no loop.
-            return asyncio.run(run_compare_pipeline(
-                queries=sep_queries,
-                db=db,
-                llm_engine=llm_engine
-            ))
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_run_in_new_loop)
+                return future.result()
         else:
-            return asyncio.run(run_compare_pipeline(
-                queries=sep_queries,
-                db=db,
-                llm_engine=llm_engine
-            ))
+            return _run_in_new_loop()
+
     except Exception as exc:
         logger.exception("compare_tool execution failed")
         return {
@@ -79,3 +84,4 @@ def execute_compare_tool(action_input: Dict[str, Any], context: Any) -> Dict[str
             "error": str(exc),
             "queries": sep_queries
         }
+

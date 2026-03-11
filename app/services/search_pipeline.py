@@ -17,6 +17,7 @@ from app.services.rag.context_builder import build_context
 from app.services.rag.explainer import explain_results
 from app.services.rag.retriever import retrieve_context
 from app.services.rag.reranker import rerank_products
+from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
 from app.services.user_profiling import update_user_profile
 
@@ -357,8 +358,11 @@ def run_search_pipeline(
 
     t = time.time()
     try:
-        rag_docs_after = retrieve_context(query, k=10)
-    except Exception:
+        expanded_query = expand_query(query)
+        logger.info(f"Query expansion: '{query}' -> '{expanded_query}'")
+        rag_docs_after = retrieve_context(expanded_query, k=10)
+    except Exception as e:
+        logger.warning(f"RAG retrieve failed: {e}")
         rag_docs_after = []
     timings["rag_retrieve_s"] = round(time.time() - t, 3)
 

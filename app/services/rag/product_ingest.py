@@ -1,8 +1,8 @@
 from typing import List, Dict
 
-from app.services.rag.vector_store import add_documents
-from app.services.rag.bm25_store import add_documents as bm25_add
+from app.services.rag.qdrant_store import add_documents
 from app.services.rag.schemas import make_doc_id
+from app.services.rag.chunking import chunk_text
 
 _seen_products = set()
 
@@ -33,23 +33,25 @@ def ingest_products(items: List[Dict]):
         text = f"Product: {title}. Seller: {seller}. Price: {price}. Condition: {condition}."
         text = " ".join(text.split()).strip()
 
-        meta = {
-            "doc_id": make_doc_id(text),
-            "text": text,
-            "type": "product",
-            "title": title,
-            "seller": seller,
-            "price": price,
-            "condition": condition,
-            "ebay_id": ebay_id,
-            "source": "product_ingest",
-        }
-
-        texts.append(text)
-        metas.append(meta)
+        chunks = chunk_text(text, chunk_size=150, overlap=30)
+        
+        for i, chunk in enumerate(chunks):
+            meta = {
+                "doc_id": make_doc_id(chunk),
+                "text": chunk,
+                "type": "product",
+                "title": title,
+                "seller": seller,
+                "price": price,
+                "condition": condition,
+                "ebay_id": ebay_id,
+                "source": "product_ingest",
+            }
+    
+            texts.append(chunk)
+            metas.append(meta)
 
     if not texts:
         return
 
     add_documents(texts, metas)
-    bm25_add(texts, metas)

@@ -56,3 +56,6 @@ passlib~=1.7.3
 jose~=1.0.0
 mcp~=1.26.0
 redis~=7.3.0
+
+
+fastembed

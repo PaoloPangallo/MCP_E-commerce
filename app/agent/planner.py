@@ -49,7 +49,7 @@ TRANSACTIONAL_CUES = {
 }
 
 COMPARISON_CUES = {
-    "compara", "compari", "confronta", "confronto", "differenza", "differenze",
+    "compara", "compari", "comparami", "confronta", "confrontami", "confronto", "differenza", "differenze",
     "meglio", "peggio", "versus", "vs", "comparazione",
 }
 
@@ -609,6 +609,8 @@ class ReactPlanner:
 
         if label == "seller_analysis" and evidence.seller >= self.intent_threshold:
             return label, evidence.seller, evidence
+        if label == "comparison" and evidence.comparison >= self.intent_threshold:
+            return label, evidence.comparison, evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
         if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
@@ -721,6 +723,8 @@ class ReactPlanner:
 
         if intent == "hybrid":
             return f"La richiesta combina segnali seller+product ({compact})."
+        if intent == "comparison":
+            return f"La richiesta ha struttura da comparazione prodotti ({compact})."
         if intent == "product_search":
             return f"La richiesta ha struttura da ricerca prodotto ({compact})."
         if intent == "seller_analysis":

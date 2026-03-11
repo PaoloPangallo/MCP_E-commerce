@@ -38,7 +38,7 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
         r"[,;:].+\b(cerca|trova|analizza|feedback|seller|venditore|vende)\b",
     ),
     "comparison": (
-        r"\b(compara|compari|confronta|confronto|versus|vs|differenza|differenze)\b",
+        r"\b(compara|compari|comparami|confronta|confrontami|confronto|versus|vs|differenza|differenze)\b",
         r"\b(meglio|peggio)\b",
     ),
 }
@@ -215,7 +215,7 @@ def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -
 
     # Pattern per "compara X e Y" o "differenza tra X e Y"
     comparison_patterns = [
-        r"(?:compara|compari|confronta|vs|versus|differenza tra|differenze tra)\s+(.+)\s+(?:e|con|vs|versus)\s+(.+)",
+        r"(?:compara|compari|comparami|confronta|confrontami|vs|versus|differenza tra|differenze tra)\s+(.+)\s+(?:e|con|vs|versus)\s+(.+)",
         r"(.+)\s+(?:vs|versus)\s+(.+)",
     ]
 

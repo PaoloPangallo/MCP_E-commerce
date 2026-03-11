@@ -53,32 +53,7 @@ ACCESSORY_WORDS = [
     "adapter",
 ]
 
-POSITIVE_HINTS = [
-    "positive",
-    "affidabile",
-    "affidabile",
-    "consigliato",
-    "veloce",
-    "rapido",
-    "top",
-    "perfetto",
-    "gentile",
-    "disponibile",
-    "ottimo",
-]
-
-NEGATIVE_HINTS = [
-    "negative",
-    "lento",
-    "difettoso",
-    "rotto",
-    "problema",
-    "ritardo",
-    "scarsa",
-    "pessimo",
-    "non consiglio",
-    "non raccomando",
-]
+# Non usiamo più POSITIVE_HINTS/NEGATIVE_HINTS ma le label LLM-based ("POSITIVE", "NEGATIVE", "NEUTRAL")
 
 
 def accessory_penalty(query: str, title: str) -> float:
@@ -213,9 +188,10 @@ def _compute_seller_rag_signal(item: Dict, seller_docs: List[Dict]) -> Tuple[flo
         matched.append(doc)
         rrf_sum += float(doc.get("_rrf_score") or 0.0)
 
-        if any(h in text for h in POSITIVE_HINTS):
+        sentiment = doc.get("sentiment_label", "NEUTRAL")
+        if sentiment == "POSITIVE":
             pos_hits += 1
-        if any(h in text for h in NEGATIVE_HINTS):
+        elif sentiment == "NEGATIVE":
             neg_hits += 1
 
     if not matched:
@@ -409,7 +385,7 @@ def rerank_products(
         for d in matched_seller_docs[:2]:
             rag_feedback.append(
                 {
-                    "text": d.get("text"),
+                    "comment": d.get("text"),
                     "seller": d.get("seller"),
                     "rrf_score": d.get("_rrf_score"),
                     "sources": d.get("_sources") or [],

@@ -1,12 +1,6 @@
 from typing import List, Dict, Optional
 
-from .vector_store import search as vector_search
-from .bm25_store import search as bm25_search
-
-
-def _rrf(rank: int, k0: int = 60) -> float:
-    return 1.0 / (k0 + rank)
-
+from app.services.rag.qdrant_store import search as qdrant_search
 
 def retrieve_context(
     query: str,
@@ -16,66 +10,23 @@ def retrieve_context(
     k0: int = 60
 ) -> List[Dict]:
     """
-    Hybrid retrieval:
-      - vector_search + bm25_search
-      - RRF fusion
-      - dedup by doc_id (fallback text)
-      - optional doc_type filter
-
-    per_source:
-      - if None => use k
-      - else fetch per_source from each source before fusion
+    Hybrid retrieval now uses Qdrant natively.
+    Qdrant handles Dense + Sparse vectors and RRF fusion internally.
     """
-
     query = (query or "").strip()
     if not query:
         return []
 
     take = per_source if per_source is not None else k
 
-    vector_docs = vector_search(query, k=take, doc_type=doc_type)
-    bm25_docs = bm25_search(query, k=take, doc_type=doc_type)
-
-    merged: Dict[str, Dict] = {}
-
-    def key_of(d: Dict) -> str:
-        return d.get("doc_id") or (d.get("text") or "").strip()
-
-    # vector contribution
-    for rank, d in enumerate(vector_docs, start=1):
-        key = key_of(d)
-        if not key:
-            continue
-
-        if key not in merged:
-            merged[key] = dict(d)
-            merged[key]["_sources"] = ["vector"]
-            merged[key]["_rrf_score"] = 0.0
-        else:
-            if "vector" not in merged[key].get("_sources", []):
-                merged[key]["_sources"].append("vector")
-
-        merged[key]["_rrf_score"] += _rrf(rank, k0=k0)
-        merged[key]["_source"] = "hybrid"
-
-    # bm25 contribution
-    for rank, d in enumerate(bm25_docs, start=1):
-        key = key_of(d)
-        if not key:
-            continue
-
-        if key not in merged:
-            merged[key] = dict(d)
-            merged[key]["_sources"] = ["bm25"]
-            merged[key]["_rrf_score"] = 0.0
-        else:
-            if "bm25" not in merged[key].get("_sources", []):
-                merged[key]["_sources"].append("bm25")
-
-        merged[key]["_rrf_score"] += _rrf(rank, k0=k0)
-        merged[key]["_source"] = "hybrid"
-
-    results = list(merged.values())
-    results.sort(key=lambda x: x.get("_rrf_score", 0.0), reverse=True)
-
-    return results[:k]
+    # qdrant_search already executes a FusionQuery (RRF) internally 
+    # and filters by doc_type.
+    docs = qdrant_search(query, k=take, doc_type=doc_type)
+    
+    # We add _sources for backward compatibility with the explainer
+    # Since it's hybrid from Qdrant, we just tag it as both.
+    for d in docs:
+        d["_sources"] = ["vector", "bm25"]
+        d["_source"] = "hybrid"
+        
+    return docs

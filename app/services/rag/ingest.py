@@ -1,11 +1,8 @@
 from typing import List, Dict
 
-from .vector_store import add_documents as vector_add
-
-try:
-    from .bm25_store import add_documents as bm25_add
-except Exception:
-    bm25_add = None
+from app.services.rag.qdrant_store import add_documents
+from app.services.rag.chunking import chunk_text
+from app.services.nlp_sentiment import extract_sentiment_label
 
 
 def ingest_seller_feedback(
@@ -40,27 +37,28 @@ def ingest_seller_feedback(
         if not doc_text:
             continue
 
-        meta = {
-            "text": doc_text,
-            "type": "seller_feedback",   # ✅ aggiunto
-            "seller": seller_name,
-            "rating": rating,
-            "time": ts,
-            "source": "seller_feedback",
-        }
+        # Ask LLM for exact sentiment once per feedback
+        sentiment_label = extract_sentiment_label(comment)
 
-        texts.append(doc_text)
-        metas.append(meta)
+        chunks = chunk_text(doc_text, chunk_size=150, overlap=30)
+        
+        for i, chunk in enumerate(chunks):
+            meta = {
+                "text": chunk,
+                "type": "seller_feedback",
+                "seller": seller_name,
+                "rating": rating,
+                "time": ts,
+                "source": "seller_feedback",
+                "sentiment_label": sentiment_label,
+            }
+
+            texts.append(chunk)
+            metas.append(meta)
 
     if not texts:
         return 0
 
-    vector_add(texts, metas)
-
-    if bm25_add is not None:
-        try:
-            bm25_add(texts, metas)
-        except Exception:
-            pass
+    add_documents(texts, metas)
 
     return len(texts)

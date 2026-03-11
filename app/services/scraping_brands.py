@@ -17,7 +17,7 @@ def fetch_brands():
 
     brands = sorted(set(brands))
 
-    with open("brand_vocab.json", "w") as f:
+    with open("../../brand_vocab.json", "w") as f:
         json.dump(brands, f, indent=2)
 
     print(f"Saved {len(brands)} brands")

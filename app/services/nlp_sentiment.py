@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 from app.services.model_singleton import get_sentence_transformer as _get_model
+from app.services.parser import call_gemini, call_ollama
 
 
 
@@ -199,3 +200,38 @@ def compute_sentiment_score(
         _SENTIMENT_CACHE[fingerprint] = normalized
 
     return round(normalized, 4)
+
+# ============================================================
+# LLM SENTIMENT LABEL FOR RAG INGESTION
+# ============================================================
+
+def extract_sentiment_label(text: str) -> str:
+    """
+    Uses LLM (fastest available, e.g. Gemini) to label a single feedback 
+    as exactly one word: POSITIVE, NEGATIVE, or NEUTRAL.
+    """
+    if not text.strip():
+        return "NEUTRAL"
+        
+    prompt = f"""
+    Analyze the following seller feedback comment and classify its sentiment.
+    Return ONLY ONE WORD from this list: POSITIVE, NEGATIVE, NEUTRAL.
+    No other text, no punctuation.
+
+    Comment: "{text}"
+    """
+    try:
+        # Fallback to Ollama if Gemini is not set/fails, but call_gemini is usually faster
+        res = call_gemini(prompt)
+        res = res.strip().upper()
+        if "POSITIVE" in res: return "POSITIVE"
+        if "NEGATIVE" in res: return "NEGATIVE"
+        return "NEUTRAL"
+    except Exception as e:
+        logger.warning(f"Extrac_sentiment LLM failed: {e}")
+        # fallback to heuristic
+        pos_hits = sum(1 for w in _POS_WORDS if w in text.lower())
+        neg_hits = sum(1 for w in _NEG_WORDS if w in text.lower())
+        if pos_hits > neg_hits: return "POSITIVE"
+        if neg_hits > pos_hits: return "NEGATIVE"
+        return "NEUTRAL"
