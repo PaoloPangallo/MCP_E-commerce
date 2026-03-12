@@ -28,6 +28,17 @@ class ToolExecutor:
         self.mcp_client = mcp_client
         self.prefer_mcp = bool(prefer_mcp)
         self.fallback_to_local = bool(fallback_to_local)
+        self._mcp_tools: Optional[set[str]] = None
+
+    async def initialize(self) -> None:
+        if self.mcp_client and getattr(self.mcp_client, "is_available", True):
+            try:
+                tools_list = await self.mcp_client.list_tools_async()
+                self._mcp_tools = set(tools_list)
+                logger.info("ToolExecutor discovered MCP tools: %s", self._mcp_tools)
+            except Exception as exc:
+                logger.warning("ToolExecutor failed to list MCP tools: %s", exc)
+                self._mcp_tools = None
 
     async def execute(self, tool_call: ToolCall) -> Observation:
         spec = TOOLS.get(tool_call.tool)
@@ -44,6 +55,10 @@ class ToolExecutor:
                 terminal=False,
                 quality="empty",
             )
+
+        # Assicurati che _mcp_tools sia inizializzato se necessario
+        if self._mcp_tools is None and self._should_use_mcp(tool_call.tool, check_list=False):
+            await self.initialize()
 
         cache_key = self._make_cache_key(tool_call.tool, tool_call.input)
         if spec.use_cache:
@@ -147,6 +162,10 @@ class ToolExecutor:
         return list(await asyncio.gather(*tasks, return_exceptions=False))
 
     async def _execute_once(self, tool_call: ToolCall, spec: Any) -> Dict[str, Any]:
+        # Inject session context 
+        if self.context.user and hasattr(self.context.user, "session_id"):
+            tool_call.input["session_id"] = self.context.user.session_id
+
         if self._should_use_mcp(tool_call.tool):
             try:
                 logger.info(
@@ -183,7 +202,7 @@ class ToolExecutor:
         logger.info("ToolExecutor LOCAL success | tool=%s", tool_call.tool)
         return result
 
-    def _should_use_mcp(self, tool_name: str) -> bool:
+    def _should_use_mcp(self, tool_name: str, check_list: bool = True) -> bool:
         if not self.prefer_mcp:
             return False
 
@@ -194,6 +213,10 @@ class ToolExecutor:
         if not is_available:
             return False
 
+        if check_list and self._mcp_tools is not None:
+            return tool_name in self._mcp_tools
+
+        # Fallback pre-dynamic in case it's not initialized yet (to be safe or to trigger init)
         return tool_name in {
             "search_products",
             "analyze_seller",

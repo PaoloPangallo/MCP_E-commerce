@@ -61,6 +61,16 @@ ATTRIBUTE_CUES = {
     "verde", "grigio", "grigia", "beige", "m", "l", "xl", "xxl", "xs", "s",
 }
 
+SHIPPING_CUES = {
+    "spedizione", "spedirlo", "arriva", "arrivo", "quando", "tempo", "tempi", "consegna",
+    "cap", "provincia", "città", "paese", "costa", "costo", "spedire", "corriere"
+}
+
+DETAILS_CUES = {
+    "dettagli", "specifiche", "ram", "scocca", "materiale", "processore", "cpu", "gpu",
+    "scheda", "descrizione", "info", "informazioni", "memoria", "gb", "tb"
+}
+
 PERSONAL_PRONOUNS = {
     "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
 }
@@ -87,8 +97,10 @@ class IntentEvidence:
     seller: float = 0.0
     conversation: float = 0.0
     comparison: float = 0.0
+    shipping: float = 0.0
+    item_details: float = 0.0
     reasons: Dict[str, list[str]] = field(
-        default_factory=lambda: {"product": [], "seller": [], "conversation": [], "comparison": []}
+        default_factory=lambda: {"product": [], "seller": [], "conversation": [], "comparison": [], "shipping": [], "item_details": []}
     )
 
     def add(self, label: str, value: float, reason: str) -> None:
@@ -100,6 +112,10 @@ class IntentEvidence:
             self.conversation += value
         elif label == "comparison":
             self.comparison += value
+        elif label == "shipping":
+            self.shipping += value
+        elif label == "item_details":
+            self.item_details += value
         if reason:
             self.reasons.setdefault(label, []).append(reason)
 
@@ -110,6 +126,8 @@ class IntentEvidence:
                 ("seller_analysis", self.seller),
                 ("conversation", self.conversation),
                 ("comparison", self.comparison),
+                ("shipping", self.shipping),
+                ("item_details", self.item_details),
             ],
             key=lambda x: x[1],
             reverse=True,
@@ -146,7 +164,10 @@ class ReactPlanner:
         if memory.has_pending_tasks():
             decision = self._decide_from_task_queue(memory)
             if decision:
+                logger.info(f"Planned task decision: {decision.action.tool if decision.action else 'finish'}")
                 return decision
+
+        logger.info(f"Deciding for query: {memory.user_query}")
 
         # FIX B:
         # fast path conversazionale prima di qualunque possibile chiamata lenta al planner LLM
@@ -219,10 +240,6 @@ class ReactPlanner:
     def _state_based_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         intent = (memory.detected_intent or self._infer_intent(memory)).lower()
 
-        search_tool = self._search_tool_name()
-        seller_tool = self._seller_tool_name()
-        compare_tool = self._compare_tool_name()
-
         if intent == "conversation":
             return PlannerOutput(
                 thought="La richiesta è conversazionale.",
@@ -230,54 +247,25 @@ class ReactPlanner:
                 intent="conversation",
             )
 
-        if intent == "seller_analysis":
-            if seller_tool and not self._tool_state_is_terminal(memory, seller_tool):
-                normalized = self._normalize_action_input(seller_tool, {}, memory)
-                if normalized is not None and not self._exceeds_tool_budget(memory, seller_tool):
-                    return PlannerOutput(
-                        thought="Devo ancora analizzare il venditore.",
-                        action=ToolCall(tool=seller_tool, input=normalized),
-                        intent="seller_analysis",
-                    )
+        # Usiamo l'approccio generico basato sull'ordine dei tool previsti per l'intento
+        for tool_name in self._ordered_tools_for_intent(intent):
+            # Se il tool è già stato eseguito e ha raggiunto uno stato terminale (es. ha prodotto risultati finali o eccezioni bloccanti)
+            if self._tool_state_is_terminal(memory, tool_name):
+                continue
+            
+            # Se il tool è andato in errore troppe volte
+            if self._exceeds_tool_budget(memory, tool_name):
+                continue
 
-        if intent == "product_search":
-            if search_tool and not self._tool_state_is_terminal(memory, search_tool):
-                normalized = self._normalize_action_input(search_tool, {}, memory)
-                if normalized is not None and not self._exceeds_tool_budget(memory, search_tool):
-                    return PlannerOutput(
-                        thought="Devo ancora cercare i prodotti.",
-                        action=ToolCall(tool=search_tool, input=normalized),
-                        intent="product_search",
-                    )
-
-        if intent == "comparison":
-            if compare_tool and not self._tool_state_is_terminal(memory, compare_tool):
-                normalized = self._normalize_action_input(compare_tool, {}, memory)
-                if normalized is not None and not self._exceeds_tool_budget(memory, compare_tool):
-                    return PlannerOutput(
-                        thought="Devo ancora confrontare i prodotti.",
-                        action=ToolCall(tool=compare_tool, input=normalized),
-                        intent="comparison",
-                    )
-
-        if intent == "hybrid":
-            if search_tool and not self._tool_state_is_terminal(memory, search_tool):
-                normalized = self._normalize_action_input(search_tool, {}, memory)
-                if normalized is not None and not self._exceeds_tool_budget(memory, search_tool):
-                    return PlannerOutput(
-                        thought="Prima completo la ricerca prodotti.",
-                        action=ToolCall(tool=search_tool, input=normalized),
-                        intent="hybrid",
-                    )
-
-            if seller_tool and not self._tool_state_is_terminal(memory, seller_tool):
-                normalized = self._normalize_action_input(seller_tool, {}, memory)
-                if normalized is not None and not self._exceeds_tool_budget(memory, seller_tool):
-                    return PlannerOutput(
-                        thought="Ora controllo il venditore.",
-                        action=ToolCall(tool=seller_tool, input=normalized),
-                        intent="hybrid",
-                    )
+            # Proviamo a normalizzare gli input. 
+            # Se restituisce None, significa che mancano i prerequisiti (es. l'item_id per la spedizione e la ricerca non ha ancora finito)
+            normalized_input = self._normalize_action_input(tool_name, {}, memory)
+            if normalized_input is not None:
+                return PlannerOutput(
+                    thought=f"Eseguo lo step necessario: {tool_name}.",
+                    action=ToolCall(tool=tool_name, input=normalized_input),
+                    intent=intent,
+                )
 
         return None
 
@@ -295,9 +283,12 @@ class ReactPlanner:
             return None
 
         if confidence < self.intent_threshold:
+            logger.info(f"Confidence {confidence} below threshold {self.intent_threshold}")
             return None
 
-        if self._intent_is_satisfied(memory, intent):
+        satisfied = self._intent_is_satisfied(memory, intent)
+        logger.info(f"Intent {intent} satisfied: {satisfied}")
+        if satisfied:
             return PlannerOutput(
                 thought="Ho già raccolto dati sufficienti.",
                 should_stop=True,
@@ -470,18 +461,11 @@ class ReactPlanner:
                 intent=intent if intent in VALID_INTENTS else self._infer_intent(memory),
             )
 
-        if intent == "seller_analysis":
-            return PlannerOutput(
-                thought="Manca un venditore esplicito da analizzare.",
-                should_stop=True,
-                intent="seller_analysis",
-                final_answer="Per analizzare il venditore mi serve il suo nome esatto.",
-            )
-
         return PlannerOutput(
-            thought="Termino.",
+            thought="Termino, non ho altri tool utilizzabili o non ho i requisiti per procedere.",
             should_stop=True,
             intent=intent if intent in VALID_INTENTS else self._infer_intent(memory),
+            final_answer="Non riesco a procedere oltre con i dati forniti." if intent not in ("conversation", "product_search") else None
         )
 
     async def _call_llm(self, prompt: str) -> Optional[str]:
@@ -510,12 +494,14 @@ class ReactPlanner:
         try:
             if spec.input_normalizer:
                 clean = spec.input_normalizer(clean, memory)
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"Normalizer for {action} failed: {exc}")
             return None
 
         for field_name in spec.required_fields:
             value = clean.get(field_name)
             if value is None or (isinstance(value, str) and not value.strip()):
+                logger.info(f"Tool {action} missing required field {field_name}")
                 return None
 
         return clean
@@ -528,7 +514,7 @@ class ReactPlanner:
         if not tools:
             return memory.has_any_terminal_state()
 
-        if intent == "hybrid":
+        if intent in {"hybrid", "shipping", "item_details"}:
             return all(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
@@ -617,6 +603,10 @@ class ReactPlanner:
             return label, evidence.seller, evidence
         if label == "comparison" and evidence.comparison >= self.intent_threshold:
             return label, evidence.comparison, evidence
+        if label == "shipping" and evidence.shipping >= self.intent_threshold:
+            return label, evidence.shipping, evidence
+        if label == "item_details" and evidence.item_details >= self.intent_threshold:
+            return label, evidence.item_details, evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
         if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
@@ -652,6 +642,14 @@ class ReactPlanner:
         if comparison_hits:
             ev.add("comparison", min(0.35 + 0.15 * comparison_hits, 0.8), "comparison_lexicon")
             ev.add("product", 0.2, "comparison_implies_product")
+
+        shipping_hits = len(token_set & SHIPPING_CUES)
+        if shipping_hits:
+            ev.add("shipping", min(0.35 + 0.15 * shipping_hits, 0.8), "shipping_lexicon")
+
+        details_hits = len(token_set & DETAILS_CUES)
+        if details_hits:
+            ev.add("item_details", min(0.35 + 0.15 * details_hits, 0.8), "details_lexicon")
 
         attribute_hits = len(token_set & ATTRIBUTE_CUES)
         if attribute_hits:
@@ -720,6 +718,8 @@ class ReactPlanner:
             "seller_analysis": evidence.reasons.get("seller", []),
             "conversation": evidence.reasons.get("conversation", []),
             "comparison": evidence.reasons.get("comparison", []),
+            "shipping": evidence.reasons.get("shipping", []),
+            "item_details": evidence.reasons.get("item_details", []),
             "hybrid": evidence.reasons.get("seller", []) + evidence.reasons.get("product", []),
         }
         reasons = [r for r in mapping.get(intent, []) if r]
@@ -729,6 +729,10 @@ class ReactPlanner:
 
         if intent == "hybrid":
             return f"La richiesta combina segnali seller+product ({compact})."
+        if intent == "shipping":
+            return f"La richiesta riguarda la spedizione ({compact})."
+        if intent == "item_details":
+            return f"La richiesta richiede dettagli specifici ({compact})."
         if intent == "comparison":
             return f"La richiesta ha struttura da comparazione prodotti ({compact})."
         if intent == "product_search":

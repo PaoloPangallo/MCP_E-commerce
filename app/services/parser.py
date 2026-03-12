@@ -911,6 +911,18 @@ def correct_brands_in_text(text: str) -> str:
     corrected = []
 
     for w in words:
+        w_low = w.lower()
+        
+        # SKIP numeric/postal codes
+        if re.fullmatch(r"\d+", w):
+            corrected.append(w)
+            continue
+            
+        # EXACT MATCH check - if it's already a known brand, don't fuzzy replace it
+        if w_low in BRAND_WHITELIST:
+            corrected.append(BRAND_WHITELIST[w_low])
+            continue
+
         if len(w) < 4:
             corrected.append(w)
             continue
@@ -918,12 +930,13 @@ def correct_brands_in_text(text: str) -> str:
         match = process.extractOne(
             w,
             cast(List[str], list(vocab)),
-            scorer=fuzz.partial_ratio
+            scorer=fuzz.token_sort_ratio # Stricter than partial_ratio for full words
         )
 
         if match:
             brand, score, _ = match
-            if score >= 90 and abs(len(w) - len(brand)) <= 3:
+            # Only replace if score is very high and it's not a short word match
+            if score >= 92 and abs(len(w) - len(brand)) <= 2:
                 corrected.append(brand)
                 continue
 

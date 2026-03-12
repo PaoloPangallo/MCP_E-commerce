@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-IntentType = Literal["conversation", "seller_analysis", "product_search", "hybrid", "comparison"]
+IntentType = Literal["conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping"]
 ObservationStatus = Literal["ok", "no_data", "error"]
 ObservationQuality = Literal["empty", "partial", "good"]
 LatencyClass = Literal["low", "medium", "high"]

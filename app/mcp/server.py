@@ -13,6 +13,8 @@ from app.services.seller_pipeline import run_seller_pipeline
 from app.tools import (
     execute_conversation_tool,
     execute_compare_tool,
+    execute_item_details_tool,
+    execute_shipping_costs_tool,
 )
 
 
@@ -85,10 +87,17 @@ def _close_db(db: Any) -> None:
             logger.warning("Failed to close DB session: %s", exc)
 
 
-def _build_context(db: Any, llm_engine: str = "ollama") -> MCPToolContext:
+def _build_context(db: Any, llm_engine: str = "ollama", session_id: Optional[str] = None) -> MCPToolContext:
+    user = None
+    if session_id and _DEPS.user_resolver:
+        try:
+            user = _DEPS.user_resolver(session_id)
+        except Exception as exc:
+            logger.warning("Failed to resolve user for session_id=%s: %s", session_id, exc)
+
     return MCPToolContext(
         db=db,
-        user=None,
+        user=user,
         llm_engine=(llm_engine or "ollama").strip().lower(),
     )
 
@@ -139,6 +148,25 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "raw": raw,
     }
 
+def _normalize_item_details_output(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "status": raw.get("status", "ok"),
+        "item_id": raw.get("item_id"),
+        "data": raw.get("data"),
+        "error": raw.get("error"),
+        "message": raw.get("message"),
+        "raw": raw,
+    }
+
+
+def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "status": raw.get("status", "ok"),
+        "item_id": raw.get("item_id"),
+        "data": raw.get("data"),
+        "error": raw.get("error"),
+        "raw": raw,
+    }
 
 # ============================================================
 # MCP TOOLS
@@ -148,10 +176,12 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     name="search_products",
     description=(
         "Cerca prodotti e-commerce usando la pipeline completa: parsing query, "
-        "retrieval, reranking, trust scoring e analisi finale."
+        "retrieval, reranking, trust scoring e analisi finale. "
+        "Se include_shipping=true, calcola automaticamente anche i costi di spedizione "
+        "per il primo risultato, risparmiando un passaggio aggiuntivo."
     ),
 )
-def search_products(query: str) -> str:
+def search_products(query: str, include_shipping: bool = False, session_id: str = "") -> str:
 
     db = None
 
@@ -161,14 +191,35 @@ def search_products(query: str) -> str:
 
         db = _get_db()
 
+        context = _build_context(db=db, session_id=session_id)
+        
         raw = run_search_pipeline(
             query=query,
             db=db,
-            user=None,
+            user=context.user,
             llm_engine="ollama"
         )
 
         normalized = _normalize_search_output(raw)
+
+        if include_shipping and normalized.get("top_result"):
+            top_item_id = normalized["top_result"].get("ebay_id")
+            if top_item_id:
+                try:
+                    logger.info("MCP TOOL search_products - fetching shipping for top item %s", top_item_id)
+                    shipping_raw = execute_shipping_costs_tool(
+                        {
+                            "item_id": top_item_id,
+                            "country_code": "IT",
+                            "zip_code": "",
+                        },
+                        context,
+                    )
+                    shipping_norm = _normalize_shipping_costs_output(shipping_raw)
+                    normalized["top_result"]["shipping_info"] = shipping_norm.get("data")
+                    normalized["top_result"]["shipping_status"] = shipping_norm.get("status")
+                except Exception as e:
+                    logger.warning("Auto-shipping fetch failed in search pipeline: %s", e)
 
         normalized["_backend"] = "mcp"
 
@@ -197,7 +248,7 @@ def search_products(query: str) -> str:
         "e sentiment score."
     ),
 )
-def analyze_seller(seller_name: str, page: int = 1, limit: int = 10) -> str:
+def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
@@ -223,7 +274,7 @@ def analyze_seller(seller_name: str, page: int = 1, limit: int = 10) -> str:
         "utile per capire brand, prezzo, taglia, categoria e altri vincoli."
     ),
 )
-def profile_query(query: str) -> str:
+def profile_query(query: str, session_id: str = "") -> str:
     try:
         parsed = parse_query_service(query)
         return _safe_json(
@@ -246,11 +297,11 @@ def profile_query(query: str) -> str:
         "tool e-commerce specifici."
     ),
 )
-def conversation(query: str, llm_engine: str = "ollama") -> str:
+def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
-        context = _build_context(db=db, llm_engine=llm_engine)
+        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
         payload = execute_conversation_tool({"query": query}, context)
 
         if not isinstance(payload, dict):
@@ -278,7 +329,7 @@ def conversation(query: str, llm_engine: str = "ollama") -> str:
         "'iphone 13, samsung galaxy s22'. Min 2, max 4 query."
     ),
 )
-def compare_products(queries: str, llm_engine: str = "ollama") -> str:
+def compare_products(queries: str, llm_engine: str = "ollama", session_id: str = "") -> str:
     """
     queries: stringa con le query separate da virgola o punto e virgola.
     Esempio: 'nike air max, adidas ultraboost'
@@ -302,7 +353,7 @@ def compare_products(queries: str, llm_engine: str = "ollama") -> str:
             )
 
         db = _get_db()
-        context = _build_context(db=db, llm_engine=llm_engine)
+        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
 
         logger.info("MCP TOOL compare_products START | queries=%s", queries)
 
@@ -319,6 +370,70 @@ def compare_products(queries: str, llm_engine: str = "ollama") -> str:
     except Exception as exc:
         logger.exception("MCP compare_products failed")
         return _tool_error(queries=queries, error=str(exc))
+    finally:
+        _close_db(db)
+
+
+@mcp.tool(
+    name="get_item_details",
+    description=(
+        "Recupera i dettagli estesi, descrizione e specifiche tecniche di un prodotto "
+        "conoscendo il suo ID eBay (item_id)."
+    ),
+)
+def get_item_details(item_id: str, session_id: str = "") -> str:
+    db = None
+    try:
+        db = _get_db()
+        context = _build_context(db=db, session_id=session_id)
+        logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
+        
+        result = execute_item_details_tool(
+            {"item_id": item_id},
+            context
+        )
+        normalized = _normalize_item_details_output(result)
+        normalized["_backend"] = "mcp"
+        
+        logger.info("MCP TOOL get_item_details END")
+        return _safe_json(normalized)
+    except Exception as exc:
+        logger.exception("MCP get_item_details failed")
+        return _tool_error(item_id=item_id, error=str(exc))
+    finally:
+        _close_db(db)
+
+
+@mcp.tool(
+    name="get_shipping_costs",
+    description=(
+        "Recupera i costi e le opzioni di spedizione precisi per un determinato oggetto "
+        "(item_id) verso un CAP (zip_code) e Paese (country_code)."
+    ),
+)
+def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: str = "", session_id: str = "") -> str:
+    db = None
+    try:
+        db = _get_db()
+        context = _build_context(db=db, session_id=session_id)
+        logger.info("MCP TOOL get_shipping_costs START | item_id=%s", item_id)
+        
+        result = execute_shipping_costs_tool(
+            {
+                "item_id": item_id,
+                "country_code": country_code,
+                "zip_code": zip_code,
+            },
+            context
+        )
+        normalized = _normalize_shipping_costs_output(result)
+        normalized["_backend"] = "mcp"
+        
+        logger.info("MCP TOOL get_shipping_costs END")
+        return _safe_json(normalized)
+    except Exception as exc:
+        logger.exception("MCP get_shipping_costs failed")
+        return _tool_error(item_id=item_id, error=str(exc))
     finally:
         _close_db(db)
 
@@ -389,6 +504,30 @@ def tools_catalog() -> str:
                             "llm_engine": {"type": "string", "default": "ollama"},
                         },
                         "required": ["queries"],
+                    },
+                },
+                {
+                    "name": "get_item_details",
+                    "description": "Recupera i dettagli estesi di un prodotto (item_id)",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "item_id": {"type": "string"},
+                        },
+                        "required": ["item_id"],
+                    },
+                },
+                {
+                    "name": "get_shipping_costs",
+                    "description": "Recupera i costi di spedizione precisi per un oggetto (item_id)",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "item_id": {"type": "string"},
+                            "country_code": {"type": "string", "default": "IT"},
+                            "zip_code": {"type": "string", "default": ""},
+                        },
+                        "required": ["item_id"],
                     },
                 },
             ]

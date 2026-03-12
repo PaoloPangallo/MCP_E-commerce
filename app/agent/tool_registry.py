@@ -190,7 +190,13 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
 
 def _normalize_search_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
     fallback_query = getattr(memory, "user_query", "")
-    return normalize_search_arguments(action_input, fallback_query=fallback_query)
+    norm = normalize_search_arguments(action_input, fallback_query=fallback_query)
+    
+    # Add optional parameter propagation for pipelining
+    if "include_shipping" in action_input:
+        norm["include_shipping"] = bool(action_input["include_shipping"])
+        
+    return norm
 
 
 def _normalize_seller_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
@@ -206,7 +212,18 @@ def _normalize_conversation_action_input(action_input: Dict[str, Any], memory: A
     query = _clean_text(action_input.get("query") or getattr(memory, "user_query", ""))
     if not query:
         raise ValueError("conversation richiede una query non vuota.")
-    return {"query": query}
+        
+    context_str = ""
+    try:
+        session_memory = getattr(memory, "session_memory", None)
+        if session_memory:
+            recent_queries = session_memory.recent_queries
+            if recent_queries:
+                context_str = " | ".join(recent_queries[:3])
+    except Exception:
+        pass
+        
+    return {"query": query, "context_info": context_str}
 
 
 def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
@@ -239,8 +256,8 @@ def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -
 
 
 def _normalize_item_details_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
-    # Item ID must be passed explicitly; no fallback from pure text yet.
-    return normalize_item_details_arguments(action_input)
+    # Item ID must be passed explicitly or implicit from search payload
+    return normalize_item_details_arguments(action_input, memory)
 
 
 def _normalize_shipping_costs_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
@@ -353,7 +370,7 @@ def _resolve_search_quality(payload: Dict[str, Any]) -> ObservationQuality:
 
 
 def _resolve_search_terminal(payload: Dict[str, Any]) -> bool:
-    return bool(payload.get("error")) or int(payload.get("results_count", 0)) >= 1
+    return payload.get("status") in {"ok", "no_data"} or bool(payload.get("error"))
 
 
 def _resolve_seller_status(payload: Dict[str, Any]) -> ObservationStatus:
@@ -506,6 +523,7 @@ def _bootstrap_tools() -> None:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
+                    "include_shipping": {"type": "boolean", "default": False},
                 },
                 "required": ["query"],
             },

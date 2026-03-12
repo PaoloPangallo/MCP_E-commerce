@@ -1,11 +1,11 @@
 import logging
-from app.services.parser import call_gemini
+from app.services.parser import call_ollama
 
 logger = logging.getLogger(__name__)
 
 def expand_query(query: str) -> str:
     """
-    Expands the user query using a fast LLM call (Gemini).
+    Expands the user query using a fast LLM call (Ollama).
     Example: 'compara iphone 15 max' -> 'Apple iPhone 15 Pro Max smartphone comparison'
     This helps the Sparse (BM25) and Dense retrieval stages find more relevant matches.
     """
@@ -22,7 +22,10 @@ def expand_query(query: str) -> str:
     User query: "{query}"
     """
     try:
-        res = call_gemini(prompt)
+        res = call_ollama(prompt)
+        if res is None:
+            return query
+            
         expanded = res.strip().replace('"', '').replace('\n', ' ')
         
         # Fallback if the LLM returns something weird or too long

@@ -17,9 +17,10 @@ def normalize_shipping_costs_arguments(args: Dict[str, Any], memory: Any) -> Dic
     """
     item_id = str(args.get("item_id", "")).strip()
 
-    # Se l'item_id non è esplicito, prova a prenderlo dai risultati di ricerca
-    if not item_id and getattr(memory, "top_results", None):
-        item_id = memory.top_results[0].get("ebay_id", "")
+    if not item_id and getattr(memory, "search_payload", None):
+        results = memory.search_payload.get("results")
+        if results and len(results) > 0:
+            item_id = results[0].get("ebay_id", "")
 
     country_code = str(args.get("country_code", "IT")).strip().upper()
     zip_code = str(args.get("zip_code", "")).strip()

@@ -15,8 +15,13 @@ def _clean_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def normalize_item_details_arguments(action_input: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_item_details_arguments(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
     item_id = _clean_text(action_input.get("item_id"))
+    if not item_id and getattr(memory, "search_payload", None):
+        results = memory.search_payload.get("results")
+        if results and len(results) > 0:
+            item_id = results[0].get("ebay_id", "")
+            
     if not item_id:
         raise ValueError("item_details_tool richiede un item_id valido.")
     return {"item_id": item_id}
