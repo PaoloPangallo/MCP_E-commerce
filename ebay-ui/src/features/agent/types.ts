@@ -60,6 +60,8 @@ export type FinalPayload = {
   ragContext?: import("../search/types").RagContext
   sellerSummary?: import("../seller/types").SellerSummaryBlock | null
   comparison?: import("../search/types").ComparisonData | null
+  itemDetails?: import("../search/types").ItemDetailsData | null
+  shippingCosts?: import("../search/types").ShippingCostsData | null
   trace: AgentStep[]
   errors?: string[]
 

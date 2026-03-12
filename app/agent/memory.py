@@ -302,6 +302,8 @@ class RequestState:
     search_analysis: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
     compare_payload: Optional[Dict[str, Any]] = None
+    item_details_payload: Optional[Dict[str, Any]] = None
+    shipping_costs_payload: Optional[Dict[str, Any]] = None
     final_answer: Optional[str] = None
 
     def load_tasks(self, tasks: List[Dict[str, Any]]) -> None:
@@ -379,6 +381,15 @@ class RequestState:
 
         if observation.tool == "compare_products" and observation.ok:
             self._apply_compare_payload(observation.data)
+
+        if observation.tool == "get_item_details" and observation.ok:
+            if isinstance(observation.data, dict):
+                # Il tool registry wrappa il dato originario in "data", cerchiamo di estrarlo se c'è
+                self.item_details_payload = observation.data.get("data") or observation.data
+        
+        if observation.tool == "get_shipping_costs" and observation.ok:
+            if isinstance(observation.data, dict):
+                self.shipping_costs_payload = observation.data.get("data") or observation.data
 
     def _apply_compare_payload(self, payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
@@ -517,6 +528,8 @@ class RequestState:
             "search_analysis": self.search_analysis,
             "metrics": self.metrics,
             "seller_summary": seller_summary,
+            "item_details": self.item_details_payload,
+            "shipping_costs": self.shipping_costs_payload,
             "tool_calls": dict(self.tool_call_counts),
             "llm_calls": dict(self.llm_call_counts),
             "tool_states": self.tool_state_summaries(),
@@ -533,6 +546,8 @@ class RequestState:
             "search": self.search_payload,
             "seller": self.seller_payload,
             "compare": self.compare_payload,
+            "item_details": self.item_details_payload,
+            "shipping_costs": self.shipping_costs_payload,
             "top_result": compact_top,
             "last_seller_name": self.last_seller_name,
             "search_analysis": self.search_analysis,

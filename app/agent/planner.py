@@ -21,7 +21,7 @@ from app.services.parser import call_gemini, call_ollama, extract_first_json_obj
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -556,8 +556,14 @@ class ReactPlanner:
         if intent == "product_search":
             return [tool for tool in [search_tool] if tool]
 
+        if intent == "item_details":
+            return [tool for tool in [search_tool, "get_item_details"] if tool]
+
+        if intent == "shipping":
+            return [tool for tool in [search_tool, "get_shipping_costs"] if tool]
+
         if intent == "hybrid":
-            ordered = [tool for tool in [search_tool, seller_tool] if tool]
+            ordered = [tool for tool in [search_tool, seller_tool, "get_item_details", "get_shipping_costs"] if tool]
             seen: set[str] = set()
             unique: list[str] = []
             for tool in ordered:

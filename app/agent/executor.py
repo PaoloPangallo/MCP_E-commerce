@@ -200,6 +200,8 @@ class ToolExecutor:
             "conversation",
             "profile_query",
             "compare_products",
+            "get_item_details",
+            "get_shipping_costs",
         }
 
     @classmethod

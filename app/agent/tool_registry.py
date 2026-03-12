@@ -12,9 +12,13 @@ from app.tools import (
     execute_conversation_tool,
     execute_search_tool,
     execute_seller_tool,
+    execute_item_details_tool,
+    execute_shipping_costs_tool,
 )
 from app.tools.search_tool import clean_search_query, normalize_search_arguments
 from app.tools.seller_tool import extract_explicit_seller, normalize_seller_arguments
+from app.tools.item_details_tool import normalize_item_details_arguments
+from app.tools.shipping_costs_tool import normalize_shipping_costs_arguments
 
 InputNormalizer = Callable[[Dict[str, Any], Any], Dict[str, Any]]
 
@@ -234,6 +238,15 @@ def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -
     return {"queries": queries_raw or user_query}
 
 
+def _normalize_item_details_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+    # Item ID must be passed explicitly; no fallback from pure text yet.
+    return normalize_item_details_arguments(action_input)
+
+
+def _normalize_shipping_costs_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+    return normalize_shipping_costs_arguments(action_input, memory)
+
+
 def _normalize_search_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(result or {})
     payload.setdefault("query", _clean_text(action_input.get("query")))
@@ -277,6 +290,20 @@ def _normalize_compare_result(result: Dict[str, Any], action_input: Dict[str, An
     payload = dict(result or {})
     payload.setdefault("winner", {})
     payload.setdefault("comparison_matrix", [])
+    payload.setdefault("status", payload.get("status", "ok"))
+    return payload
+
+
+def _normalize_item_details_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(result or {})
+    payload.setdefault("item_id", _clean_text(action_input.get("item_id")))
+    payload.setdefault("status", payload.get("status", "ok"))
+    return payload
+
+
+def _normalize_shipping_costs_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(result or {})
+    payload.setdefault("item_id", _clean_text(action_input.get("item_id")))
     payload.setdefault("status", payload.get("status", "ok"))
     return payload
 
@@ -366,6 +393,22 @@ def _resolve_conversation_terminal(payload: Dict[str, Any]) -> bool:
     return True
 
 
+def _resolve_item_details_status(payload: Dict[str, Any]) -> ObservationStatus:
+    if payload.get("status") == "error":
+        return "error"
+    if payload.get("status") == "not_found" or not payload.get("data"):
+        return "no_data"
+    return "ok"
+
+
+def _resolve_shipping_costs_status(payload: Dict[str, Any]) -> ObservationStatus:
+    if payload.get("status") == "error":
+        return "error"
+    if not payload.get("data"):
+        return "no_data"
+    return "ok"
+
+
 def _summarize_search(payload: Dict[str, Any]) -> str:
     count = int(payload.get("results_count", 0))
     results = payload.get("results") or []
@@ -433,6 +476,23 @@ def _summarize_conversation(payload: Dict[str, Any]) -> str:
     if answer:
         return answer
     return _clean_text(payload.get("error")) or "Nessuna risposta conversazionale disponibile."
+
+
+def _summarize_item_details(payload: Dict[str, Any]) -> str:
+    status = payload.get("status")
+    if status != "ok":
+        return f"Dettagli oggetto non trovati o errore: {payload.get('error') or payload.get('message')}"
+    data = payload.get("data", {})
+    title = data.get("title", "")
+    return f"Recuperati con successo i dettagli dell'oggetto: {title}"
+
+
+def _summarize_shipping_costs(payload: Dict[str, Any]) -> str:
+    status = payload.get("status")
+    if status != "ok":
+        return f"Costi di spedizione non trovati o errore: {payload.get('error')}"
+    item_id = payload.get("item_id", "sconosciuto")
+    return f"Recuperati con successo i costi di spedizione per l'oggetto {item_id}"
 
 
 def _bootstrap_tools() -> None:
@@ -575,6 +635,74 @@ def _bootstrap_tools() -> None:
             terminal_resolver=lambda _: True,
             result_normalizer=_normalize_compare_result,
             summarizer=_summarize_compare,
+        )
+    )
+    register_tool(
+        ToolSpec(
+            name="get_item_details",
+            description="Recupera i dettagli estesi, descrizione e specifiche tecniche di un prodotto conoscendo il suo ID eBay (item_id).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string", "description": "L'ID univoco dell'oggetto eBay (es. v1|123456789|0)"},
+                },
+                "required": ["item_id"],
+            },
+            executor=execute_item_details_tool,
+            tags=("details", "specs", "product", "ebay"),
+            examples=(
+                "v1|123456789|0",
+                "v1|987654321|0",
+            ),
+            required_fields=("item_id",),
+            state_key="item_details",
+            max_retries=0,
+            cost=1,
+            latency_class="low",
+            dependencies=(),
+            produced_entities=("item_details",),
+            can_run_in_parallel=True,
+            use_cache=True,
+            input_normalizer=_normalize_item_details_action_input,
+            status_resolver=_resolve_item_details_status,
+            terminal_resolver=lambda _: True,
+            result_normalizer=_normalize_item_details_result,
+            summarizer=_summarize_item_details,
+        )
+    )
+
+    register_tool(
+        ToolSpec(
+            name="get_shipping_costs",
+            description="Recupera i costi e le opzioni di spedizione precisi per un determinato oggetto (item_id) verso un CAP (zip_code) e Paese (country_code).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string", "description": "L'ID univoco dell'oggetto eBay (es. v1|123456789|0)"},
+                    "country_code": {"type": "string", "description": "Il codice paese di destinazione (es. IT, US, DE)", "default": "IT"},
+                    "zip_code": {"type": "string", "description": "Il CAP di destinazione (es. 20100)", "default": ""},
+                },
+                "required": ["item_id"],
+            },
+            executor=execute_shipping_costs_tool,
+            tags=("shipping", "delivery", "costs", "ebay"),
+            examples=(
+                "costo spedizione per v1|123456789|0 a milano 20100",
+            ),
+            required_fields=("item_id",),
+            state_key="shipping_costs",
+            max_retries=0,
+            cost=1,
+            latency_class="low",
+            dependencies=(),
+            produced_entities=("shipping_options",),
+            can_run_in_parallel=True,
+            use_cache=True,
+            input_normalizer=_normalize_shipping_costs_action_input,
+            status_resolver=_resolve_shipping_costs_status,
+            terminal_resolver=lambda _: True,
+            result_normalizer=_normalize_shipping_costs_result,
+            summarizer=_summarize_shipping_costs,
         )
     )
 

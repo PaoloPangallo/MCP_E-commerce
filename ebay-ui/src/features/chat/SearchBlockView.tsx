@@ -2,6 +2,8 @@ import { Box, Paper, Typography } from "@mui/material"
 import type { SearchBlock } from "../../types/searchTypes.ts"
 import AIThinkingPipeline from "../agent/components/AIThinkingPipeline.tsx"
 import AIAnalysisCard from "../agent/components/AIAnalysisCard.tsx"
+import ItemDetailsCard from "./ItemDetailsCard.tsx"
+import ShippingCostsCard from "./ShippingCostsCard.tsx"
 import SearchResultList from "../search/components/SearchResultList.tsx"
 import ComparisonDisplay from "../search/components/ComparisonDisplay.tsx"
 import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
@@ -64,6 +66,18 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
             {hasComparison ? (
                 <Box mt={2.5}>
                     <ComparisonDisplay data={search.comparison!} />
+                </Box>
+            ) : null}
+
+            {search.item_details ? (
+                <Box mt={2.5}>
+                    <ItemDetailsCard data={search.item_details} />
+                </Box>
+            ) : null}
+
+            {search.shipping_costs ? (
+                <Box mt={2.5}>
+                    <ShippingCostsCard data={search.shipping_costs} />
                 </Box>
             ) : null}
 

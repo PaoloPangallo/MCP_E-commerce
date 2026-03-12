@@ -188,6 +188,8 @@ export function useAgentStream(options?: {
           ragContext: search.rag_context,
           sellerSummary: seller,
           comparison: finalData.compare || null,
+          itemDetails: finalData.item_details || null,
+          shippingCosts: finalData.shipping_costs || null,
           trace: finalTrace,
           errors: Array.isArray(finalData.errors) ? finalData.errors : [],
           plannedTasks: localPlannedTasks,

@@ -37,6 +37,32 @@ export interface ComparisonCandidate extends SearchItem {
   }
 }
 
+export interface ItemDetailsData {
+  item_id?: string
+  title?: string
+  short_description?: string
+  description?: string
+  category_path?: string
+  condition?: string
+  item_specifics?: any[]
+  return_terms?: Record<string, any>
+  shipping_options?: any[]
+  seller?: Record<string, any>
+  price?: Record<string, any>
+  brand?: string
+  color?: string
+  mpn?: string
+  [key: string]: any
+}
+
+export interface ShippingCostsData {
+  item_id?: string
+  shipping_options?: any[]
+  item_location?: Record<string, any>
+  estimated_delivery?: any[]
+  [key: string]: any
+}
+
 export interface ComparisonData {
   status: string
   queries_compared: number
@@ -65,6 +91,8 @@ export interface SearchBlock {
   agent_trace?: AgentStep[]
   seller_summary?: SellerSummaryBlock | null
   comparison?: ComparisonData | null
+  item_details?: ItemDetailsData | null
+  shipping_costs?: ShippingCostsData | null
   final_answer?: string | null
   mode?: AppMode
   errors?: string[]
@@ -98,6 +126,8 @@ export interface AgentResponse {
   final_data?: {
     search?: SearchPipelineResponse
     seller?: import("../seller/types").SellerFeedbackResponse
+    item_details?: ItemDetailsData
+    shipping_costs?: ShippingCostsData
     top_result?: SearchItem | null
     last_seller_name?: string | null
     errors?: string[]

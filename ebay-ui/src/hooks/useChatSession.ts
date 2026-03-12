@@ -62,6 +62,8 @@ export function useChatSession() {
         agent_trace: payload.trace?.length ? payload.trace : [], // Fixed to use the reliable payload trace directly
         seller_summary: sellerSummary,
         comparison: payload.comparison || null,
+        item_details: payload.itemDetails || null,
+        shipping_costs: payload.shippingCosts || null,
         final_answer:
           payload.finalAnswer ||
           "Ho completato l’analisi della richiesta.",
@@ -76,9 +78,10 @@ export function useChatSession() {
         !!newSearch.agent_trace?.length ||
         !!newSearch.errors?.length ||
         !!newSearch.comparison ||
+        !!newSearch.item_details ||
+        !!newSearch.shipping_costs ||
         !!payload.plannedTasks?.length ||
-        !!payload.toolStates &&
-        Object.keys(payload.toolStates).length > 0
+        (!!payload.toolStates && Object.keys(payload.toolStates).length > 0)
 
       useChatStore.getState().setCachedSearch(cacheKey, newSearch)
 

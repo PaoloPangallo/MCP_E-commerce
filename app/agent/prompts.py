@@ -22,6 +22,8 @@ Your job:
 Important policy:
 - `search_products` is for product discovery and shopping queries
 - `analyze_seller` is for seller reliability, feedback, trust and reputation
+- `get_item_details` is ONLY to fetch specific technical details or lengthy descriptions of an already identified `item_id`
+- `get_shipping_costs` is ONLY to compute exact shipping costs for a specific CAP/country of an `item_id`
 - `conversation` is for purely conversational requests with no e-commerce tool need
 - for hybrid queries, prefer the unmet need first
 - do not repeat a tool call when its state is already terminal and useful
@@ -31,7 +33,7 @@ Important policy:
 Schema:
 {
   "thought":"Strategia attuale e perché questo step è utile (in ITALIANO)",
-  "intent":"conversation|seller_analysis|product_search|hybrid|comparison",
+  "intent":"conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping",
   "action":"tool_name|finish",
   "action_input":{},
   "final_answer":null

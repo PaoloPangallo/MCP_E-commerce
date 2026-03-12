@@ -28,9 +28,11 @@ APPROX_PRICE_MIN_DELTA = float(os.getenv("APPROX_PRICE_MIN_DELTA", "10"))
 if EBAY_ENV == "production":
     OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
     SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+    ITEM_URL = "https://api.ebay.com/buy/browse/v1/item/"
 else:
     OAUTH_URL = "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
     SEARCH_URL = "https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search"
+    ITEM_URL = "https://api.sandbox.ebay.com/buy/browse/v1/item/"
 
 
 # ============================================================
@@ -448,3 +450,143 @@ def search_items(
     logger.info("EBAY SEARCH END | total_items=%s", len(items))
 
     return items[:wanted]
+
+
+# ============================================================
+# ITEM DETAILS API
+# ============================================================
+
+def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches full details of a specific item from eBay using the getItem endpoint.
+    Retrieves item specifics, long description, categories, return terms, etc.
+    """
+    logger.info("EBAY GET ITEM START | item_id=%s", item_id)
+
+    try:
+        token = _get_oauth_token()
+    except Exception as e:
+        logger.exception("EBAY TOKEN ERROR")
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+    }
+
+    url = f"{ITEM_URL}{item_id}"
+
+    try:
+        response = _SESSION.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.exception("EBAY CONNECTION ERROR")
+        return None
+
+    if response.status_code == 401:
+        logger.warning("EBAY TOKEN EXPIRED for getItem")
+        try:
+            token = _get_oauth_token(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
+            response = _SESSION.get(
+                url,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.exception("EBAY REFRESH/CONNECTION ERROR")
+            return None
+
+    if response.status_code != 200:
+        logger.error("EBAY GET ITEM ERROR %s %s", response.status_code, response.text)
+        return None
+
+    data = response.json()
+    
+    # Strip bloat out of the response to save LLM tokens
+    safe_data = {
+        "item_id": data.get("itemId"),
+        "title": data.get("title"),
+        "short_description": data.get("shortDescription"),
+        "description": data.get("description"),
+        "category_path": data.get("categoryPath"),
+        "condition": data.get("condition"),
+        "item_specifics": data.get("localizedAspects", []),
+        "return_terms": data.get("returnTerms", {}),
+        "shipping_options": data.get("shippingOptions", []),
+        "seller": data.get("seller", {}),
+        "price": data.get("price", {}),
+        "brand": data.get("brand"),
+        "color": data.get("color"),
+        "mpn": data.get("mpn"),
+    }
+    
+    return safe_data
+
+# ============================================================
+# SHIPPING COSTS API
+# ============================================================
+
+def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches precise shipping costs for a specific location using the getItem endpoint
+    and the X-EBAY-C-ENDUSERCTX header.
+    country_code: e.g., 'IT', 'US', 'FR'
+    zip_code: e.g., '20100'
+    """
+    logger.info("EBAY SHIPPING COSTS | item_id=%s country=%s zip=%s", item_id, country_code, zip_code)
+
+    try:
+        token = _get_oauth_token()
+    except Exception as e:
+        logger.exception("EBAY TOKEN ERROR")
+        return None
+
+    user_ctx = f"contextualLocation=country={country_code},zip={zip_code}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+        "X-EBAY-C-ENDUSERCTX": user_ctx,
+    }
+
+    url = f"{ITEM_URL}{item_id}"
+
+    try:
+        response = _SESSION.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.exception("EBAY CONNECTION ERROR")
+        return None
+
+    if response.status_code == 401:
+        try:
+            token = _get_oauth_token(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
+            response = _SESSION.get(
+                url,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+            )
+        except Exception:
+            return None
+
+    if response.status_code != 200:
+        logger.error("EBAY SHIPPING COSTS ERROR %s %s", response.status_code, response.text)
+        return None
+
+    data = response.json()
+    shipping_options = data.get("shippingOptions", [])
+    
+    # We only need to return the shipping parts to keep it lightweight
+    return {
+        "item_id": item_id,
+        "shipping_options": shipping_options,
+        "item_location": data.get("itemLocation", {}),
+        "estimated_delivery": data.get("estimatedAvailabilities", [])
+    }
