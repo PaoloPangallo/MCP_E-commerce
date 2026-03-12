@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import requests
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,10 +37,11 @@ else:
 
 
 # ============================================================
-# HTTP SESSION
+# HTTP SESSION & CLIENTS
 # ============================================================
 
 _SESSION = requests.Session()
+_ASYNC_CLIENT = httpx.AsyncClient(timeout=float(os.getenv("EBAY_REQUEST_TIMEOUT", "15")))
 
 
 # ============================================================
@@ -135,6 +137,60 @@ def _get_oauth_token(force_refresh: bool = False) -> str:
 
     if not access_token:
         raise RuntimeError("OAuth response without access_token")
+
+    _token_cache["access_token"] = access_token
+    _token_cache["expires_at"] = now + float(expires_in) - 60
+
+    return access_token
+
+
+async def _get_oauth_token_async(force_refresh: bool = False) -> str:
+    global _token_cache
+
+    now = time.time()
+
+    if (
+        not force_refresh
+        and _token_cache["access_token"]
+        and now < float(_token_cache["expires_at"])
+    ):
+        return _token_cache["access_token"]
+
+    if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
+        raise RuntimeError("EBAY_CLIENT_ID o EBAY_CLIENT_SECRET mancanti")
+
+    auth_string = f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}"
+    encoded_auth = base64.b64encode(auth_string.encode()).decode()
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": f"Basic {encoded_auth}",
+    }
+
+    data = {
+        "grant_type": "client_credentials",
+        "scope": "https://api.ebay.com/oauth/api_scope",
+    }
+
+    try:
+        response = await _ASYNC_CLIENT.post(
+            OAUTH_URL,
+            headers=headers,
+            data=data,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Async OAuth connection error: {exc}")
+
+    if response.status_code != 200:
+        raise RuntimeError(f"Async OAuth error {response.status_code}: {response.text}")
+
+    token_data = response.json()
+    access_token = token_data.get("access_token")
+    expires_in = token_data.get("expires_in", 7200)
+
+    if not access_token:
+        raise RuntimeError("Async OAuth response without access_token")
 
     _token_cache["access_token"] = access_token
     _token_cache["expires_at"] = now + float(expires_in) - 60
@@ -321,32 +377,23 @@ def _perform_search_request(
         params["sort"] = sort
 
     try:
-
         response = _SESSION.get(
             SEARCH_URL,
             headers=headers,
             params=params,
             timeout=REQUEST_TIMEOUT,
         )
-
     except requests.exceptions.Timeout:
-
         logger.error("EBAY TIMEOUT")
         raise RuntimeError("EBAY timeout")
-
     except Exception as exc:
-
         logger.exception("EBAY CONNECTION ERROR")
         raise RuntimeError("EBAY connection error")
 
     if response.status_code == 401:
-
         logger.warning("EBAY TOKEN EXPIRED")
-
         token = _get_oauth_token(force_refresh=True)
-
         headers["Authorization"] = f"Bearer {token}"
-
         response = _SESSION.get(
             SEARCH_URL,
             headers=headers,
@@ -355,12 +402,67 @@ def _perform_search_request(
         )
 
     if response.status_code != 200:
-
         logger.error("EBAY ERROR %s %s", response.status_code, response.text)
+        raise RuntimeError(f"eBay search error {response.status_code}")
 
-        raise RuntimeError(
-            f"eBay search error {response.status_code}"
+    return response.json()
+
+
+async def _perform_search_request_async(
+    token: str,
+    query: str,
+    filter_string: Optional[str],
+    limit: int,
+    offset: int,
+    sort: Optional[str] = None,
+) -> Dict[str, Any]:
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+    }
+
+    params: Dict[str, Any] = {
+        "q": query,
+        "limit": limit,
+        "offset": offset,
+    }
+
+    if filter_string:
+        params["filter"] = filter_string
+
+    if sort:
+        params["sort"] = sort
+
+    try:
+        response = await _ASYNC_CLIENT.get(
+            SEARCH_URL,
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT,
         )
+    except httpx.TimeoutException:
+        logger.error("EBAY ASYNC TIMEOUT")
+        raise RuntimeError("EBAY async timeout")
+    except Exception as exc:
+        logger.exception("EBAY ASYNC CONNECTION ERROR")
+        raise RuntimeError(f"EBAY async connection error: {exc}")
+
+    if response.status_code == 401:
+        logger.warning("EBAY ASYNC TOKEN EXPIRED")
+        token = await _get_oauth_token_async(force_refresh=True)
+        headers["Authorization"] = f"Bearer {token}"
+        
+        response = await _ASYNC_CLIENT.get(
+            SEARCH_URL,
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    if response.status_code != 200:
+        logger.error("EBAY ASYNC ERROR %s %s", response.status_code, response.text)
+        raise RuntimeError(f"eBay async search error {response.status_code}")
 
     return response.json()
 
@@ -413,7 +515,6 @@ def search_items(
         )
 
         try:
-
             data = _perform_search_request(
                 token=token,
                 query=query,
@@ -422,9 +523,7 @@ def search_items(
                 offset=offset,
                 sort=sort,
             )
-
         except Exception as exc:
-
             logger.exception("EBAY REQUEST FAILED")
             break
 
@@ -436,7 +535,6 @@ def search_items(
             break
 
         normalized_page = [_normalize_item(i) for i in page_items]
-
         items.extend(normalized_page)
 
         if len(page_items) < page_size:
@@ -446,8 +544,83 @@ def search_items(
         pages_done += 1
 
     items = _dedupe_keep_order(items)
-
     logger.info("EBAY SEARCH END | total_items=%s", len(items))
+
+    return items[:wanted]
+
+
+async def search_items_async(
+    parsed_query: Dict[str, Any],
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+
+    logger.info("EBAY ASYNC SEARCH START")
+
+    query = _build_query(parsed_query)
+
+    if not query:
+        logger.warning("EBAY ASYNC QUERY EMPTY")
+        return []
+
+    logger.info("EBAY ASYNC QUERY = %s", query)
+
+    try:
+        token = await _get_oauth_token_async()
+    except Exception as e:
+        logger.exception("EBAY ASYNC TOKEN ERROR")
+        return []
+
+    constraints = parsed_query.get("constraints") or []
+    preferences = parsed_query.get("preferences") or []
+
+    filter_string = _build_filter_string(constraints)
+    sort = _build_sort(preferences)
+
+    wanted = max(1, int(limit))
+    page_size = min(MAX_PAGE_SIZE, wanted)
+
+    items: List[Dict[str, Any]] = []
+    offset = 0
+    pages_done = 0
+
+    while len(items) < wanted and pages_done < MAX_OFFSET_PAGES:
+        logger.info(
+            "EBAY ASYNC REQUEST | query=%s offset=%s limit=%s",
+            query,
+            offset,
+            page_size
+        )
+
+        try:
+            data = await _perform_search_request_async(
+                token=token,
+                query=query,
+                filter_string=filter_string,
+                limit=page_size,
+                offset=offset,
+                sort=sort,
+            )
+        except Exception as exc:
+            logger.exception("EBAY ASYNC REQUEST FAILED")
+            break
+
+        page_items = data.get("itemSummaries", []) or []
+        logger.info("EBAY ASYNC RESPONSE items=%s", len(page_items))
+
+        if not page_items:
+            break
+
+        normalized_page = [_normalize_item(i) for i in page_items]
+        items.extend(normalized_page)
+
+        if len(page_items) < page_size:
+            break
+
+        offset += page_size
+        pages_done += 1
+
+    items = _dedupe_keep_order(items)
+    logger.info("EBAY ASYNC SEARCH END | total_items=%s", len(items))
 
     return items[:wanted]
 
@@ -526,6 +699,74 @@ def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
     
     return safe_data
 
+
+async def get_item_details_async(item_id: str) -> Optional[Dict[str, Any]]:
+
+    logger.info("EBAY ASYNC GET ITEM START | item_id=%s", item_id)
+
+    try:
+        token = await _get_oauth_token_async()
+    except Exception as e:
+        logger.exception("EBAY ASYNC TOKEN ERROR")
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+    }
+
+    url = f"{ITEM_URL}{item_id}"
+
+    try:
+        response = await _ASYNC_CLIENT.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.exception("EBAY ASYNC CONNECTION ERROR")
+        return None
+
+    if response.status_code == 401:
+        logger.warning("EBAY ASYNC TOKEN EXPIRED for getItem")
+        try:
+            token = await _get_oauth_token_async(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
+            response = await _ASYNC_CLIENT.get(
+                url,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.exception("EBAY ASYNC REFRESH/CONNECTION ERROR")
+            return None
+
+    if response.status_code != 200:
+        logger.error("EBAY ASYNC GET ITEM ERROR %s %s", response.status_code, response.text)
+        return None
+
+    data = response.json()
+    
+    safe_data = {
+        "item_id": data.get("itemId"),
+        "title": data.get("title"),
+        "short_description": data.get("shortDescription"),
+        "description": data.get("description"),
+        "category_path": data.get("categoryPath"),
+        "condition": data.get("condition"),
+        "item_specifics": data.get("localizedAspects", []),
+        "return_terms": data.get("returnTerms", {}),
+        "shipping_options": data.get("shippingOptions", []),
+        "seller": data.get("seller", {}),
+        "price": data.get("price", {}),
+        "brand": data.get("brand"),
+        "color": data.get("color"),
+        "mpn": data.get("mpn"),
+    }
+    
+    return safe_data
+
+
 # ============================================================
 # SHIPPING COSTS API
 # ============================================================
@@ -586,6 +827,64 @@ def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> Option
     # We only need to return the shipping parts to keep it lightweight
     return {
         "item_id": item_id,
+        "title": data.get("title"),
+        "shipping_options": shipping_options,
+        "item_location": data.get("itemLocation", {}),
+        "estimated_delivery": data.get("estimatedAvailabilities", [])
+    }
+
+
+async def get_shipping_costs_async(item_id: str, country_code: str, zip_code: str) -> Optional[Dict[str, Any]]:
+
+    logger.info("EBAY ASYNC SHIPPING COSTS | item_id=%s country=%s zip=%s", item_id, country_code, zip_code)
+
+    try:
+        token = await _get_oauth_token_async()
+    except Exception as e:
+        logger.exception("EBAY ASYNC TOKEN ERROR")
+        return None
+
+    user_ctx = f"contextualLocation=country={country_code},zip={zip_code}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+        "X-EBAY-C-ENDUSERCTX": user_ctx,
+    }
+
+    url = f"{ITEM_URL}{item_id}"
+
+    try:
+        response = await _ASYNC_CLIENT.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        logger.exception("EBAY ASYNC CONNECTION ERROR")
+        return None
+
+    if response.status_code == 401:
+        try:
+            token = await _get_oauth_token_async(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
+            response = await _ASYNC_CLIENT.get(
+                url,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+            )
+        except Exception:
+            return None
+
+    if response.status_code != 200:
+        logger.error("EBAY ASYNC SHIPPING COSTS ERROR %s %s", response.status_code, response.text)
+        return None
+
+    data = response.json()
+    shipping_options = data.get("shippingOptions", [])
+    
+    return {
+        "item_id": item_id,
+        "title": data.get("title"),
         "shipping_options": shipping_options,
         "item_location": data.get("itemLocation", {}),
         "estimated_delivery": data.get("estimatedAvailabilities", [])

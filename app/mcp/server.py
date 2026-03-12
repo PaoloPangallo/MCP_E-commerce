@@ -197,29 +197,11 @@ def search_products(query: str, include_shipping: bool = False, session_id: str 
             query=query,
             db=db,
             user=context.user,
-            llm_engine="ollama"
+            llm_engine="ollama",
+            include_shipping=include_shipping,
         )
 
         normalized = _normalize_search_output(raw)
-
-        if include_shipping and normalized.get("top_result"):
-            top_item_id = normalized["top_result"].get("ebay_id")
-            if top_item_id:
-                try:
-                    logger.info("MCP TOOL search_products - fetching shipping for top item %s", top_item_id)
-                    shipping_raw = execute_shipping_costs_tool(
-                        {
-                            "item_id": top_item_id,
-                            "country_code": "IT",
-                            "zip_code": "",
-                        },
-                        context,
-                    )
-                    shipping_norm = _normalize_shipping_costs_output(shipping_raw)
-                    normalized["top_result"]["shipping_info"] = shipping_norm.get("data")
-                    normalized["top_result"]["shipping_status"] = shipping_norm.get("status")
-                except Exception as e:
-                    logger.warning("Auto-shipping fetch failed in search pipeline: %s", e)
 
         normalized["_backend"] = "mcp"
 

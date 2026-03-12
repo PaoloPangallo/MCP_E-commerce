@@ -13,7 +13,20 @@ function upsertStep(
   previous: AgentStep[],
   incoming: Partial<AgentStep> & { step: number }
 ): AgentStep[] {
-  const index = previous.findIndex((s) => s.step === incoming.step)
+  const index = previous.findIndex((s) => {
+    if (s.step !== incoming.step) return false
+    if (incoming.action && s.action && s.action !== incoming.action) return false
+
+    if (incoming.status === "running") {
+      return s.status === "thinking" && !s.action_input
+    }
+
+    if (incoming.status === "ok" || incoming.status === "error") {
+      return s.status === "running" || s.status === "thinking"
+    }
+
+    return true
+  })
 
   if (index === -1) {
     return [

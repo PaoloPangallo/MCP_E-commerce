@@ -5,13 +5,14 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import AutorenewIcon from "@mui/icons-material/Autorenew"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import SearchIcon from "@mui/icons-material/Search"
-import StorefrontIcon from "@mui/icons-material/Storefront"
-import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined"
+import LocalShippingIcon from "@mui/icons-material/LocalShipping"
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined"
 import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import PsychologyIcon from "@mui/icons-material/Psychology"
+import StorefrontIcon from "@mui/icons-material/Storefront"
+import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined"
 
 import type { AgentStep, PlannedTask } from "../types"
 
@@ -50,7 +51,10 @@ function humanizeToolName(action?: string, input?: any) {
     case "price_history_tool":
       return "Studio lo storico dei prezzi..."
     case "shipping_tool":
+    case "get_shipping_costs":
       return "Calcolo stime di spedizione..."
+    case "get_item_details":
+      return "Recupero dettagli tecnici prodotto..."
     case "finish":
       return "Sintesi dei risultati..."
     default:
@@ -69,6 +73,11 @@ function getActionIcon(action?: string) {
     case "weather_tool":
       return <CloudOutlinedIcon sx={{ fontSize: 16 }} />
     case "price_history_tool":
+      return <InsightsOutlinedIcon sx={{ fontSize: 16 }} />
+    case "shipping_tool":
+    case "get_shipping_costs":
+      return <LocalShippingIcon sx={{ fontSize: 16 }} />
+    case "get_item_details":
       return <InsightsOutlinedIcon sx={{ fontSize: 16 }} />
     case "finish":
       return <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Protocol
 
-from app.services.parser import call_gemini, call_ollama
+from app.services.parser import call_gemini_async, call_ollama_async
 
 
 class ToolContextLike(Protocol):
@@ -15,48 +15,21 @@ def _clean_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def normalize_conversation_arguments(action_input: Dict[str, Any], fallback_query: str = "") -> Dict[str, Any]:
-    query = _clean_text(action_input.get("query") or fallback_query)
-    if not query:
-        raise ValueError("conversation richiede una query non vuota.")
-    return {"query": query}
-
-
-def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
+async def _call_conversation_llm_async(prompt: str, llm_engine: str) -> str:
     engine = _clean_text(llm_engine).lower() or "ollama"
-
     if engine == "gemini":
-        return _clean_text(call_gemini(prompt))
+        return _clean_text(await call_gemini_async(prompt))
     if engine == "ollama":
-        return _clean_text(call_ollama(prompt))
-
+        return _clean_text(await call_ollama_async(prompt))
     return ""
 
 
-def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
-    clean = normalize_conversation_arguments(action_input)
+async def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+    query = _clean_text(action_input.get("query"))
+    if not query:
+        return {"status": "error", "error": "Query missing"}
 
-    prompt = (
-        "Sei ebayGPT, un assistente e-commerce in italiano rapido e conciso.\n"
-        "Regola 1: NON essere prolisso, rispondi con 1-2 frasi al massimo.\n"
-        "Regola 2: NON offrire liste di azioni a meno che non ti venga esplicitamente richiesto.\n"
-        "Regola 3: Sii amichevole ma vai dritto al punto.\n\n"
-        f"Contesto delle ultime richieste dell'utente: {clean.get('context_info', 'Nessuno')}\n"
-        f"Messaggio utente: {clean['query']}"
-    )
+    prompt = f"Sei un assistente e-commerce. Rispondi a: {query}"
+    answer = await _call_conversation_llm_async(prompt, getattr(context, "llm_engine", "ollama"))
 
-    answer = _call_conversation_llm(prompt, getattr(context, "llm_engine", "ollama"))
-
-    if answer:
-        return {
-            "status": "ok",
-            "query": clean["query"],
-            "answer": answer,
-        }
-
-    return {
-        "status": "error",
-        "query": clean["query"],
-        "error": "Non riesco a generare una risposta conversazionale in questo momento.",
-        "answer": "",
-    }
+    return {"status": "ok", "query": query, "answer": answer} if answer else {"status": "error", "answer": ""}

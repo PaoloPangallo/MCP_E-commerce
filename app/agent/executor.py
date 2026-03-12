@@ -196,7 +196,7 @@ class ToolExecutor:
             tool_call.tool,
             tool_call.input,
         )
-        result = await asyncio.to_thread(spec.executor, tool_call.input, self.context)
+        result = await spec.executor(tool_call.input, self.context)
         result = self._normalize_result_payload(result)
         result.setdefault("_backend", "local")
         logger.info("ToolExecutor LOCAL success | tool=%s", tool_call.tool)

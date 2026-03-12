@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.agent.memory import AgentMemory
 from app.agent.prompts import build_planner_prompt
@@ -249,7 +248,8 @@ class ReactPlanner:
 
         # Usiamo l'approccio generico basato sull'ordine dei tool previsti per l'intento
         for tool_name in self._ordered_tools_for_intent(intent):
-            # Se il tool è già stato eseguito e ha raggiunto uno stato terminale (es. ha prodotto risultati finali o eccezioni bloccanti)
+            # Se il tool è già stato eseguito e ha raggiunto uno stato terminale (es. ha prodotto risultati finali o
+            # eccezioni bloccanti)
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
             
@@ -257,8 +257,8 @@ class ReactPlanner:
             if self._exceeds_tool_budget(memory, tool_name):
                 continue
 
-            # Proviamo a normalizzare gli input. 
-            # Se restituisce None, significa che mancano i prerequisiti (es. l'item_id per la spedizione e la ricerca non ha ancora finito)
+            # Proviamo a normalizzare gli input. Se restituisce None, significa che mancano i prerequisiti (es.
+            # l'item_id per la spedizione e la ricerca non ha ancora finito)
             normalized_input = self._normalize_action_input(tool_name, {}, memory)
             if normalized_input is not None:
                 return PlannerOutput(
@@ -380,13 +380,18 @@ class ReactPlanner:
 
         thought = str(payload.get("thought") or "").strip()
         intent = str(payload.get("intent") or "").strip().lower()
-        action = str(payload.get("action") or "").strip().lower()
-        action_input = payload.get("action_input") or {}
+
+        # Check for multiple actions natively to resolve the Compare Bottleneck
+        actions_data = payload.get("actions") or []
+        run_parallel = payload.get("run_parallel", len(actions_data) > 1)
+
+        single_action = str(payload.get("action") or "").strip().lower()
+        single_action_input = payload.get("action_input") or {}
 
         if intent not in VALID_INTENTS:
             intent = self._infer_intent(memory)
 
-        if action in {"finish", "stop"}:
+        if single_action in {"finish", "stop"}:
             if memory.has_pending_tasks():
                 return self._safe_fallback_decide(memory, forced_intent=intent)
 
@@ -399,22 +404,33 @@ class ReactPlanner:
                 intent=intent,
             )
 
-        if action not in TOOLS:
-            logger.warning("Planner selected invalid tool=%r.", action)
-            return None
+        # Build list of parsed actions
+        parsed_actions = []
+        
+        # If the LLM returned a list of `actions`
+        if actions_data and isinstance(actions_data, list):
+            for act_dict in actions_data:
+                act = str(act_dict.get("action") or "").strip().lower()
+                ainput = act_dict.get("action_input") or {}
+                if act in TOOLS and not self._exceeds_tool_budget(memory, act):
+                    norm = self._normalize_action_input(act, ainput, memory)
+                    if norm is not None:
+                        parsed_actions.append(ToolCall(tool=act, input=norm))
+        # If the LLM returned a single `action`
+        elif single_action and single_action in TOOLS and not self._exceeds_tool_budget(memory, single_action):
+            norm = self._normalize_action_input(single_action, single_action_input, memory)
+            if norm is not None:
+                parsed_actions.append(ToolCall(tool=single_action, input=norm))
 
-        if self._exceeds_tool_budget(memory, action):
-            logger.warning("Planner selected tool=%s but budget is exhausted.", action)
+        if not parsed_actions:
+            logger.warning("Planner LLM output unviable tools or budget exhausted.")
             return self._safe_fallback_decide(memory, forced_intent=intent)
-
-        normalized_input = self._normalize_action_input(action, action_input, memory)
-        if normalized_input is None:
-            logger.warning("Planner selected tool=%s with unusable input=%r.", action, action_input)
-            return None
 
         return PlannerOutput(
             thought=thought or "Procedo con il prossimo step.",
-            action=ToolCall(tool=action, input=normalized_input),
+            actions=parsed_actions if len(parsed_actions) > 1 else [],
+            action=parsed_actions[0] if len(parsed_actions) == 1 else None,
+            run_parallel=run_parallel,
             intent=intent,
         )
 
@@ -490,6 +506,41 @@ class ReactPlanner:
             return None
 
         clean = dict(action_input or {})
+
+        # Merge history if the query is underspecified (elliptical)
+        if action == "search_products":
+            query = str(clean.get("query") or "").strip().lower()
+            # Common elliptical cues: "the best ones", "more", "any cheaper?", "show me others"
+            elliptical_cues = {"migliori", "meglio", "altre", "altri", "economici", "economico", "meno", "ancora", "più"}
+            tokens = set(re.findall(r"\w+", query))
+            
+            is_elliptical = (
+                not query or 
+                len(tokens) <= 2 and (tokens & elliptical_cues)
+            )
+
+            if is_elliptical and memory.session_memory.recent_queries:
+                # Get the most recent query that wasn't the current one (if possible)
+                history = memory.session_memory.recent_queries
+                # The first one might be the current query if it was already saved
+                prev_query = history[0] if len(history) > 0 else None
+                # If the first one matches current cleaned query, take the second
+                if prev_query and prev_query.lower() == memory.user_query.lower() and len(history) > 1:
+                    prev_query = history[1]
+                
+                if prev_query:
+                    # Simple merge: append keywords
+                    # We avoid duplicates
+                    new_query = f"{prev_query} {query}".strip()
+                    # Clean up double words
+                    words = []
+                    seen = set()
+                    for w in new_query.split():
+                        if w.lower() not in seen:
+                            words.append(w)
+                            seen.add(w.lower())
+                    clean["query"] = " ".join(words)
+                    logger.info(f"Context merged: '{query}' -> '{clean['query']}' using history '{prev_query}'")
 
         try:
             if spec.input_normalizer:

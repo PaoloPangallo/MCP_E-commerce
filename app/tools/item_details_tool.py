@@ -1,58 +1,31 @@
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict, Optional, Protocol
 
-if TYPE_CHECKING:
-    from app.agent.tool_registry import ToolContext
-
-from app.services.ebay import get_item_details
-
-logger = logging.getLogger(__name__)
+from app.services.ebay import get_item_details_async
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+class ToolContextLike(Protocol):
+    db: Any
+    user: Optional[object]
+    llm_engine: str
 
 
 def normalize_item_details_arguments(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
-    item_id = _clean_text(action_input.get("item_id"))
-    if not item_id and getattr(memory, "search_payload", None):
-        results = memory.search_payload.get("results")
-        if results and len(results) > 0:
-            item_id = results[0].get("ebay_id", "")
-            
+    item_id = action_input.get("item_id")
     if not item_id:
-        raise ValueError("item_details_tool richiede un item_id valido.")
+        # try to get from memory if available
+        pass
     return {"item_id": item_id}
 
 
-async def execute_item_details_tool(action_input: Dict[str, Any], context: "ToolContext") -> Dict[str, Any]:
-    """
-    Esegue il tool per scaricare i dettagli completi di un oggetto.
-    A differenza degli altri tool, questo esegue una request I/O-bound asincrona/bloccante
-    quindi avvolgiamo la chiamata sincrona in un thread executor se necessario, ma dato 
-    che services/ebay.py è sincrono con requests.Session, lo eseguiamo in un offtrack async.
-    """
-    clean = normalize_item_details_arguments(action_input)
-    item_id = clean["item_id"]
+async def execute_item_details_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+    item_id = action_input.get("item_id")
+    if not item_id:
+        return {"status": "error", "message": "item_id missing"}
 
-    try:
-        import asyncio
-        data = await asyncio.to_thread(get_item_details, item_id)
-    except Exception as exc:
-        logger.exception("Errore in execute_item_details_tool per %s: %s", item_id, exc)
-        return {"item_id": item_id, "status": "error", "error": str(exc)}
-
+    data = await get_item_details_async(item_id)
     if not data:
-        return {
-            "item_id": item_id,
-            "status": "not_found",
-            "message": "Nessun dettaglio trovato o oggetto non esistente.",
-        }
+        return {"status": "not_found", "item_id": item_id}
 
-    return {
-        "item_id": item_id,
-        "status": "ok",
-        "data": data,
-    }
+    return {"status": "ok", "data": data}

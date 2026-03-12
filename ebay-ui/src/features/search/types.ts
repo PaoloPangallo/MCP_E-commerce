@@ -24,6 +24,8 @@ export interface SearchItem {
     relevance?: number
     condition?: number
   }
+  shipping_info?: Record<string, any>
+  shipping_status?: string
 }
 
 export interface ComparisonCandidate extends SearchItem {

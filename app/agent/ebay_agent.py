@@ -23,7 +23,7 @@ from app.agent.schemas import (
 from app.agent.task_decomposer import decompose_query
 from app.agent.tool_registry import ToolContext, analyze_user_query
 from app.mcp.client import MCPToolClient
-from app.services.parser import call_gemini, call_ollama
+from app.services.parser import call_gemini_async, call_ollama_async
 
 logger = logging.getLogger(__name__)
 
@@ -384,14 +384,12 @@ class EbayReactAgent:
 
         return fallback
 
-    @staticmethod
-    async def _call_final_llm(prompt: str, llm_engine: str) -> Optional[str]:
-        import asyncio
+    async def _call_final_llm(self, prompt: str, llm_engine: str) -> Optional[str]:
         try:
             if llm_engine == "gemini":
-                return await asyncio.to_thread(call_gemini, prompt)
+                return await call_gemini_async(prompt)
             if llm_engine == "ollama":
-                return await asyncio.to_thread(call_ollama, prompt)
+                return await call_ollama_async(prompt)
             return None
         except Exception as exc:
             logger.warning("Final answer LLM failed: %s", exc)

@@ -12,6 +12,8 @@ import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
 import type { SearchItem } from "../types"
 import SellerInfo from "../../seller/SellerInfo.tsx";
 import ExplanationChips from "./ExplanationChips.tsx";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping"
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
 
 function formatPrice(price?: number, currency?: string) {
   if (typeof price !== "number") return "Prezzo non disponibile"
@@ -65,6 +67,21 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
 
               <Typography sx={{ fontSize: 27, fontWeight: 700, color: "#111827", mt: 1 }}>{formatPrice(item.price, item.currency)}</Typography>
               {item.condition ? <Typography sx={{ fontSize: 13, color: "#6b7280", mt: 0.5 }}>Condizione: {item.condition}</Typography> : null}
+              
+              {item.shipping_info && (
+                <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 0.75, color: "#059669" }}>
+                  <LocalShippingIcon sx={{ fontSize: 14 }} />
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                    {(() => {
+                      const opt = item.shipping_info.shipping_options?.[0]
+                      const costValue = opt?.shippingCost?.value || opt?.cost?.value
+                      const costCurrency = opt?.shippingCost?.currency || opt?.cost?.currency
+                      if (!costValue || costValue === "0.00") return "Spedizione GRATIS"
+                      return `Spedizione: ${costValue} ${costCurrency ?? ""}`
+                    })() || "Spedizione non specificata"}
+                  </Typography>
+                </Box>
+              )}
             </Box>
 
             <Box display="flex" gap={1} flexWrap="wrap" justifyContent="flex-end">

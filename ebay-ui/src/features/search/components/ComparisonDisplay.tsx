@@ -453,7 +453,7 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
                     <TableBody>
                         {/* PRICE ROW with highlights */}
                         <TableRow>
-                            <TableCell sx={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>Prezzo Effettivo</TableCell>
+                            <TableCell sx={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>Prezzo Oggetto</TableCell>
                             {comparison_matrix.map((c, i) => (
                                 <TableCell key={i} align="center">
                                     <Typography sx={{
@@ -466,6 +466,22 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
                                     }}>
                                         {formatPrice(c.price, c.currency)}
                                         {c.price === minPrice && <CheckCircleIcon sx={{ fontSize: 14 }} />}
+                                    </Typography>
+                                </TableCell>
+                            ))}
+                        </TableRow>
+
+                        <TableRow sx={{ bgcolor: "#FDFDFD" }}>
+                            <TableCell sx={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>Spedizione</TableCell>
+                            {comparison_matrix.map((c, i) => (
+                                <TableCell key={i} align="center">
+                                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#059669" }}>
+                                        {(() => {
+                                            const opt = c.shipping_info?.shipping_options?.[0]
+                                            const costValue = opt?.shippingCost?.value || opt?.cost?.value
+                                            if (!costValue || costValue === "0.00") return "GRATIS"
+                                            return `${costValue} ${opt?.shippingCost?.currency || opt?.cost?.currency || ""}`
+                                        })()}
                                     </Typography>
                                 </TableCell>
                             ))}
