@@ -1,6 +1,7 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.db.database import get_db
 from app.models.user import User
@@ -19,38 +20,38 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 def get_optional_user(
-    token: str | None = Depends(oauth2_scheme),
+    token_header: Optional[str] = Depends(oauth2_scheme),
+    token_query: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ):
-
+    token = token_header or token_query
+    
     if not token:
         return None
 
     try:
-
         payload = decode_token(token)
-
         user_id = get_user_id_from_payload(payload)
 
         if not user_id:
             return None
 
         user = db.query(User).filter(User.id == user_id).first()
-
         return user
 
     except TokenError:
         return None
-
     except Exception:
         return None
 
 
 def get_current_user(
-    token: str | None = Depends(oauth2_scheme),
+    token_header: Optional[str] = Depends(oauth2_scheme),
+    token_query: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ):
-
+    token = token_header or token_query
+    
     if not token:
         raise HTTPException(
             status_code=401,

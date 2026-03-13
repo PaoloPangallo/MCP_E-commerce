@@ -24,22 +24,13 @@ from app.mcp.asgi import app as mcp_app
 async def app_lifespan(app: FastAPI):
     import asyncio
     from app.services.model_singleton import preload as _preload_model
-    from app.mcp.client import MCPToolClient
-    import os
 
     # 1) Warm up the SentenceTransformer on the main thread before serving requests
     logger.info("Pre-loading SentenceTransformer model...")
     await asyncio.to_thread(_preload_model)
     logger.info("SentenceTransformer model ready.")
 
-    # 2) Create app-level MCP client (lazy connection — the MCP server is
-    #    mounted on the same process, so it's not reachable during startup).
-    #    The executor falls back to local tools if MCP is not connected.
-    mcp_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8050/mcp/mcp")
-    app.state.mcp_client = MCPToolClient(server_url=mcp_url, enabled=True)
-    logger.info("App-level MCP client created (lazy) | url=%s", mcp_url)
-
-    # 3) Check Redis Connectivity for session memory
+    # 2) Check Redis Connectivity for session memory
     from app.services.memory_service import redis_client
     try:
         if redis_client.ping():

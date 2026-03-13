@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from app.services.parser import parse_query_service
 from app.services.search_pipeline import run_search_pipeline
 from app.services.seller_pipeline import run_seller_pipeline
+from app.models.user import User
 from app.tools import (
     execute_conversation_tool,
     execute_compare_tool,
@@ -87,13 +88,39 @@ def _close_db(db: Any) -> None:
             logger.warning("Failed to close DB session: %s", exc)
 
 
+def resolve_user_by_id(user_id_str: str) -> Optional[User]:
+    """Default user resolver that fetches user from DB by ID string."""
+    if not user_id_str:
+        return None
+    
+    db = _get_db()
+    if not db:
+        return None
+        
+    try:
+        user_id = int(user_id_str)
+        user = db.query(User).filter(User.id == user_id).first()
+        return user
+    except (ValueError, Exception) as exc:
+        logger.warning("Failed to resolve user by ID '%s': %s", user_id_str, exc)
+        return None
+    finally:
+        _close_db(db)
+
+
 def _build_context(db: Any, llm_engine: str = "ollama", session_id: Optional[str] = None) -> MCPToolContext:
     user = None
+    
+    # Try configured resolver first
     if session_id and _DEPS.user_resolver:
         try:
             user = _DEPS.user_resolver(session_id)
         except Exception as exc:
-            logger.warning("Failed to resolve user for session_id=%s: %s", session_id, exc)
+            logger.warning("Failed to resolve user for session_id=%s via custom resolver: %s", session_id, exc)
+
+    # Fallback to default ID resolver if still None
+    if user is None and session_id:
+        user = resolve_user_by_id(session_id)
 
     return MCPToolContext(
         db=db,
@@ -175,10 +202,9 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
 @mcp.tool(
     name="search_products",
     description=(
-        "Cerca prodotti e-commerce usando la pipeline completa: parsing query, "
-        "retrieval, reranking, trust scoring e analisi finale. "
-        "Se include_shipping=true, calcola automaticamente anche i costi di spedizione "
-        "per il primo risultato, risparmiando un passaggio aggiuntivo."
+        "Cerca prodotti e-commerce usando la pipeline completa di search, ranking e trust. "
+        "Se include_shipping=true, calcola automaticamente i costi di spedizione "
+        "per il primo risultato."
     ),
 )
 def search_products(query: str, include_shipping: bool = False, session_id: str = "") -> str:
@@ -243,10 +269,7 @@ def search_products(query: str, include_shipping: bool = False, session_id: str 
 
 @mcp.tool(
     name="analyze_seller",
-    description=(
-        "Analizza un venditore e-commerce recuperando feedback, trust score "
-        "e sentiment score."
-    ),
+    description="Analizza un venditore e-commerce usando feedback, trust score e sentiment.",
 )
 def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id: str = "") -> str:
     db = None
@@ -293,8 +316,7 @@ def profile_query(query: str, session_id: str = "") -> str:
 @mcp.tool(
     name="conversation",
     description=(
-        "Gestisce messaggi conversazionali generici quando non serve usare "
-        "tool e-commerce specifici."
+        "Risponde a messaggi conversazionali generici quando non serve usare tool eBay specifici."
     ),
 )
 def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -> str:
@@ -322,8 +344,8 @@ def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -
 @mcp.tool(
     name="compare_products",
     description=(
-        "Confronta più prodotti e-commerce cercando ognuno in parallelo e "
-        "restituisce una matrice di confronto (prezzo, trust, rilevanza, condizione) "
+        "Confronta più prodotti e-commerce cercando ognuno in parallelo. "
+        "Restituisce una matrice di confronto (prezzo, trust, rilevanza, condizione) "
         "con il prodotto vincitore e la motivazione. "
         "Input: lista di query separate da virgola o punto e virgola, ad esempio "
         "'iphone 13, samsung galaxy s22'. Min 2, max 4 query."

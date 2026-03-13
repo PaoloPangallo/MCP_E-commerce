@@ -36,8 +36,13 @@ def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
 def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_conversation_arguments(action_input)
 
+    custom_instructions = ""
+    if context.user and getattr(context.user, "custom_instructions", None):
+        custom_instructions = f"REGOLA 0 (PRIORITÀ ASSOLUTA - PREFERENZE DELL'UTENTE):\n{context.user.custom_instructions}\n\nDevi RISPETTARE ASSOLUTAMENTE la regola 0 (es. se ti chiede una lingua specifica, DEVI usarla per tutta la risposta).\n\n"
+
     prompt = (
-        "Sei ebayGPT, un assistente e-commerce in italiano rapido e conciso.\n"
+        "Sei ebayGPT, un assistente e-commerce.\n"
+        f"{custom_instructions}"
         "Regola 1: NON essere prolisso, rispondi con 1-2 frasi al massimo.\n"
         "Regola 2: NON offrire liste di azioni a meno che non ti venga esplicitamente richiesto.\n"
         "Regola 3: Sii amichevole ma vai dritto al punto.\n\n"

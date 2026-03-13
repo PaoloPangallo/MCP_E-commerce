@@ -165,10 +165,7 @@ async def agent_event_generator(
     try:
         db = SessionLocal()
 
-        # Use the app-level MCP client singleton if available
-        app_mcp_client = getattr(request.app.state, "mcp_client", None)
-
-        agent = EbayReactAgent(db=db, user=user, mcp_client=app_mcp_client)
+        agent = EbayReactAgent(db=db, user=user)
 
         logger.info(
             "Agent created | mcp_server_url=%s | prefer_mcp=%s | strict_mcp=%s",
@@ -267,6 +264,13 @@ async def agent_stream(
         llm_engine,
         getattr(user, "id", None) if user is not None else None,
     )
+
+    if user and getattr(user, "custom_instructions", None):
+        logger.info("USER GEMS LOADED: %s", user.custom_instructions)
+    elif user:
+        logger.info("USER AUTHENTICATED but no GEMS found.")
+    else:
+        logger.info("ANONYMOUS REQUEST (no GEMS).")
 
     return StreamingResponse(
         agent_event_generator(request, clean_query, llm_engine, user),

@@ -232,27 +232,47 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
 # ============================================================
 
 def _build_query(parsed: Dict[str, Any]) -> str:
+    # 1) Elaboriamo i componenti principali
     parts: List[str] = []
-
+    
     brands = parsed.get("brands") or []
     product = parsed.get("product")
-    semantic_query = parsed.get("semantic_query")
-    original_query = parsed.get("original_query")
-
+    
     if brands:
         parts.extend(str(b).strip() for b in brands if str(b).strip())
-
     if product:
         parts.append(str(product).strip())
-
-    if not parts and semantic_query:
-        parts.append(str(semantic_query).strip())
-
-    if not parts and original_query:
-        parts.append(str(original_query).strip())
-
-    query = " ".join(p for p in parts if p).strip()
-    return query
+        
+    # 2) Includiamo constraints che non sono price/condition (spesso sono feature testuali)
+    constraints = parsed.get("constraints") or []
+    for c in constraints:
+        ctype = c.get("type")
+        val = c.get("value")
+        if ctype not in ("price", "condition") and val:
+            if isinstance(val, list):
+                parts.extend(str(v) for v in val)
+            else:
+                parts.append(str(val))
+    
+    # 3) Se ancora vuoto, usiamo semantic/original query
+    if not parts:
+        fallback = parsed.get("semantic_query") or parsed.get("original_query")
+        if fallback:
+            parts.append(str(fallback).strip())
+            
+    # 4) DEDUPLICAZIONE PAROLE MANTENENDO ORDINE
+    # Esempio: "iPhone iPhone 13 128gb" -> "iPhone 13 128gb"
+    final_tokens: List[str] = []
+    seen_tokens_low = set()
+    
+    raw_query = " ".join(parts)
+    for word in raw_query.split():
+        w_low = word.lower()
+        if w_low not in seen_tokens_low:
+            final_tokens.append(word)
+            seen_tokens_low.add(w_low)
+            
+    return " ".join(final_tokens).strip()
 
 
 def _build_sort(preferences: List[Dict[str, Any]]) -> Optional[str]:

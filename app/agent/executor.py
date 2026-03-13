@@ -162,9 +162,10 @@ class ToolExecutor:
         return list(await asyncio.gather(*tasks, return_exceptions=False))
 
     async def _execute_once(self, tool_call: ToolCall, spec: Any) -> Dict[str, Any]:
-        # Inject session context 
-        if self.context.user and hasattr(self.context.user, "session_id"):
-            tool_call.input["session_id"] = self.context.user.session_id
+        if self.context.user:
+            user_id = getattr(self.context.user, "id", None)
+            if user_id:
+                tool_call.input["session_id"] = str(user_id)
 
         if self._should_use_mcp(tool_call.tool):
             try:
@@ -213,19 +214,14 @@ class ToolExecutor:
         if not is_available:
             return False
 
+        # Se la lista è stata già scoperta via list_tools_async, usala
         if check_list and self._mcp_tools is not None:
             return tool_name in self._mcp_tools
 
-        # Fallback pre-dynamic in case it's not initialized yet (to be safe or to trigger init)
-        return tool_name in {
-            "search_products",
-            "analyze_seller",
-            "conversation",
-            "profile_query",
-            "compare_products",
-            "get_item_details",
-            "get_shipping_costs",
-        }
+        # Lista non ancora scoperta: assume che tutti i tool siano disponibili su MCP
+        # (verrà confermato/fallito alla prima chiamata reale).
+        # initialize() di norma viene chiamato dal ToolExecutor prima di execute().
+        return True
 
     @classmethod
     def _get_cached_result(cls, cache_key: str) -> Optional[Dict[str, Any]]:

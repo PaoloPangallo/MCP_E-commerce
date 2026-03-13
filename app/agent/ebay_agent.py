@@ -36,7 +36,6 @@ class EbayReactAgent:
         mcp_server_url: Optional[str] = None,
         strict_mcp: Optional[bool] = None,
         prefer_mcp: bool = True,
-        mcp_client: Optional[object] = None,  # inject app-level singleton if available
     ) -> None:
         self.db = db
         self.user = user
@@ -59,15 +58,13 @@ class EbayReactAgent:
 
         self.strict_mcp = bool(strict_mcp)
 
-        if mcp_client is not None:
-            # Use the externally provided (app-level) MCP client
-            self.mcp_client = mcp_client
-        else:
-            # Fallback: create a per-request client (previous behaviour)
-            self.mcp_client = MCPToolClient(
-                server_url=self.mcp_server_url,
-                enabled=self.prefer_mcp,
-            )
+        # Sempre creare un client per-request: viene connesso tramite
+        # `async with self.mcp_client` all'inizio di run_stream, garantendo
+        # che _session sia sempre inizializzata prima dell'esecuzione dei tool.
+        self.mcp_client = MCPToolClient(
+            server_url=self.mcp_server_url,
+            enabled=self.prefer_mcp,
+        )
 
         logger.info(
             "EbayReactAgent initialized | prefer_mcp=%s | strict_mcp=%s | mcp_server_url=%s",

@@ -390,63 +390,43 @@ def extract_brands(doc, original_text: str) -> List[str]:
 
 def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]:
     brand_norm = {b.lower() for b in brands}
-    candidates: List[str] = []
-
-    try:
-        for chunk in doc.noun_chunks:
-            text = chunk.text.strip()
-            if not text:
-                continue
-
-            text_norm = text.lower()
-
-            if any(b in text_norm for b in brand_norm):
-                continue
-
-            if re.search(r"\d+\s*(euro|€)?", text_norm):
-                continue
-
-            forbidden = {"prezzo", "euro", "minimo", "massimo", "massima", "minima", "costo"}
-            if any(f in text_norm.split() for f in forbidden):
-                continue
-
-            tokens = [t.text for t in chunk if not t.is_punct and not t.is_space]
-            if tokens:
-                cand = " ".join(tokens).strip()
-                if cand and not is_vague_product(cand):
-                    candidates.append(cand)
-    except Exception:
-        pass
-
-    if candidates:
-        candidates = sorted(candidates, key=len, reverse=True)
-        best = candidates[0].strip()
-        return None if is_vague_product(best) else best
-
-    content_tokens: List[str] = []
     forbidden_tokens = {
         "prezzo", "euro", "minimo", "massimo", "costo",
         "sotto", "sopra", "circa", "intorno", "entro"
     }
 
+    content_tokens: List[str] = []
+    
+    # Scansione lineare di tutti i token rilevanti
     for token in doc:
-        if token.is_stop or token.is_punct or token.is_space:
+        # 1. Filtriamo punteggiatura e spazi
+        if token.is_punct or token.is_space:
             continue
 
-        if token.text.lower() in brand_norm or token.text.lower() in forbidden_tokens:
+        # 2. Filtriamo i brand già identificati e le parole vietate
+        t_low = token.text.lower()
+        if t_low in brand_norm or t_low in forbidden_tokens:
             continue
 
-        if re.fullmatch(r"\d+(?:[.,]\d+)?", token.text):
-            continue
-
-        if token.pos_ in {"NOUN", "PROPN"}:
+        # 3. Prendiamo NOUN, PROPN, ADJ e NUM (fondamentali per le specifiche)
+        if token.pos_ in {"NOUN", "PROPN", "ADJ", "NUM"}:
             content_tokens.append(token.text)
 
-    if content_tokens:
-        best = " ".join(content_tokens[:4]).strip()
-        return None if is_vague_product(best) else best
+    if not content_tokens:
+        return None
 
-    return None
+    # 4. Pulizia stop words solo se all'inizio o alla fine (es. "un", "con", "di")
+    while content_tokens and get_nlp().vocab[content_tokens[0]].is_stop:
+        content_tokens.pop(0)
+    while content_tokens and get_nlp().vocab[content_tokens[-1]].is_stop:
+        content_tokens.pop()
+            
+    if not content_tokens:
+        return None
+        
+    # Uniamo fino a un massimo di 8 token (solitamente un prodotto non è più lungo)
+    best = " ".join(content_tokens[:8]).strip()
+    return None if is_vague_product(best) else best
 
 
 # ============================================================

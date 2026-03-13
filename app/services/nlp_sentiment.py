@@ -222,7 +222,7 @@ def extract_sentiment_label(text: str) -> str:
     """
     try:
         # Fallback to Ollama if Gemini is not set/fails, but call_gemini is usually faster
-        res = call_gemini(prompt)
+        res = call_ollama(prompt)
         res = res.strip().upper()
         if "POSITIVE" in res: return "POSITIVE"
         if "NEGATIVE" in res: return "NEGATIVE"

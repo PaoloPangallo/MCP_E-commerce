@@ -62,34 +62,42 @@ def _dedupe_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
-    product = parsed.get("product")
-    brands = parsed.get("brands") or []
+    parts: List[str] = []
     
-    condition_words = ["usato", "usata", "nuovo", "nuova", "ricondizionato", "rigenerato", "seconda mano", "sigillato", "mai usato"]
-
+    brands = parsed.get("brands") or []
+    product = parsed.get("product")
+    
+    if brands:
+        parts.extend(str(b).strip() for b in brands if str(b).strip())
     if product:
-        product_str = str(product)
-        for w in condition_words:
-            product_str = re.sub(rf"\b{w}\b", "", product_str, flags=re.IGNORECASE)
-        product_str = re.sub(r"\s+", " ", product_str).strip()
+        parts.append(str(product).strip())
         
-        if not product_str:
-            product_str = str(product)
+    # Includiamo constraints testuali (no price/condition)
+    constraints = parsed.get("constraints") or []
+    for c in constraints:
+        ctype = c.get("type")
+        val = c.get("value")
+        if ctype not in ("price", "condition") and val:
+            if isinstance(val, list):
+                parts.extend(str(v) for v in val)
+            else:
+                parts.append(str(val))
+                
+    if not parts:
+        return fallback_query
+        
+    # Deduplicazione parole mantenendo ordine
+    final_tokens: List[str] = []
+    seen_tokens_low = set()
+    
+    raw_query = " ".join(parts)
+    for word in raw_query.split():
+        w_low = word.lower()
+        if w_low not in seen_tokens_low:
+            final_tokens.append(word)
+            seen_tokens_low.add(w_low)
             
-        if brands:
-            return f"{product_str} {' '.join(brands)}"
-        return product_str
-
-    semantic_query = parsed.get("semantic_query") or fallback_query
-    if semantic_query:
-        query_str = str(semantic_query)
-        for w in condition_words:
-            query_str = re.sub(rf"\b{w}\b", "", query_str, flags=re.IGNORECASE)
-        query_str = re.sub(r"\s+", " ", query_str).strip()
-        if query_str:
-            return query_str
-            
-    return fallback_query
+    return " ".join(final_tokens).strip()
 
 
 def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
