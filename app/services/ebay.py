@@ -65,10 +65,7 @@ def _normalize_numeric(value: Any) -> Optional[float]:
         return None
 
 
-def _clean_text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
+from app.utils.text import clean_text as _clean_text
 
 
 def _dedupe_keep_order(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

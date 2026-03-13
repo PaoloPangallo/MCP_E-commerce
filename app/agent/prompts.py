@@ -1,7 +1,41 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+# Approx 4 characters per token as a rough safety heuristic
+ROUGH_CHARS_PER_TOKEN = 4
+MAX_LLM_PROMPT_TOKENS = 6000
+
+
+def _estimate_tokens(text: str) -> int:
+    return len(str(text)) // ROUGH_CHARS_PER_TOKEN
+
+
+def _truncate_scratchpad(scratchpad: List[Dict[str, Any]], context_budget_chars: int) -> str:
+    """Formats the scratchpad as JSON but aggressively truncates older items if it exceeds the budget."""
+    if not scratchpad:
+        return "Nessuna azione precedente."
+
+    formatted_items = []
+    # Add items starting from most recent backwards
+    for item in reversed(scratchpad):
+        item_str = json.dumps(item, ensure_ascii=False, indent=2)
+        formatted_items.insert(0, item_str)
+
+    full_str = json.dumps([json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2)
+
+    # If it fits the budget, return it all
+    if len(full_str) <= context_budget_chars:
+        return full_str
+
+    # Otherwise, start dropping the oldest items
+    while len(formatted_items) > 1 and len(json.dumps([json.loads(i) for i in formatted_items])) > context_budget_chars:
+        formatted_items.pop(0)  # Remove oldest
+
+    leftover = json.dumps([json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2)
+    return f"[... {len(scratchpad) - len(formatted_items)} older items omitted ...]\n" + leftover
+
 
 PLANNER_SYSTEM_PROMPT = """
 You are ebayGPT, an e-commerce agent that plans the NEXT BEST ACTION.
@@ -49,6 +83,7 @@ Use only the provided data.
 Do not invent prices, sellers, trust scores, metrics, or results.
 Integrate available tool outputs into one coherent answer.
 If the structured data is enough, be concise and direct.
+CRITICAL: For simple greetings (e.g., "ciao", "hey") or purely conversational turns, respond directly and briefly.
 If there is no useful result, say it clearly.
 No markdown.
 No bullet points.
@@ -144,46 +179,68 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
 
 def build_planner_prompt(
     user_query: str,
-    scratchpad: Dict[str, Any],
+    scratchpad: List[Dict[str, Any]], # Changed type hint to List
     step_index: int,
     max_steps: int,
     tool_catalog: Dict[str, Dict[str, Any]],
     custom_instructions: Optional[str] = None
 ) -> str:
-    compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
     compact_tool_catalog = _compact_tool_catalog_for_prompt(tool_catalog)
+    tools_json = json.dumps(compact_tool_catalog, ensure_ascii=False, indent=2)
 
     system_prompt = PLANNER_SYSTEM_PROMPT
     if custom_instructions:
         system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}"
 
+    # Estimate token usage to safeguard context window
+    current_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(tools_json) + _estimate_tokens(user_query)
+    budget_chars = max(1000, (MAX_LLM_PROMPT_TOKENS - current_tokens) * ROUGH_CHARS_PER_TOKEN)
+
+    scratchpad_str = _truncate_scratchpad(scratchpad, budget_chars)
+
     return (
         f"{system_prompt}\n\n"
         f"Step:{step_index}/{max_steps}\n"
-        f"Available tools:{_compact_json(compact_tool_catalog)}\n"
+        f"Available tools:{tools_json}\n"
         f"User query:{user_query}\n"
-        f"Scratchpad:{_compact_json(compact_scratchpad)}\n"
+        f"Scratchpad:{scratchpad_str}\n"
         f"Return JSON only."
     )
 
 
 def build_final_answer_prompt(
-    user_query: str, 
-    scratchpad: Dict[str, Any], 
+    user_query: str,
+    scratchpad: List[Dict[str, Any]],
     final_data: Dict[str, Any],
     custom_instructions: Optional[str] = None
 ) -> str:
-    compact_scratchpad = _compact_scratchpad_for_prompt(scratchpad)
     compact_final_data = _compact_final_data_for_prompt(final_data)
+    context_info = _compact_json(compact_final_data)
 
     system_prompt = FINAL_ANSWER_SYSTEM_PROMPT
     if custom_instructions:
         system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS (Apply these specifically to your tone/style/content):\n{custom_instructions}"
+        
+    pref_str = ""
+    # Make sure we don't blow up context with massive scratchpad
+    base_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(user_query) + _estimate_tokens(context_info)
+    budget_chars = max(1000, (MAX_LLM_PROMPT_TOKENS - base_tokens) * ROUGH_CHARS_PER_TOKEN)
+    
+    scratch_str = _truncate_scratchpad(scratchpad, budget_chars)
 
-    return (
-        f"{system_prompt}\n\n"
-        f"User query:{user_query}\n"
-        f"Scratchpad:{_compact_json(compact_scratchpad)}\n"
-        f"Final data:{_compact_json(compact_final_data)}\n"
-        f"Write the final answer now."
-    )
+    return f"""{system_prompt}
+
+CONVERSATION CONTEXT:
+{context_info}
+
+USER STATUS/PREFERENCES:
+{pref_str}
+
+OBSERVATIONS HISTORY:
+{scratch_str}
+
+USER REQUEST:
+{user_query}
+
+Write the final answer now.
+"""

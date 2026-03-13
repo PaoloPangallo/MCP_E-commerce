@@ -9,6 +9,7 @@ Parser ottimizzato:
 
 from __future__ import annotations
 
+import httpx
 import json
 import logging
 import os
@@ -20,8 +21,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-import requests
 from rapidfuzz import fuzz, process
+from app.db.redis import redis_client
 
 # ============================================================
 # LOAD .env
@@ -47,8 +48,8 @@ SPACY_MODEL = "it_core_news_sm"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
 LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "12"))
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b-q4_K_M")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "45"))
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "12"))
@@ -464,106 +465,106 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 # LLM CALLS
 # ============================================================
 
-def call_ollama(prompt: str) -> Optional[str]:
+import logging
+from typing import Optional
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+OLLAMA_URL = "http://localhost:11434/api/chat"
+
+
+async def call_ollama(
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    think: bool = False,
+) -> Optional[str]:
+    """
+    Wrapper async per Ollama chat API.
+    """
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+        "think": think,
+        "options": {
+            "temperature": 0.1,
+            "top_p": 0.9,
+            "num_predict": 768,
+            "num_ctx": 8192,
+        },
+    }
 
     try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
+            response = await client.post(OLLAMA_URL, json=payload)
+            response.raise_for_status()
+            data = response.json()
 
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
+        message = data.get("message") or {}
+        content = (message.get("content") or "").strip()
+        thinking = (message.get("thinking") or "").strip()
 
-                    "temperature": 0,
-                    "top_p": 0.9,
-                    "repeat_penalty": 1.1,
+        if content:
+            return content
 
-                    "num_predict": 256,
-                    "num_ctx": 8192,
+        if think and thinking:
+            return await call_ollama(prompt, system_prompt=system_prompt, think=False)
 
-                },
-            },
-            timeout=OLLAMA_TIMEOUT,
-        )
-
-        if response.status_code != 200:
-            logger.warning("Ollama HTTP %s", response.status_code)
-            return None
-
-        data = response.json()
-
-        text = data.get("response", "").strip()
-
-        if not text:
-            return None
-
-        return text
+        return None
 
     except Exception as e:
-
-        logger.warning("Ollama REST error: %s", e)
+        logger.warning("Ollama async error: %s", e)
         return None
 
 
-def call_gemini(prompt: str) -> Optional[str]:
+async def call_gemini(prompt: str) -> Optional[str]:
     if not GEMINI_API_KEY:
         return None
 
-    request_id = str(uuid.uuid4())[:8]
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     )
-
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
     try:
-        t0 = time.time()
-        response = requests.post(url, json=payload, timeout=GEMINI_TIMEOUT)
-        elapsed = round(time.time() - t0, 2)
-
-        logger.info("[%s] Gemini HTTP %s in %ss", request_id, response.status_code, elapsed)
-
-        if response.status_code != 200:
-            return None
-
-        data = response.json()
-
-        text = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text")
-        )
-
-        return text.strip() if text else None
-
+        async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text")
+            return text.strip() if text else None
     except Exception as e:
-        logger.warning("[%s] Gemini error: %s", request_id, e)
+        logger.warning("Gemini async error: %s", e)
         return None
 
 
-def call_llm(prompt: str) -> Tuple[Optional[str], str]:
+async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
     primary = LLM_PROVIDER
     fallback = LLM_FALLBACK_PROVIDER
 
-    def _call(provider: str) -> Optional[str]:
+    async def _call(provider: str) -> Optional[str]:
         if provider == "ollama":
-            return call_ollama(prompt)
+            return await call_ollama(prompt)
         if provider == "gemini":
-            return call_gemini(prompt)
+            return await call_gemini(prompt)
         return None
 
-    out = _call(primary)
+    out = await _call(primary)
     if out:
         return out, primary
 
     if fallback and fallback != primary:
-        out2 = _call(fallback)
+        out2 = await _call(fallback)
         if out2:
             return out2, fallback
 
@@ -746,7 +747,7 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
 # LLM PARSE
 # ============================================================
 
-def llm_parse(query: str) -> Tuple[Optional[Dict[str, Any]], str]:
+async def llm_parse(query: str) -> Tuple[Optional[Dict[str, Any]], str]:
     prompt = f"""
 You are a strict semantic query parser for an e-commerce assistant.
 
@@ -799,7 +800,7 @@ Rules:
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()
 
-    response, used_provider = call_llm(prompt)
+    response, used_provider = await call_llm(prompt)
     if not response:
         return None, used_provider
 
@@ -929,7 +930,7 @@ def correct_brands_in_text(text: str) -> str:
 # MAIN SERVICE
 # ============================================================
 
-def parse_query_service(
+async def parse_query_service(
     text: str,
     use_llm: bool = True,
     include_meta: bool = True,
@@ -938,15 +939,22 @@ def parse_query_service(
     text = normalize_text(text)
     text = correct_brands_in_text(text)
 
-    rule_result = rule_based_parse(text)
+    # Caching check
+    cache_key = f"query_parse:{text}:{use_llm}"
+    if use_llm:
+        cached = redis_client.get_json(cache_key)
+        if cached:
+            logger.info("Parser cache hit for query: %s", text)
+            return cached
 
+    rule_result = rule_based_parse(text)
     llm_result = None
     used_provider: Optional[str] = None
 
     effective_use_llm = use_llm and should_try_llm(text)
 
     if effective_use_llm:
-        parsed_llm, used_provider = llm_parse(text)
+        parsed_llm, used_provider = await llm_parse(text)
         llm_result = parsed_llm
 
     final = merge_results(rule_result, llm_result)
@@ -960,5 +968,9 @@ def parse_query_service(
         }
     else:
         final.pop("_meta", None)
+
+    # Cache the result if LLM was used and successful or if rule-based was enough
+    if effective_use_llm and llm_result:
+        redis_client.set_json(cache_key, final, ttl_seconds=3600) # 1 hour cache
 
     return final

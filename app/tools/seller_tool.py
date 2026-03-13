@@ -37,8 +37,8 @@ _SELLER_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+from app.utils.text import clean_text as _clean_text
+# Using shared _clean_text from app.utils.text
 
 
 def _bounded_int(value: Any, default: int, min_value: int, max_value: int) -> int:

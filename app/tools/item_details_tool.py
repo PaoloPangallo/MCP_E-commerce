@@ -11,8 +11,8 @@ from app.services.ebay import get_item_details
 logger = logging.getLogger(__name__)
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+from app.utils.text import clean_text as _clean_text
+# Using shared _clean_text from app.utils.text
 
 
 def normalize_item_details_arguments(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
@@ -27,19 +27,15 @@ def normalize_item_details_arguments(action_input: Dict[str, Any], memory: Any) 
     return {"item_id": item_id}
 
 
-async def execute_item_details_tool(action_input: Dict[str, Any], context: "ToolContext") -> Dict[str, Any]:
+def execute_item_details_tool(action_input: Dict[str, Any], context: "ToolContext") -> Dict[str, Any]:
     """
     Esegue il tool per scaricare i dettagli completi di un oggetto.
-    A differenza degli altri tool, questo esegue una request I/O-bound asincrona/bloccante
-    quindi avvolgiamo la chiamata sincrona in un thread executor se necessario, ma dato 
-    che services/ebay.py è sincrono con requests.Session, lo eseguiamo in un offtrack async.
     """
-    clean = normalize_item_details_arguments(action_input)
+    clean = normalize_item_details_arguments(action_input, getattr(context, "memory", None))
     item_id = clean["item_id"]
 
     try:
-        import asyncio
-        data = await asyncio.to_thread(get_item_details, item_id)
+        data = get_item_details(item_id)
     except Exception as exc:
         logger.exception("Errore in execute_item_details_tool per %s: %s", item_id, exc)
         return {"item_id": item_id, "status": "error", "error": str(exc)}

@@ -11,8 +11,10 @@ class ToolContextLike(Protocol):
     llm_engine: str
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+from typing import Any, Dict
+
+from app.utils.text import clean_text as _clean_text
+# Using shared _clean_text from app.utils.text
 
 
 def normalize_conversation_arguments(action_input: Dict[str, Any], fallback_query: str = "") -> Dict[str, Any]:

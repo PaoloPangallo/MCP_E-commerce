@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Any, Dict, Iterable, List, Optional
 
+from app.db.redis import redis_client
 from app.agent.schemas import Observation, ObservationQuality, ObservationStatus, ToolCall
 from app.agent.tool_registry import TOOLS, ToolContext, get_tool_spec
 from app.mcp.client import MCPToolClient
@@ -14,8 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolExecutor:
-    _RESULT_CACHE: Dict[str, tuple[float, Dict[str, Any]]] = {}
-    _CACHE_TTL = 120.0
+    _CACHE_TTL = 120
 
     def __init__(
         self,
@@ -225,23 +225,11 @@ class ToolExecutor:
 
     @classmethod
     def _get_cached_result(cls, cache_key: str) -> Optional[Dict[str, Any]]:
-        cached_entry = cls._RESULT_CACHE.get(cache_key)
-        if not cached_entry:
-            return None
-
-        ts, cached = cached_entry
-        if time.time() - ts >= cls._CACHE_TTL:
-            try:
-                del cls._RESULT_CACHE[cache_key]
-            except KeyError:
-                pass
-            return None
-
-        return dict(cached)
+        return redis_client.get_json(cache_key)
 
     @classmethod
     def _set_cached_result(cls, cache_key: str, result: Dict[str, Any]) -> None:
-        cls._RESULT_CACHE[cache_key] = (time.time(), dict(result))
+        redis_client.set_json(cache_key, result, ttl_seconds=int(cls._CACHE_TTL))
 
     @staticmethod
     def _make_cache_key(tool_name: str, action_input: Dict[str, Any]) -> str:

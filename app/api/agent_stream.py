@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, Dict, Optional
@@ -24,9 +25,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------
 
 MAX_QUERY_LENGTH = 500
-WORKER_HARD_TIMEOUT_SECONDS = 90.0
+
+# Request concurrency limit to prevent starving the server
+MAX_CONCURRENT_STREAMS = int(os.getenv("MAX_CONCURRENT_STREAMS", "10"))
+_stream_semaphore = asyncio.Semaphore(MAX_CONCURRENT_STREAMS)
+
+WORKER_HARD_TIMEOUT_SECONDS = 180.0
 QUEUE_WAIT_TIMEOUT_SECONDS = 75.0
-HEARTBEAT_INTERVAL_SECONDS = 15.0
+HEARTBEAT_INTERVAL_SECONDS = 10.0 # Modified: Changed from 15.0 to 10.0
 
 _ALLOWED_EVENT_TYPES = {
     "start",
@@ -79,6 +85,17 @@ def _sanitize_query(query: str) -> str:
 
     if "data:" in lowered and any(marker in lowered for marker in _EVENT_STREAM_MARKERS):
         return ""
+
+    # Prompt injection guardrails: strip system/instruction overrides
+    injection_patterns = [
+        r"<\|.*?\|>",  # Token markers
+        r"(?i)\bignore\s+(all\s+)?(previous\s+)?(instructions|directions)\b",
+        r"(?i)\bsystem(\s+prompt)?\s*:",
+        r"(?i)\bnew\s+instructions\s*:",
+        r"(?i)\byou\s+are\s+now\b"
+    ]
+    for pattern in injection_patterns:
+        q = re.sub(pattern, "", q)
 
     q = re.sub(r"\s+", " ", q).strip()
 
@@ -182,31 +199,42 @@ async def agent_event_generator(
         )
 
         logger.info(
-            "Starting async agent stream | query=%s | llm_engine=%s",
+            "Starting async agent stream | query=%s | llm_engine=%s | timeout=%ss",
             query,
             llm_engine,
+            WORKER_HARD_TIMEOUT_SECONDS
         )
 
-        async for event in agent.run_stream(agent_request):
-            if await request.is_disconnected():
-                logger.info("Client disconnected from /agent/stream")
-                break
+        start_time = time.monotonic()
+        async with _stream_semaphore:
+            async for event in agent.run_stream(agent_request):
+                if time.monotonic() - start_time > WORKER_HARD_TIMEOUT_SECONDS:
+                    logger.warning("Agent stream hit hard timeout of %ss", WORKER_HARD_TIMEOUT_SECONDS)
+                    yield _sse({
+                        "type": "error",
+                        "message": "La richiesta ha richiesto troppo tempo ed è andata in timeout."
+                    })
+                    break
 
-            validated = _validate_event(event)
-            event_type = validated.get("type", "")
+                if await request.is_disconnected():
+                    logger.info("Client disconnected from /agent/stream")
+                    break
 
-            yield _sse(validated)
+                validated = _validate_event(event)
+                event_type = validated.get("type", "")
 
-            if event_type == "done":
-                done_sent = True
+                yield _sse(validated)
 
-            # Send heartbeats during gaps
-            now = time.monotonic()
-            if now - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
-                yield _sse({"type": "heartbeat"})
-                last_heartbeat = now
+                if event_type == "done":
+                    done_sent = True
 
-            await asyncio.sleep(0)  # Yield control to event loop
+                # Send heartbeats during gaps
+                now = time.monotonic()
+                if now - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
+                    yield _sse({"type": "heartbeat"})
+                    last_heartbeat = now
+                    
+                await asyncio.sleep(0)  # Yield control to event loop
 
         if not done_sent and not await request.is_disconnected():
             done_sent = True

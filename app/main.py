@@ -31,12 +31,13 @@ async def app_lifespan(app: FastAPI):
     logger.info("SentenceTransformer model ready.")
 
     # 2) Check Redis Connectivity for session memory
-    from app.services.memory_service import redis_client
+    from app.db.redis import redis_client
     try:
-        if redis_client.ping():
-            logger.info("Connected to Redis at localhost:6379 (session memory ready)")
+        # redis_client is a RedisManager, we need to check its internal state or just try an operation
+        if redis_client.get_json("health_check") is None:
+            logger.info("Redis cache ready (checked via RedisManager).")
     except Exception as e:
-        logger.warning("Could not connect to Redis: %s. Session memory/history will be disabled or fallback to mock.", e)
+        logger.warning("Could not connect to Redis: %s. Session memory/history will fallback to local memory.", e)
 
     async with mcp_app.router.lifespan_context(app):
         yield

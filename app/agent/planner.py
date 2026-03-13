@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.agent.memory import AgentMemory
 from app.agent.prompts import build_planner_prompt
@@ -367,15 +367,50 @@ class ReactPlanner:
             logger.info("Planner LLM returned empty output.")
             return None
 
-        json_text = extract_first_json_object(raw)
-        if not json_text:
-            logger.warning("Planner LLM returned no JSON. Raw head=%r", raw[:180])
-            return None
+        # json_text = extract_first_json_object(raw) # This line is replaced by the new parsing logic
+        # if not json_text: # This check is now part of the new parsing logic
+        #     logger.warning("Planner LLM returned no JSON. Raw head=%r", raw[:180])
+        #     return None
 
+        # try:
+        #     payload = json.loads(json_text)
+        # except Exception as exc:
+        #     logger.warning("Planner LLM returned malformed JSON: %s", exc)
+        #     return None
+
+        payload = None
         try:
-            payload = json.loads(json_text)
-        except Exception as exc:
-            logger.warning("Planner LLM returned malformed JSON: %s", exc)
+            # Handle possible markdown blocks wrapping JSON
+            match = re.search(r"```json\s*(.*?)\s*```", raw, re.DOTALL)
+            if match:
+                json_str = match.group(1)
+            else:
+                # Assuming extract_first_json_object is already imported or defined
+                json_str = extract_first_json_object(raw)
+
+            if json_str:
+                data = json.loads(json_str)
+                
+                action = data.get("action")
+                action_input = data.get("action_input")
+                
+                # Validate that the requested tool actually exists in the registry
+                if action and action != "finish" and action != "stop": # "final_answer" is not an action, "finish" or "stop" are
+                    # Assuming TOOLS is imported or defined
+                    if action not in TOOLS:
+                        logger.warning("LLM hallucinated invalid tool: %s. Falling back.", action)
+                        return None
+                
+                if action or action_input: # If there's an action or input, consider it valid JSON
+                    logger.info("Planner LLM returned valid JSON action=%s", action)
+                    payload = data
+            
+        except Exception as e:
+            logger.warning("Failed to parse Planner LLM response as JSON: %s\nResponse: %s", e, raw[:500])
+            return None # If parsing fails, return None
+
+        if not payload:
+            logger.warning("Planner LLM returned no usable JSON. Raw head=%r", raw[:180])
             return None
 
         thought = str(payload.get("thought") or "").strip()

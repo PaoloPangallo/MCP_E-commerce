@@ -94,14 +94,34 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           ) : null}
 
           {item.seller_name ? (
-            <Box mt={1.75}>
+            <Box mt={1.75} display="flex" gap={2} alignItems="center" flexWrap="wrap">
               <Button variant="text" onClick={() => setShowSellerPanel((prev) => !prev)} endIcon={showSellerPanel ? <ExpandLessIcon /> : <ExpandMoreIcon />} sx={{ px: 0, textTransform: "none", fontWeight: 600, color: "#111827", "&:hover": { bgcolor: "transparent" } }}>
                 {showSellerPanel ? "Nascondi seller deep dive" : "Mostra seller deep dive"}
               </Button>
-              <Collapse in={showSellerPanel} timeout="auto" unmountOnExit>
-                <Box mt={1}><SellerFeedbackPanel seller={item.seller_name} /></Box>
-              </Collapse>
+              <Button 
+                variant="text" 
+                onClick={() => window.dispatchEvent(new CustomEvent("send-chat", { detail: `Analizza nel dettaglio il prodotto con ID ${item.ebay_id}` }))}
+                sx={{ px: 0, textTransform: "none", fontWeight: 600, color: "#2563eb", "&:hover": { bgcolor: "transparent" } }}
+              >
+                Mostra dettagli prodotto
+              </Button>
             </Box>
+          ) : (
+            <Box mt={1.75}>
+              <Button 
+                variant="text" 
+                onClick={() => window.dispatchEvent(new CustomEvent("send-chat", { detail: `Analizza nel dettaglio il prodotto con ID ${item.ebay_id}` }))}
+                sx={{ px: 0, textTransform: "none", fontWeight: 600, color: "#2563eb", "&:hover": { bgcolor: "transparent" } }}
+              >
+                Mostra dettagli prodotto
+              </Button>
+            </Box>
+          )}
+
+          {item.seller_name ? (
+            <Collapse in={showSellerPanel} timeout="auto" unmountOnExit>
+              <Box mt={1}><SellerFeedbackPanel seller={item.seller_name} /></Box>
+            </Collapse>
           ) : null}
         </Box>
       </Box>

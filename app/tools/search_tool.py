@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional, Protocol
 
+from app.utils.text import clean_text as _clean_text
+
 from app.services.search_pipeline import run_search_pipeline
 
 
@@ -12,8 +14,7 @@ class ToolContextLike(Protocol):
     llm_engine: str
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+# Using shared _clean_text from app.utils.text
 
 
 def clean_search_query(query: str) -> str:

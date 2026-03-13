@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
+from app.db.redis import redis_client
 from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.feedback import get_seller_feedback
@@ -24,14 +25,7 @@ from app.services.user_profiling import update_user_profile
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# IN-MEMORY CACHES (with TTL eviction)
-# ============================================================
-
 _CACHE_TTL = 300.0  # 5 minutes
-
-_SELLER_FEEDBACK_CACHE: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
-_SELLER_TRUST_CACHE: Dict[str, tuple[float, Dict[str, float]]] = {}
 
 MAX_RESULTS_FROM_EBAY = 20
 MAX_SELLERS_FOR_TRUST = 5
@@ -101,43 +95,40 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
 
 
 def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
-    key = seller_name.strip().lower()
-    now = time.time()
-
-    cached = _SELLER_FEEDBACK_CACHE.get(key)
+    seller_key = seller_name.strip().lower()
+    cache_key = f"seller_feedback:{seller_key}"
+    
+    cached = redis_client.get_json(cache_key)
     if cached is not None:
-        ts, data = cached
-        if now - ts < _CACHE_TTL:
-            return data
-        del _SELLER_FEEDBACK_CACHE[key]
+        return cached
 
     feedbacks = get_seller_feedback(seller_name, limit=limit) or []
-    _SELLER_FEEDBACK_CACHE[key] = (now, feedbacks)
+    redis_client.set_json(cache_key, feedbacks, ttl_seconds=int(_CACHE_TTL))
     return feedbacks
 
 
 def _compute_seller_trust_cached(seller_name: str) -> Optional[float]:
     seller_key = seller_name.strip().lower()
+    cache_key = f"seller_trust:{seller_key}"
+    
     feedbacks = _fetch_feedback_cached(seller_name, limit=MAX_FEEDBACK_PER_SELLER)
-
     if not feedbacks:
         return None
 
-    now = time.time()
-    cached = _SELLER_TRUST_CACHE.get(seller_key)
+    cached = redis_client.get_json(cache_key)
     if cached is not None:
-        ts, scores = cached
-        if now - ts < _CACHE_TTL and int(scores.get("count", -1)) == len(feedbacks):
-            return round(float(scores["trust_score"]), 3)
+        if int(cached.get("count", -1)) == len(feedbacks):
+            return round(float(cached["trust_score"]), 3)
 
     sentiment_score = compute_sentiment_score(feedbacks, max_texts=20)
     trust_score = compute_trust_score(feedbacks, sentiment_score=sentiment_score)
 
-    _SELLER_TRUST_CACHE[seller_key] = (now, {
+    result = {
         "count": float(len(feedbacks)),
         "sentiment_score": float(sentiment_score),
         "trust_score": float(trust_score),
-    })
+    }
+    redis_client.set_json(cache_key, result, ttl_seconds=int(_CACHE_TTL))
 
     return round(float(trust_score), 3)
 

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from app.utils.text import clean_text as _clean_text
 from app.agent.schemas import LatencyClass, ObservationQuality, ObservationStatus
 from app.tools import (
     execute_compare_tool,
@@ -142,8 +143,7 @@ def get_tool_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+# Using shared _clean_text from app.utils.text
 
 
 def analyze_user_query(query: str) -> Dict[str, Any]:

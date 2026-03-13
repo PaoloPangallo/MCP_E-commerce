@@ -33,6 +33,14 @@ export default function ChatPage() {
 
   const showWelcome = !hasSearches && chat.length <= 1
 
+  useEffect(() => {
+    const handleSendChat = (e: CustomEvent<string>) => {
+      handleSend(e.detail)
+    }
+    window.addEventListener("send-chat", handleSendChat as EventListener)
+    return () => window.removeEventListener("send-chat", handleSendChat as EventListener)
+  }, [handleSend])
+
   return (
     <ChatLayout
       onNewChat={resetChat}
