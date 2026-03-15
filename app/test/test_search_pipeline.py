@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 
 from app.services.parser import parse_query_service
@@ -7,113 +8,119 @@ from app.services.rag import retrieve_context
 from app.services.rag.reranker import rerank_products
 
 
-query = "scarpe"
+async def test_search():
+    query = "scarpe"
 
-print("\n======================")
-print("TEST SEARCH PIPELINE")
-print("======================\n")
-
-
-# ============================================================
-# 1) PARSER
-# ============================================================
-
-try:
-    print("1️⃣ PARSER")
-
-    parsed = parse_query_service(
-        query,
-        use_llm=True,
-        include_meta=True
-    )
-
-    print("Parsed query:")
-    print(parsed)
-
-except Exception:
-    print("❌ Parser error")
-    traceback.print_exc()
-    exit()
+    print("\n======================")
+    print("TEST SEARCH PIPELINE")
+    print("======================\n")
 
 
-# ============================================================
-# 2) EBAY SEARCH
-# ============================================================
+    # ============================================================
+    # 1) PARSER
+    # ============================================================
 
-try:
-    print("\n2️⃣ EBAY SEARCH")
+    try:
+        print("1️⃣ PARSER")
 
-    items = search_items(
-        parsed_query=parsed,
-        limit=10
-    )
+        parsed = await parse_query_service(
+            query,
+            use_llm=True,
+            include_meta=True
+        )
 
-    items = items or []
+        print("Parsed query:")
+        print(parsed)
 
-    print("Items found:", len(items))
-
-    if items:
-        print("\nSample item:")
-        print(items[0])
-
-except Exception:
-    print("❌ eBay error")
-    traceback.print_exc()
-    exit()
+    except Exception:
+        print("❌ Parser error")
+        traceback.print_exc()
+        return
 
 
-# ============================================================
-# 3) RAG INGEST
-# ============================================================
+    # ============================================================
+    # 2) EBAY SEARCH
+    # ============================================================
 
-try:
-    print("\n3️⃣ INGEST PRODUCTS")
+    try:
+        print("\n2️⃣ EBAY SEARCH")
 
-    ingest_products(items)
+        items = await search_items(
+            parsed_query=parsed,
+            limit=10
+        )
 
-    print("✅ ingest ok")
+        items = items or []
 
-except Exception:
-    print("❌ ingest error")
-    traceback.print_exc()
+        print("Items found:", len(items))
 
+        if items:
+            print("\nSample item:")
+            print(items[0])
 
-# ============================================================
-# 4) RAG RETRIEVAL
-# ============================================================
-
-try:
-    print("\n4️⃣ RETRIEVE CONTEXT")
-
-    docs = retrieve_context(query, k=5)
-
-    print("Documents retrieved:", len(docs))
-
-    if docs:
-        print("\nSample context doc:")
-        print(docs[0])
-
-except Exception:
-    print("❌ retrieve error")
-    traceback.print_exc()
+    except Exception:
+        print("❌ eBay error")
+        traceback.print_exc()
+        return
 
 
-# ============================================================
-# 5) RERANK
-# ============================================================
+    # ============================================================
+    # 3) RAG INGEST
+    # ============================================================
 
-try:
-    print("\n5️⃣ RERANK")
+    try:
+        print("\n3️⃣ INGEST PRODUCTS")
 
-    reranked = rerank_products(query, items)
+        ingest_products(items)
 
-    print("Reranked items:", len(reranked))
+        print("✅ ingest ok")
 
-except Exception:
-    print("❌ rerank error")
-    traceback.print_exc()
+    except Exception:
+        print("❌ ingest error")
+        traceback.print_exc()
 
 
-print("\n======================")
-print("TEST FINISHED")
-print("======================")
+    # ============================================================
+    # 4) RAG RETRIEVAL
+    # ============================================================
+
+    try:
+        print("\n4️⃣ RETRIEVE CONTEXT")
+
+        # retrieve_context is still sync as it calls Qdrant natively
+        docs = retrieve_context(query, k=5)
+
+        print("Documents retrieved:", len(docs))
+
+        if docs:
+            print("\nSample context doc:")
+            print(docs[0])
+
+    except Exception:
+        print("❌ retrieve error")
+        traceback.print_exc()
+
+
+    # ============================================================
+    # 5) RERANK
+    # ============================================================
+
+    try:
+        print("\n5️⃣ RERANK")
+
+        # rerank_products is likely sync (CPU intensive)
+        reranked = rerank_products(query, items)
+
+        print("Reranked items:", len(reranked))
+
+    except Exception:
+        print("❌ rerank error")
+        traceback.print_exc()
+
+
+    print("\n======================")
+    print("TEST FINISHED")
+    print("======================")
+
+if __name__ == "__main__":
+    asyncio.run(test_search())

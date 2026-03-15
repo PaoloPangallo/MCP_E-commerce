@@ -51,6 +51,11 @@ LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b-q4_K_M")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "45"))
 
+# Ollama Cloud (API diretta su ollama.com)
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
+OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
+OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com")
+
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "12"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
@@ -480,9 +485,12 @@ async def call_ollama(
     *,
     system_prompt: Optional[str] = None,
     think: bool = False,
-) -> Optional[str]:
+    stream: bool = False,
+) -> Any:
     """
     Wrapper async per Ollama chat API.
+    Se stream=True, restituisce un AsyncGenerator[str, None].
+    Altrimenti restituisce Optional[str].
     """
     messages = []
     if system_prompt:
@@ -492,7 +500,7 @@ async def call_ollama(
     payload = {
         "model": OLLAMA_MODEL,
         "messages": messages,
-        "stream": False,
+        "stream": stream,
         "think": think,
         "options": {
             "temperature": 0.1,
@@ -502,50 +510,173 @@ async def call_ollama(
         },
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-            response = await client.post(OLLAMA_URL, json=payload)
-            response.raise_for_status()
-            data = response.json()
+    if not stream:
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
+                response = await client.post(OLLAMA_URL, json=payload)
+                response.raise_for_status()
+                data = response.json()
 
-        message = data.get("message") or {}
-        content = (message.get("content") or "").strip()
-        thinking = (message.get("thinking") or "").strip()
+            message = data.get("message") or {}
+            content = (message.get("content") or "").strip()
+            thinking = (message.get("thinking") or "").strip()
 
-        if content:
-            return content
+            if content:
+                return content
 
-        if think and thinking:
-            return await call_ollama(prompt, system_prompt=system_prompt, think=False)
+            if think and thinking:
+                return await call_ollama(prompt, system_prompt=system_prompt, think=False)
 
-        return None
+            return None
+        except Exception as e:
+            logger.warning("Ollama async error: %s", e)
+            return None
+    else:
+        # Streaming mode
+        async def _ollama_generator():
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
+                    async with client.stream("POST", OLLAMA_URL, json=payload) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                                msg = chunk.get("message", {})
+                                content = msg.get("content", "")
+                                if content:
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
+            except Exception as e:
+                logger.warning("Ollama streaming error: %s", e)
+                yield ""
 
-    except Exception as e:
-        logger.warning("Ollama async error: %s", e)
-        return None
+        return _ollama_generator()
 
 
-async def call_gemini(prompt: str) -> Optional[str]:
+async def call_gemini(prompt: str, stream: bool = False) -> Any:
     if not GEMINI_API_KEY:
         return None
 
+    method = "streamGenerateContent" if stream else "generateContent"
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        f"{GEMINI_MODEL}:{method}?key={GEMINI_API_KEY}"
     )
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    try:
-        async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
-            response = await client.post(url, json=payload)
-            if response.status_code != 200:
-                return None
-            data = response.json()
-            text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text")
-            return text.strip() if text else None
-    except Exception as e:
-        logger.warning("Gemini async error: %s", e)
+    if not stream:
+        try:
+            async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code != 200:
+                    return None
+                data = response.json()
+                text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text")
+                return text.strip() if text else None
+        except Exception as e:
+            logger.warning("Gemini async error: %s", e)
+            return None
+    else:
+        # Gemini streaming
+        async def _gemini_generator():
+            try:
+                async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
+                    async with client.stream("POST", url, json=payload) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            # Gemini returns a list of objects or a sequence of JSON objects
+                            # In streamGenerateContent it's usually a JSON array or multiple objects
+                            # Actually it's often SSE or just a stream of JSON.
+                            # Standard Gemini REST API for streaming is a bit different.
+                            # Usually it returns a JSON array that grows or multiple JSON objects.
+                            # We'll try to parse each line as a potential JSON chunk.
+                            line = line.strip()
+                            if line.startswith("[") or line.startswith(","):
+                                line = line[1:].strip()
+                            if line.endswith("]"):
+                                line = line[:-1].strip()
+                            if not line:
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                                text = chunk.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                                if text:
+                                    yield text
+                            except json.JSONDecodeError:
+                                continue
+            except Exception as e:
+                logger.warning("Gemini streaming error: %s", e)
+                yield ""
+
+        return _gemini_generator()
+
+
+async def call_ollama_cloud(
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    stream: bool = False,
+) -> Any:
+    """
+    Chiama Ollama Cloud (ollama.com) via SDK Python ufficiale.
+    Richiede OLLAMA_API_KEY nel .env.
+    Se stream=True restituisce un AsyncGenerator[str, None].
+    Altrimenti restituisce Optional[str].
+    """
+    if not OLLAMA_API_KEY:
+        logger.warning("OLLAMA_API_KEY non impostata — Ollama Cloud non disponibile")
         return None
+
+    try:
+        from ollama import AsyncClient
+    except ImportError:
+        logger.error(
+            "Libreria 'ollama' non installata. Esegui: pip install ollama"
+        )
+        return None
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    client = AsyncClient(
+        host=OLLAMA_CLOUD_HOST,
+        headers={"Authorization": f"Bearer {OLLAMA_API_KEY}"},
+    )
+
+    if not stream:
+        try:
+            response = await client.chat(
+                model=OLLAMA_CLOUD_MODEL,
+                messages=messages,
+            )
+            content = (response.message.content or "").strip()
+            return content if content else None
+        except Exception as e:
+            logger.warning("Ollama Cloud error: %s", e)
+            return None
+    else:
+        async def _ollama_cloud_generator():
+            try:
+                async for part in await client.chat(
+                    model=OLLAMA_CLOUD_MODEL,
+                    messages=messages,
+                    stream=True,
+                ):
+                    content = part.message.content
+                    if content:
+                        yield content
+            except Exception as e:
+                logger.warning("Ollama Cloud streaming error: %s", e)
+                yield ""
+
+        return _ollama_cloud_generator()
 
 
 async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
@@ -555,6 +686,8 @@ async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
     async def _call(provider: str) -> Optional[str]:
         if provider == "ollama":
             return await call_ollama(prompt)
+        if provider == "ollama_cloud":
+            return await call_ollama_cloud(prompt)
         if provider == "gemini":
             return await call_gemini(prompt)
         return None

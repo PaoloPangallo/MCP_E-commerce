@@ -53,7 +53,7 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
 class ToolContext:
     db: Session
     user: Optional[object] = None
-    llm_engine: str = "ollama"
+    llm_engine: str = "gemini"
 
 
 @dataclass(slots=True)

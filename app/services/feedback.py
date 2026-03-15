@@ -1,12 +1,10 @@
-from __future__ import annotations
-
+import asyncio
 import logging
 import os
 import xml.etree.ElementTree as ET
-from functools import lru_cache
 from typing import Dict, List, Optional
 
-import requests
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +15,6 @@ REQUEST_TIMEOUT = int(os.getenv("EBAY_FEEDBACK_TIMEOUT", "10"))
 SITE_ID = os.getenv("EBAY_SITE_ID", "101")
 
 _PER_PAGE = 50
-_SESSION = requests.Session()
 
 _NS = {"e": "urn:ebay:apis:eBLBaseComponents"}
 
@@ -104,105 +101,68 @@ def _parse_feedback_page(xml_text: str) -> List[Dict]:
     return feedbacks
 
 
-def fetch_feedback_page(username: str, page: int, per_page: int = _PER_PAGE) -> List[Dict]:
+async def fetch_feedback_page(
+    client: httpx.AsyncClient,
+    username: str,
+    page: int,
+    per_page: int = _PER_PAGE
+) -> List[Dict]:
     """
-    Fetch a single feedback page from eBay Trading API.
-    Returns [] on failure or no results.
+    Fetch a single feedback page using an async client.
     """
     username = _clean_username(username)
-
-    if not username:
+    if not username or not EBAY_USER_TOKEN:
         return []
-
-    if not EBAY_USER_TOKEN:
-        raise RuntimeError("EBAY_USER_TOKEN is not set")
 
     headers = _build_headers()
     body = _build_body(username, page, per_page)
 
-    last_error: Optional[Exception] = None
-
     for attempt in range(2):
         try:
-            response = _SESSION.post(
+            response = await client.post(
                 TRADING_URL,
                 headers=headers,
-                data=body.encode("utf-8"),
+                content=body.encode("utf-8"),
                 timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code != 200:
-                logger.warning(
-                    "GetFeedback HTTP %s for seller=%s page=%s",
-                    response.status_code,
-                    username,
-                    page,
-                )
+                logger.warning("GetFeedback HTTP %s for %s", response.status_code, username)
                 return []
 
-            response.encoding = "utf-8"
             return _parse_feedback_page(response.text)
 
-        except requests.Timeout as e:
-            last_error = e
-            logger.warning(
-                "GetFeedback timeout for seller=%s page=%s attempt=%s",
-                username,
-                page,
-                attempt + 1,
-            )
-        except requests.RequestException as e:
-            last_error = e
-            logger.warning(
-                "GetFeedback request error for seller=%s page=%s attempt=%s: %s",
-                username,
-                page,
-                attempt + 1,
-                e,
-            )
-
-    if last_error:
-        logger.warning(
-            "GetFeedback failed after retries for seller=%s page=%s: %s",
-            username,
-            page,
-            last_error,
-        )
+        except (httpx.TimeoutException, httpx.RequestError) as e:
+            logger.warning("GetFeedback error for %s p%s: %s", username, page, e)
 
     return []
 
 
-@lru_cache(maxsize=256)
-def get_seller_feedback(username: str, limit: int = 200) -> List[Dict]:
+async def get_seller_feedback(username: str, limit: int = 200) -> List[Dict]:
     """
-    Fetch + cache seller feedback.
-    No side effects.
-    Cache key is based on normalized username + limit.
+    Fetch seller feedback in parallel pages.
     """
     username = _clean_username(username)
-
     if not username:
         return []
 
     limit = max(1, min(int(limit), 500))
     per_page = min(_PER_PAGE, limit)
-    max_pages = max(1, (limit + per_page - 1) // per_page)
+    max_pages = (limit + per_page - 1) // per_page
+
+    async with httpx.AsyncClient() as client:
+        tasks = [
+            fetch_feedback_page(client, username, page, per_page)
+            for page in range(1, max_pages + 1)
+        ]
+        results = await asyncio.gather(*tasks)
 
     all_feedback: List[Dict] = []
-
-    for page in range(1, max_pages + 1):
-        page_feedback = fetch_feedback_page(username, page, per_page)
-
-        if not page_feedback:
-            break
-
-        all_feedback.extend(page_feedback)
-
-        if len(all_feedback) >= limit:
-            break
-
-        if len(page_feedback) < per_page:
-            break
+    for page_results in results:
+        if page_results:
+            all_feedback.extend(page_results)
+            if len(all_feedback) >= limit:
+                break
 
     return all_feedback[:limit]
 

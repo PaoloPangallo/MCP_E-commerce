@@ -504,12 +504,11 @@ class ReactPlanner:
         )
 
     async def _call_llm(self, prompt: str) -> Optional[str]:
-        import asyncio
         try:
             if self.llm_engine == "gemini":
-                return await asyncio.to_thread(call_gemini, prompt)
+                return await call_gemini(prompt)
             if self.llm_engine == "ollama":
-                return await asyncio.to_thread(call_ollama, prompt)
+                return await call_ollama(prompt)
         except Exception as exc:
             logger.warning("Planner LLM failed: %s", exc)
         return None

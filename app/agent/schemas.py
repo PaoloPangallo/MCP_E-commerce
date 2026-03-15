@@ -14,7 +14,7 @@ class AgentRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     query: str
-    llm_engine: Literal["gemini", "ollama", "rule_based"] = "ollama"
+    llm_engine: Literal["gemini", "ollama", "rule_based"] = "gemini"
     max_steps: int = 4
     return_trace: bool = True
 
@@ -134,3 +134,11 @@ class FinalEvent(BaseModel):
     agent_trace: List[Dict[str, Any]] = Field(default_factory=list)
     final_data: Dict[str, Any] = Field(default_factory=dict)
     steps_used: int = 0
+
+
+class AnswerChunkEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: Literal["answer_chunk"] = "answer_chunk"
+    chunk: str
+    is_last: bool = False

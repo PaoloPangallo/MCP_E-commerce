@@ -260,10 +260,10 @@ export default function ChatLayout({
           flex: 1,
           minWidth: 0,
           display: "flex",
-          flexDirection: "column"
+          flexDirection: "column",
+          bgcolor: "#ffffff"
         }}
       >
-
         {/* TOP BAR */}
         <Box
           sx={{
@@ -271,43 +271,65 @@ export default function ChatLayout({
             px: 2,
             display: "flex",
             alignItems: "center",
-            gap: 1,
-            borderBottom: "1px solid #e5e7eb"
+            justifyContent: "space-between",
+            borderBottom: "1px solid #f0f0f0",
+            bgcolor: "#fff",
+            position: "sticky",
+            top: 0,
+            zIndex: 10
           }}
         >
-          {isMobile && (
-            <IconButton onClick={() => setMobileOpen(true)}>
-              <MenuIcon />
-            </IconButton>
-          )}
-
-          <Typography fontSize={14} fontWeight={600}>
-            ebayGPT
-          </Typography>
+          <Box display="flex" alignItems="center" gap={1}>
+            {isMobile && (
+              <IconButton onClick={() => setMobileOpen(true)} size="small">
+                <MenuIcon />
+              </IconButton>
+            )}
+            <Typography fontSize={14} fontWeight={600} color="#111827">
+              ebayGPT
+            </Typography>
+          </Box>
         </Box>
 
         {/* CHAT AREA */}
         <Box
           sx={{
             flex: 1,
-            overflowY: "auto"
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center"
           }}
         >
-          {children}
+          <Box
+            sx={{
+              width: "100%",
+              maxWidth: 800,
+              flex: 1,
+              px: { xs: 2, md: 4 },
+              py: 4
+            }}
+          >
+            {children}
+          </Box>
         </Box>
 
         {/* COMPOSER */}
         {composer && (
           <Box
             sx={{
-              position: "sticky",
-              bottom: 0
+              display: "flex",
+              justifyContent: "center",
+              pb: 3,
+              px: 2,
+              bgcolor: "transparent"
             }}
           >
-            {composer}
+            <Box sx={{ width: "100%", maxWidth: 840 }}>
+              {composer}
+            </Box>
           </Box>
         )}
-
       </Box>
 
     </Box>

@@ -31,6 +31,7 @@ export interface AgentEvent {
   | "error"
   | "heartbeat"
   | "done"
+  | "answer_chunk"
 
   step?: number
   message?: string
@@ -40,6 +41,7 @@ export interface AgentEvent {
   input?: Record<string, any>
   ok?: boolean
   summary?: string
+  chunk?: string
 
   query?: string
   llm_engine?: string

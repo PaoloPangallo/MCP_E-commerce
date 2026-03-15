@@ -15,22 +15,14 @@ from app.services.compare_pipeline import run_compare_pipeline
 logger = logging.getLogger(__name__)
 
 
-def execute_compare_tool(action_input: Dict[str, Any], context: Any) -> Dict[str, Any]:
+async def execute_compare_tool(action_input: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Executes the product comparison pipeline.
-    
-    Args:
-        action_input: Dict containing 'queries' (comma-separated string).
-        context: ToolContext containing DB session and optionally llm_engine.
-        
-    Returns:
-        Structured comparison result.
     """
     queries_str = action_input.get("queries") or ""
     llm_engine = getattr(context, "llm_engine", "ollama")
     db = context.db
 
-    # Parse queries (same logic as in server.py)
     sep_queries = [
         q.strip()
         for q in queries_str.replace(";", ",").split(",")
@@ -41,22 +33,15 @@ def execute_compare_tool(action_input: Dict[str, Any], context: Any) -> Dict[str
         return {
             "status": "error",
             "error": "Fornisci almeno 2 query separate da virgola per confrontare i prodotti.",
-            "example": "iphone 13, samsung galaxy s22",
         }
 
     logger.info("Executing compare_tool | queries=%s", sep_queries)
 
-    # Since this is usually called from synchronous code (MCP or local executor),
-    # we run the async pipeline synchronously.
-    # Note: If called from an async context, this might need care with loop management.
-
     try:
-        return asyncio.run(
-            run_compare_pipeline(
-                queries=sep_queries,
-                db=db,
-                llm_engine=llm_engine
-            )
+        return await run_compare_pipeline(
+            queries=sep_queries,
+            db=db,
+            llm_engine=llm_engine
         )
 
     except Exception as exc:

@@ -24,18 +24,18 @@ def normalize_conversation_arguments(action_input: Dict[str, Any], fallback_quer
     return {"query": query}
 
 
-def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
+async def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
     engine = _clean_text(llm_engine).lower() or "ollama"
 
     if engine == "gemini":
-        return _clean_text(call_gemini(prompt))
+        return _clean_text(await call_gemini(prompt))
     if engine == "ollama":
-        return _clean_text(call_ollama(prompt))
+        return _clean_text(await call_ollama(prompt))
 
     return ""
 
 
-def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+async def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_conversation_arguments(action_input)
 
     custom_instructions = ""
@@ -52,7 +52,7 @@ def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContext
         f"Messaggio utente: {clean['query']}"
     )
 
-    answer = _call_conversation_llm(prompt, getattr(context, "llm_engine", "ollama"))
+    answer = await _call_conversation_llm(prompt, getattr(context, "llm_engine", "ollama"))
 
     if answer:
         return {

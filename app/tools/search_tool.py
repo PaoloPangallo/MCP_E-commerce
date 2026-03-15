@@ -45,10 +45,10 @@ def normalize_search_arguments(action_input: Dict[str, Any], fallback_query: str
     return {"query": query}
 
 
-def execute_search_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+async def execute_search_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_search_arguments(action_input)
 
-    payload = run_search_pipeline(
+    payload = await run_search_pipeline(
         query=clean["query"],
         db=context.db,
         user=getattr(context, "user", None),

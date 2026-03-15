@@ -86,10 +86,10 @@ def normalize_seller_arguments(
     }
 
 
-def execute_seller_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+async def execute_seller_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_seller_arguments(action_input)
 
-    payload = run_seller_pipeline(
+    payload = await run_seller_pipeline(
         seller_name=clean["seller_name"],
         page=clean["page"],
         limit=clean["limit"],

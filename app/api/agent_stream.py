@@ -30,7 +30,7 @@ MAX_QUERY_LENGTH = 500
 MAX_CONCURRENT_STREAMS = int(os.getenv("MAX_CONCURRENT_STREAMS", "10"))
 _stream_semaphore = asyncio.Semaphore(MAX_CONCURRENT_STREAMS)
 
-WORKER_HARD_TIMEOUT_SECONDS = 180.0
+WORKER_HARD_TIMEOUT_SECONDS = 380.0
 QUEUE_WAIT_TIMEOUT_SECONDS = 75.0
 HEARTBEAT_INTERVAL_SECONDS = 10.0 # Modified: Changed from 15.0 to 10.0
 
@@ -43,6 +43,7 @@ _ALLOWED_EVENT_TYPES = {
     "error",
     "heartbeat",
     "done",
+    "answer_chunk",
 }
 
 _SSE_PREFIX_RE = re.compile(r"^\s*data\s*:\s*\{", re.IGNORECASE)
@@ -70,7 +71,7 @@ def _normalize_llm_engine(llm_engine: str) -> str:
     llm_engine = (llm_engine or "").strip().lower()
     if llm_engine in {"gemini", "ollama", "rule_based"}:
         return llm_engine
-    return "ollama"
+    return "gemini"
 
 
 def _sanitize_query(query: str) -> str:
@@ -272,7 +273,7 @@ async def agent_event_generator(
 async def agent_stream(
     request: Request,
     query: str = Query(..., min_length=1),
-    llm_engine: str = Query("ollama"),
+    llm_engine: str = Query("gemini"),
     user=Depends(get_optional_user),
 ):
     clean_query = _sanitize_query(query)

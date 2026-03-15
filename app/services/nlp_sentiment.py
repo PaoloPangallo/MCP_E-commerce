@@ -205,7 +205,7 @@ def compute_sentiment_score(
 # LLM SENTIMENT LABEL FOR RAG INGESTION
 # ============================================================
 
-def extract_sentiment_label(text: str) -> str:
+async def extract_sentiment_label(text: str) -> str:
     """
     Uses LLM (fastest available, e.g. Gemini) to label a single feedback 
     as exactly one word: POSITIVE, NEGATIVE, or NEUTRAL.
@@ -222,7 +222,7 @@ def extract_sentiment_label(text: str) -> str:
     """
     try:
         # Fallback to Ollama if Gemini is not set/fails, but call_gemini is usually faster
-        res = call_ollama(prompt)
+        res = await call_ollama(prompt)
         res = res.strip().upper()
         if "POSITIVE" in res: return "POSITIVE"
         if "NEGATIVE" in res: return "NEGATIVE"
