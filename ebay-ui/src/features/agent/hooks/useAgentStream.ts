@@ -88,6 +88,7 @@ export function useAgentStream(options?: {
     const currentRunId = runIdRef.current
     let localTrace: AgentStep[] = []
     let localPlannedTasks: PlannedTask[] = []
+    let streamingAnswer = ""
 
     const nextSource = streamAgent(query, (event: AgentEvent) => {
       if (currentRunId !== runIdRef.current) return
@@ -164,6 +165,26 @@ export function useAgentStream(options?: {
 
         localTrace = upsertStep(localTrace, nextStep)
         setSteps(localTrace)
+        return
+      }
+
+      if (event.type === "answer_chunk" && typeof event.chunk === "string") {
+        streamingAnswer += event.chunk
+        setFinalPayload((prev) => {
+          if (!prev) {
+            return {
+              finalAnswer: streamingAnswer,
+              results: [],
+              analysis: null,
+              trace: localTrace,
+              plannedTasks: localPlannedTasks
+            } as any
+          }
+          return {
+            ...prev,
+            finalAnswer: streamingAnswer
+          }
+        })
         return
       }
 

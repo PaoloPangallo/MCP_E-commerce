@@ -3,7 +3,7 @@ from app.services.parser import call_ollama
 
 logger = logging.getLogger(__name__)
 
-def expand_query(query: str) -> str:
+async def expand_query(query: str) -> str:
     """
     Expands the user query using a fast LLM call (Ollama).
     Example: 'compara iphone 15 max' -> 'Apple iPhone 15 Pro Max smartphone comparison'
@@ -22,7 +22,7 @@ def expand_query(query: str) -> str:
     User query: "{query}"
     """
     try:
-        res = call_ollama(prompt)
+        res = await call_ollama(prompt)
         if res is None:
             return query
             

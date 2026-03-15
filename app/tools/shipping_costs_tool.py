@@ -32,7 +32,7 @@ def normalize_shipping_costs_arguments(args: Dict[str, Any], memory: Any) -> Dic
     }
 
 
-def execute_shipping_costs_tool(action_input: Dict[str, Any], context: "ToolContext") -> Dict[str, Any]:
+async def execute_shipping_costs_tool(action_input: Dict[str, Any], context: "ToolContext") -> Dict[str, Any]:
     """
     Esegue la ricerca dei costi di spedizione per un oggetto eBay e una posizione specifica.
     """
@@ -48,8 +48,7 @@ def execute_shipping_costs_tool(action_input: Dict[str, Any], context: "ToolCont
         }
 
     try:
-        # get_shipping_costs() is synchronous (and slow), but executor uses asyncio.to_thread
-        data = get_shipping_costs(item_id, country_code, zip_code)
+        data = await get_shipping_costs(item_id, country_code, zip_code)
         
         if not data:
             return {

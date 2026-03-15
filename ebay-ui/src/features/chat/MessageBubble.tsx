@@ -61,126 +61,114 @@ export default function MessageBubble({
     <Box
       sx={{
         width: "100%",
+        mb: 4,
         display: "flex",
-        justifyContent: isUser ? "flex-end" : "flex-start"
+        flexDirection: "column",
+        alignItems: isUser ? "flex-end" : "flex-start"
       }}
     >
       <Box
         sx={{
-          width: "100%",
-          maxWidth: isUser ? "78%" : "100%",
           display: "flex",
-          flexDirection: "column",
-          alignItems: isUser ? "flex-end" : "flex-start"
+          flexDirection: isUser ? "row-reverse" : "row",
+          alignItems: "flex-start",
+          gap: 2,
+          width: "100%",
+          maxWidth: isUser ? "85%" : "100%"
         }}
       >
-        {!isUser ? (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 1.25,
-              width: "100%"
-            }}
-          >
-            <Box
-              sx={{
-                width: 28,
-                height: 28,
-                mt: 0.15,
-                borderRadius: 2,
-                bgcolor: "#ffffff",
-                border: "1px solid #e5e7eb",
-                color: "#111827",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0
-              }}
-            >
-              <AutoAwesomeIcon sx={{ fontSize: 16 }} />
-            </Box>
+        {/* AVATAR */}
+        <Box
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            bgcolor: isUser ? "#111827" : "#10a37f", // ChatGPT Green for assistant
+            color: "#ffffff",
+            fontSize: 14,
+            fontWeight: 600,
+            mt: 0.5
+          }}
+        >
+          {isUser ? "U" : <AutoAwesomeIcon sx={{ fontSize: 18 }} />}
+        </Box>
 
-            <Box
-              sx={{
-                minWidth: 0,
-                width: "100%",
-                color: "#111827"
-              }}
-            >
-              {isTyping ? (
-                <TypingIndicator />
-              ) : (
-                <Box
-                  sx={{
-                    fontSize: 15,
-                    lineHeight: 1.8,
-                    color: "#111827",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word"
-                  }}
-                >
-                  {typeof children === "string" ? (
-                    <Typography
-                      component="div"
-                      sx={{
-                        fontSize: 15,
-                        lineHeight: 1.8,
-                        color: "#111827",
-                        whiteSpace: "pre-wrap"
-                      }}
-                    >
-                      {children}
-                    </Typography>
-                  ) : (
-                    children
-                  )}
-                </Box>
-              )}
-            </Box>
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              px: 2,
-              py: 1.4,
-              borderRadius: "24px",
-              bgcolor: "#eef2f7",
-              color: "#111827",
-              border: "1px solid #e5e7eb",
-              maxWidth: "100%"
-            }}
-          >
-            {typeof children === "string" ? (
-              <Typography
-                sx={{
-                  fontSize: 14.5,
-                  lineHeight: 1.7,
-                  color: "#111827",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word"
-                }}
-              >
-                {children}
-              </Typography>
-            ) : (
-              children
-            )}
-          </Box>
-        )}
-
-        {timestamp ? (
+        {/* CONTENT */}
+        <Box
+          sx={{
+            minWidth: 0,
+            flex: 1,
+            pt: 0.5
+          }}
+        >
           <Typography
             sx={{
-              mt: 0.7,
-              fontSize: 11.5,
-              color: "#9ca3af"
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#6b7280",
+              mb: 0.5,
+              textTransform: "uppercase",
+              letterSpacing: 0.5
             }}
           >
-            {timestamp}
+            {isUser ? "Tu" : "ebayGPT"}
           </Typography>
-        ) : null}
+
+          <Box
+            sx={{
+              fontSize: 16,
+              lineHeight: 1.6,
+              color: "#374151",
+              wordBreak: "break-word"
+            }}
+          >
+            {isTyping && !children ? (
+              <TypingIndicator />
+            ) : (
+              <Box
+                sx={{
+                  "& p": { my: 0 },
+                  "& > *:not(:last-child)": { mb: 2 }
+                }}
+              >
+                {typeof children === "string" ? (
+                  <Typography
+                    component="div"
+                    sx={{
+                      fontSize: 16,
+                      lineHeight: 1.6,
+                      color: "#374151",
+                      whiteSpace: "pre-wrap"
+                    }}
+                  >
+                    {children}
+                  </Typography>
+                ) : (
+                  children
+                )}
+              </Box>
+            )}
+          </Box>
+        </Box>
       </Box>
+
+      {timestamp && (
+        <Typography
+          sx={{
+            fontSize: 11,
+            color: "#9ca3af",
+            mt: 1,
+            ml: isUser ? 0 : 6,
+            mr: isUser ? 6 : 0
+          }}
+        >
+          {timestamp}
+        </Typography>
+      )}
     </Box>
   )
 }

@@ -37,8 +37,8 @@ _SELLER_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+from app.utils.text import clean_text as _clean_text
+# Using shared _clean_text from app.utils.text
 
 
 def _bounded_int(value: Any, default: int, min_value: int, max_value: int) -> int:
@@ -86,10 +86,10 @@ def normalize_seller_arguments(
     }
 
 
-def execute_seller_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+async def execute_seller_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_seller_arguments(action_input)
 
-    payload = run_seller_pipeline(
+    payload = await run_seller_pipeline(
         seller_name=clean["seller_name"],
         page=clean["page"],
         limit=clean["limit"],

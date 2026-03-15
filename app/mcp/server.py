@@ -35,7 +35,7 @@ class MCPDependencies:
 class MCPToolContext:
     db: Any
     user: Optional[object] = None
-    llm_engine: str = "ollama"
+    llm_engine: str = "gemini"
 
 
 _DEPS = MCPDependencies()
@@ -108,7 +108,7 @@ def resolve_user_by_id(user_id_str: str) -> Optional[User]:
         _close_db(db)
 
 
-def _build_context(db: Any, llm_engine: str = "ollama", session_id: Optional[str] = None) -> MCPToolContext:
+def _build_context(db: Any, llm_engine: str = "gemini", session_id: Optional[str] = None) -> MCPToolContext:
     user = None
     
     # Try configured resolver first
@@ -207,8 +207,7 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "per il primo risultato."
     ),
 )
-def search_products(query: str, include_shipping: bool = False, session_id: str = "") -> str:
-
+async def search_products(query: str, include_shipping: bool = False, session_id: str = "") -> str:
     db = None
 
     try:
@@ -218,8 +217,8 @@ def search_products(query: str, include_shipping: bool = False, session_id: str 
         db = _get_db()
 
         context = _build_context(db=db, session_id=session_id)
-        
-        raw = run_search_pipeline(
+
+        raw = await run_search_pipeline(
             query=query,
             db=db,
             user=context.user,
@@ -233,7 +232,7 @@ def search_products(query: str, include_shipping: bool = False, session_id: str 
             if top_item_id:
                 try:
                     logger.info("MCP TOOL search_products - fetching shipping for top item %s", top_item_id)
-                    shipping_raw = execute_shipping_costs_tool(
+                    shipping_raw = await execute_shipping_costs_tool(
                         {
                             "item_id": top_item_id,
                             "country_code": "IT",
@@ -271,11 +270,11 @@ def search_products(query: str, include_shipping: bool = False, session_id: str 
     name="analyze_seller",
     description="Analizza un venditore e-commerce usando feedback, trust score e sentiment.",
 )
-def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id: str = "") -> str:
+async def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
-        raw = run_seller_pipeline(
+        raw = await run_seller_pipeline(
             seller_name=seller_name,
             page=page,
             limit=limit,
@@ -297,9 +296,9 @@ def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id:
         "utile per capire brand, prezzo, taglia, categoria e altri vincoli."
     ),
 )
-def profile_query(query: str, session_id: str = "") -> str:
+async def profile_query(query: str, session_id: str = "") -> str:
     try:
-        parsed = parse_query_service(query)
+        parsed = await parse_query_service(query)
         return _safe_json(
             {
                 "status": "ok",
@@ -319,12 +318,12 @@ def profile_query(query: str, session_id: str = "") -> str:
         "Risponde a messaggi conversazionali generici quando non serve usare tool eBay specifici."
     ),
 )
-def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -> str:
+async def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
         context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
-        payload = execute_conversation_tool({"query": query}, context)
+        payload = await execute_conversation_tool({"query": query}, context)
 
         if not isinstance(payload, dict):
             payload = {"result": payload}
@@ -351,12 +350,11 @@ def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -
         "'iphone 13, samsung galaxy s22'. Min 2, max 4 query."
     ),
 )
-def compare_products(queries: str, llm_engine: str = "ollama", session_id: str = "") -> str:
+async def compare_products(queries: str, llm_engine: str = "ollama", session_id: str = "") -> str:
     """
     queries: stringa con le query separate da virgola o punto e virgola.
     Esempio: 'nike air max, adidas ultraboost'
     """
-    import asyncio
     from app.services.compare_pipeline import run_compare_pipeline
 
     db = None
@@ -379,7 +377,7 @@ def compare_products(queries: str, llm_engine: str = "ollama", session_id: str =
 
         logger.info("MCP TOOL compare_products START | queries=%s", queries)
 
-        result = execute_compare_tool(
+        result = await execute_compare_tool(
             {"queries": queries},
             context
         )
@@ -403,14 +401,14 @@ def compare_products(queries: str, llm_engine: str = "ollama", session_id: str =
         "conoscendo il suo ID eBay (item_id)."
     ),
 )
-def get_item_details(item_id: str, session_id: str = "") -> str:
+async def get_item_details(item_id: str, session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
         context = _build_context(db=db, session_id=session_id)
         logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
         
-        result = execute_item_details_tool(
+        result = await execute_item_details_tool(
             {"item_id": item_id},
             context
         )
@@ -433,14 +431,14 @@ def get_item_details(item_id: str, session_id: str = "") -> str:
         "(item_id) verso un CAP (zip_code) e Paese (country_code)."
     ),
 )
-def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: str = "", session_id: str = "") -> str:
+async def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: str = "", session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
         context = _build_context(db=db, session_id=session_id)
         logger.info("MCP TOOL get_shipping_costs START | item_id=%s", item_id)
         
-        result = execute_shipping_costs_tool(
+        result = await execute_shipping_costs_tool(
             {
                 "item_id": item_id,
                 "country_code": country_code,
@@ -558,9 +556,9 @@ def tools_catalog() -> str:
 
 
 @mcp.resource("profile://query/{text}")
-def query_profile_resource(text: str) -> str:
+async def query_profile_resource(text: str) -> str:
     try:
-        parsed = parse_query_service(text)
+        parsed = await parse_query_service(text)
         return _safe_json(
             {
                 "query": text,

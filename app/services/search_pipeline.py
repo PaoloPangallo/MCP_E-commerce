@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import asyncio
 import logging
 import re
 import time
@@ -8,6 +7,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
+from app.db.redis import redis_client
 from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.feedback import get_seller_feedback
@@ -24,14 +24,7 @@ from app.services.user_profiling import update_user_profile
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# IN-MEMORY CACHES (with TTL eviction)
-# ============================================================
-
 _CACHE_TTL = 300.0  # 5 minutes
-
-_SELLER_FEEDBACK_CACHE: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
-_SELLER_TRUST_CACHE: Dict[str, tuple[float, Dict[str, float]]] = {}
 
 MAX_RESULTS_FROM_EBAY = 20
 MAX_SELLERS_FOR_TRUST = 5
@@ -100,52 +93,51 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     return " ".join(final_tokens).strip()
 
 
-def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
-    key = seller_name.strip().lower()
-    now = time.time()
-
-    cached = _SELLER_FEEDBACK_CACHE.get(key)
+async def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
+    seller_key = seller_name.strip().lower()
+    cache_key = f"seller_feedback:{seller_key}"
+    
+    cached = redis_client.get_json(cache_key)
     if cached is not None:
-        ts, data = cached
-        if now - ts < _CACHE_TTL:
-            return data
-        del _SELLER_FEEDBACK_CACHE[key]
+        return cached
 
-    feedbacks = get_seller_feedback(seller_name, limit=limit) or []
-    _SELLER_FEEDBACK_CACHE[key] = (now, feedbacks)
+    # get_seller_feedback is now async
+    feedbacks = await get_seller_feedback(seller_name, limit=limit) or []
+    redis_client.set_json(cache_key, feedbacks, ttl_seconds=int(_CACHE_TTL))
     return feedbacks
 
 
-def _compute_seller_trust_cached(seller_name: str) -> Optional[float]:
+async def _compute_seller_trust_cached(seller_name: str) -> Optional[float]:
     seller_key = seller_name.strip().lower()
-    feedbacks = _fetch_feedback_cached(seller_name, limit=MAX_FEEDBACK_PER_SELLER)
-
+    cache_key = f"seller_trust:{seller_key}"
+    
+    feedbacks = await _fetch_feedback_cached(seller_name, limit=MAX_FEEDBACK_PER_SELLER)
     if not feedbacks:
         return None
 
-    now = time.time()
-    cached = _SELLER_TRUST_CACHE.get(seller_key)
+    cached = redis_client.get_json(cache_key)
     if cached is not None:
-        ts, scores = cached
-        if now - ts < _CACHE_TTL and int(scores.get("count", -1)) == len(feedbacks):
-            return round(float(scores["trust_score"]), 3)
+        if int(cached.get("count", -1)) == len(feedbacks):
+            return round(float(cached["trust_score"]), 3)
 
-    sentiment_score = compute_sentiment_score(feedbacks, max_texts=20)
-    trust_score = compute_trust_score(feedbacks, sentiment_score=sentiment_score)
+    # These are CPU bound, but let's keep them in thread for now if complex, 
+    # or just run them here if they are fast enough.
+    sentiment_score = await asyncio.to_thread(compute_sentiment_score, feedbacks, max_texts=20)
+    trust_score = await asyncio.to_thread(compute_trust_score, feedbacks, sentiment_score=sentiment_score)
 
-    _SELLER_TRUST_CACHE[seller_key] = (now, {
+    result = {
         "count": float(len(feedbacks)),
         "sentiment_score": float(sentiment_score),
         "trust_score": float(trust_score),
-    })
+    }
+    redis_client.set_json(cache_key, result, ttl_seconds=int(_CACHE_TTL))
 
     return round(float(trust_score), 3)
 
 
-def _prefetch_top_sellers_feedback(items: List[Dict[str, Any]]) -> Dict[str, float]:
+async def _prefetch_top_sellers_feedback(items: List[Dict[str, Any]]) -> Dict[str, float]:
     """
-    Compute trust only for the most relevant sellers, not for everybody.
-    This avoids N expensive feedback lookups on each request.
+    Compute trust only for the most relevant sellers using async gather.
     """
     sellers: List[str] = []
     seen = set()
@@ -163,20 +155,15 @@ def _prefetch_top_sellers_feedback(items: List[Dict[str, Any]]) -> Dict[str, flo
     if not sellers:
         return scores
 
-    with ThreadPoolExecutor(max_workers=FEEDBACK_WORKERS) as executor:
-        futures = {
-            executor.submit(_compute_seller_trust_cached, seller): seller
-            for seller in sellers
-        }
+    # Parallel async execution
+    tasks = [_compute_seller_trust_cached(s) for s in sellers]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for future in as_completed(futures):
-            seller = futures[future]
-            try:
-                score = future.result()
-                if score is not None:
-                    scores[seller] = score
-            except Exception:
-                logger.warning("Trust computation failed for seller=%s", seller)
+    for seller, score in zip(sellers, results):
+        if isinstance(score, (float, int)):
+            scores[seller] = score
+        elif isinstance(score, Exception):
+            logger.warning("Trust computation failed for seller=%s: %s", seller, score)
 
     return scores
 
@@ -299,7 +286,7 @@ def _apply_final_ranking(
             item["explanations"] = explanations
 
 
-def run_search_pipeline(
+async def run_search_pipeline(
     query: str,
     db: Session,
     user: Optional[object] = None,
@@ -319,7 +306,7 @@ def run_search_pipeline(
     logger.info("PIPELINE STEP 1: parse_query")
 
     t = time.time()
-    parsed = parse_query_service(
+    parsed = await parse_query_service(
         query,
         use_llm=(llm_engine != "rule_based"),
         include_meta=True,
@@ -329,7 +316,45 @@ def run_search_pipeline(
     ebay_query_used = _build_ebay_query(parsed, query)
 
     # ============================================================
-    # 2) USER PROFILE UPDATE
+    # 2) PARALLEL: EBAY SEARCH + RAG RETRIEVAL (including expansion)
+    # ============================================================
+    logger.info("PIPELINE: Parallel Search & RAG")
+    t = time.time()
+
+    async def _do_ebay_search(parsed_query, limit):
+        try:
+            results = await search_items(parsed_query, limit=limit)
+            return results
+        except Exception as e:
+            logger.error(f"eBay search failed: {e}")
+            return []
+
+    async def _do_rag():
+        try:
+            expanded = await expand_query(query)
+            docs = await asyncio.to_thread(retrieve_context, expanded, k=10)
+            return expanded, docs
+        except Exception as e:
+            logger.warning("RAG retrieve failed: %s", e)
+            return query, []
+
+    # Run heavy I/O in parallel
+    results = await asyncio.gather(
+        _do_ebay_search(parsed, MAX_RESULTS_FROM_EBAY),
+        _do_rag()
+    )
+    items = results[0] or []
+    expanded_query, rag_docs = results[1]
+    
+    timings["parallel_io_s"] = round(time.time() - t, 3)
+    items = _dedupe_items(items)
+
+    # Separate RAG docs for reranker
+    product_docs = [d for d in rag_docs if d.get("type") == "product"]
+    seller_docs = [d for d in rag_docs if d.get("type") == "seller_feedback"]
+
+    # ============================================================
+    # 3) USER PROFILE UPDATE (Non-blocking enough)
     # ============================================================
     logger.info("PIPELINE STEP 2: user_profile")
     if user:
@@ -339,45 +364,15 @@ def run_search_pipeline(
             logger.warning("User profiling update failed")
 
     # ============================================================
-    # 3) EBAY SEARCH
-    # ============================================================
-    logger.info("PIPELINE STEP 3: ebay_search")
-
-    t = time.time()
-    items = search_items(parsed_query=parsed, limit=MAX_RESULTS_FROM_EBAY) or []
-    timings["ebay_search_s"] = round(time.time() - t, 3)
-
-    items = _dedupe_items(items)
-
-    # ============================================================
-    # 4) RAG RETRIEVAL (once, shared with reranker)
-    # ============================================================
-    logger.info("PIPELINE STEP 4: rag_retrieve")
-
-    t = time.time()
-    try:
-        expanded_query = expand_query(query)
-        logger.info("Query expansion: '%s' -> '%s'", query, expanded_query)
-        rag_docs = retrieve_context(expanded_query, k=10)
-    except Exception as e:
-        logger.warning("RAG retrieve failed: %s", e)
-        expanded_query = query
-        rag_docs = []
-
-    # Split RAG docs by type for the reranker
-    product_docs = [d for d in rag_docs if d.get("type") == "product"]
-    seller_docs = [d for d in rag_docs if d.get("type") == "seller_feedback"]
-    timings["rag_retrieve_s"] = round(time.time() - t, 3)
-
-    # ============================================================
-    # 5) RERANK (with pre-fetched RAG docs)
+    # 4) RERANK
     # ============================================================
     logger.info("PIPELINE STEP 5: rerank")
 
     t = time.time()
     if items:
         try:
-            items = rerank_products(
+            items = await asyncio.to_thread(
+                rerank_products,
                 query, items, user=user,
                 product_docs=product_docs,
                 seller_docs=seller_docs,
@@ -387,62 +382,52 @@ def run_search_pipeline(
     timings["rerank_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 6) TRUST ONLY FOR TOP SELLERS
+    # 5) SELLER TRUST
     # ============================================================
     logger.info("PIPELINE STEP 6: seller_trust")
-    seller_trust_map = _prefetch_top_sellers_feedback(items[:MAX_SELLERS_FOR_TRUST * 2])
+    t = time.time()
+    seller_trust_map = await _prefetch_top_sellers_feedback(items[:MAX_SELLERS_FOR_TRUST * 2])
     timings["seller_trust_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 7) SAVE DB + PREP RESULTS
+    # 6) DB PERSIST
     # ============================================================
     logger.info("PIPELINE STEP 7: db_persist")
-    results_out, saved_count = _prepare_and_persist_items(
-        db=db,
-        items=items,
-        seller_trust_map=seller_trust_map,
-    )
+    t = time.time()
+    results_out, saved_count = _prepare_and_persist_items(db, items, seller_trust_map)
     timings["db_prepare_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 8) FINAL RANKING (user personalization on top of rerank scores)
+    # 7) FINAL RANKING + CONTEXT
     # ============================================================
     logger.info("PIPELINE STEP 8: final_ranking")
 
     _apply_final_ranking(results_out, user=user)
-
-    # ============================================================
-    # 9) ATTACH RAG FEEDBACK TO RESULTS
-    # ============================================================
+    
+    # Attach RAG feedback
     logger.info("PIPELINE STEP 9: rag_attach")
-
     for item in results_out:
         seller_name = item.get("seller_name")
-        if not seller_name:
-            item.setdefault("rag_feedback", [])
-            continue
-
-        item.setdefault("rag_feedback", [
-            d for d in rag_docs
-            if d.get("seller") == seller_name
-        ][:3])
+        item["rag_feedback"] = [d for d in rag_docs if d.get("seller") == seller_name][:3] if seller_name else []
 
     rag_context_text = build_context(query, results_out, rag_docs)
 
     # ============================================================
-    # 10) OPTIONAL EXPLANATION
+    # 8) EXPLAIN (if results exist)
     # ============================================================
     logger.info("PIPELINE STEP 10: explain")
 
     t = time.time()
-    try:
-        analysis = explain_results(query, results_out[:5]) if results_out else None
-    except Exception:
-        analysis = None
+    analysis = None
+    if results_out:
+        try:
+            analysis = await asyncio.to_thread(explain_results, query, results_out[:5])
+        except Exception:
+            pass
     timings["explain_s"] = round(time.time() - t, 3)
 
     # ============================================================
-    # 11) IR METRICS
+    # 9) IR METRICS
     # ============================================================
 
     binary_relevance = [

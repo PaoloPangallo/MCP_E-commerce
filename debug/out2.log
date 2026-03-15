@@ -1,0 +1,671 @@
+﻿.\.venv\Scripts\python.exe : C:\Us
+ers\paolo\MCP_ECOM\.venv\Lib\site-
+packages\huggingface_hub\file_down
+load.py:949: FutureWarning: 
+`resume_download` is deprecated 
+and will be removed in version 
+1.0.0. Downloads always resume 
+when possible. If you want to 
+force a new download, use 
+`force_download=True`.
+In riga:1 car:1
++ .\.venv\Scripts\python.exe 
+test_failures.py > out.log 2>&1; 
+Get-Conte ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : Not 
+   Specified: (C:\Users\paolo\..  
+  .download=True`.:String) [],    
+ RemoteException
+    + FullyQualifiedErrorId : Nat 
+   iveCommandError
+ 
+  warnings.warn(
+Query expansion failed: 
+'NoneType' object has no 
+attribute 'strip'
+RAG retrieve failed: Storage 
+folder qdrant_storage is already 
+accessed by another instance of 
+Qdrant client. If you require 
+concurrent access, use Qdrant 
+server instead.
+C:\Users\paolo\MCP_ECOM\.venv\Lib\
+site-packages\huggingface_hub\file
+_download.py:949: FutureWarning: 
+`resume_download` is deprecated 
+and will be removed in version 
+1.0.0. Downloads always resume 
+when possible. If you want to 
+force a new download, use 
+`force_download=True`.
+  warnings.warn(
+ToolExecutor attempt failed | 
+tool=search_products | 
+attempt=1/1 | 
+error=(sqlite3.OperationalError) 
+no such table: listings
+[SQL: SELECT listings.ebay_id AS 
+listings_ebay_id 
+FROM listings 
+WHERE listings.ebay_id IN (?, ?, 
+?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+?, ?, ?, ?, ?, ?, ?)]
+[parameters: 
+('v1|297688898385|0', 
+'v1|134462474903|433932601759', 
+'v1|147197751706|0', 
+'v1|316823259087|0', 
+'v1|167942173758|0', 
+'v1|167942153916|0', 
+'v1|188036776825|0', 
+'v1|298111436444|0', 
+'v1|227249449436|0', 
+'v1|298019804648|0', 
+'v1|124260411809|0', 
+'v1|137030903702|0', 
+'v1|297691588940|0', 
+'v1|135620321195|0', 
+'v1|156792000620|0', 
+'v1|156794316506|0', 
+'v1|389594195983|0', 
+'v1|358314304790|0', 
+'v1|287195692999|0', 
+'v1|257381678164|0')]
+(Background on this error at: 
+https://sqlalche.me/e/20/e3q8)
+Traceback (most recent call last):
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1960, in 
+_exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 924, in 
+do_execute
+    cursor.execute(statement, 
+parameters)
+sqlite3.OperationalError: no such 
+table: listings
+
+The above exception was the 
+direct cause of the following 
+exception:
+
+Traceback (most recent call last):
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\agent\executor.py", line 68, in 
+execute
+    result = await self._execute_o
+nce(tool_call=tool_call, 
+spec=spec)
+             ^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\agent\executor.py", line 180, 
+in _execute_once
+    result = await 
+asyncio.to_thread(spec.executor, 
+tool_call.input, self.context)
+             ^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^
+  File "C:\Users\paolo\AppData\Loc
+al\Programs\Python\Python311\Lib\a
+syncio\threads.py", line 25, in 
+to_thread
+    return await 
+loop.run_in_executor(None, 
+func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\AppData\Loc
+al\Programs\Python\Python311\Lib\c
+oncurrent\futures\thread.py", 
+line 58, in run
+    result = self.fn(*self.args, 
+**self.kwargs)
+             
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\tools\search_tool.py", line 50, 
+in execute_search_tool
+    payload = run_search_pipeline(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\services\search_pipeline.py", 
+line 373, in run_search_pipeline
+    results_out, saved_count = 
+_prepare_and_persist_items(
+                               
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\services\search_pipeline.py", 
+line 176, in 
+_prepare_and_persist_items
+    existing_ids = _batch_fetch_ex
+isting_ebay_ids(db, items)
+                   ^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\services\search_pipeline.py", 
+line 165, in 
+_batch_fetch_existing_ebay_ids
+    .all()
+     ^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\query.py", line 2672, in all
+    return self._iter().all()  # 
+type: ignore
+           ^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\query.py", line 2826, in _iter
+    result: 
+Union[ScalarResult[_T], 
+Result[_T]] = 
+self.session.execute(
+                                  
+                
+^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\session.py", line 2306, in 
+execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\session.py", line 2191, in 
+_execute_internal
+    result: Result[Any] = compile_
+state_cls.orm_execute_statement(
+                          ^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\context.py", line 293, in 
+orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1408, in 
+execute
+    return meth(
+           ^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\s
+ql\elements.py", line 513, in 
+_execute_on_connection
+    return 
+connection._execute_clauseelement(
+           
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1630, in 
+_execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1839, in 
+_execute_context
+    return 
+self._exec_single_context(
+           
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1979, in 
+_exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 2335, in 
+_handle_dbapi_exception
+    raise sqlalchemy_exception.wit
+h_traceback(exc_info[2]) from e
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1960, in 
+_exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 924, in 
+do_execute
+    cursor.execute(statement, 
+parameters)
+sqlalchemy.exc.OperationalError: 
+(sqlite3.OperationalError) no 
+such table: listings
+[SQL: SELECT listings.ebay_id AS 
+listings_ebay_id 
+FROM listings 
+WHERE listings.ebay_id IN (?, ?, 
+?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+?, ?, ?, ?, ?, ?, ?)]
+[parameters: 
+('v1|297688898385|0', 
+'v1|134462474903|433932601759', 
+'v1|147197751706|0', 
+'v1|316823259087|0', 
+'v1|167942173758|0', 
+'v1|167942153916|0', 
+'v1|188036776825|0', 
+'v1|298111436444|0', 
+'v1|227249449436|0', 
+'v1|298019804648|0', 
+'v1|124260411809|0', 
+'v1|137030903702|0', 
+'v1|297691588940|0', 
+'v1|135620321195|0', 
+'v1|156792000620|0', 
+'v1|156794316506|0', 
+'v1|389594195983|0', 
+'v1|358314304790|0', 
+'v1|287195692999|0', 
+'v1|257381678164|0')]
+(Background on this error at: 
+https://sqlalche.me/e/20/e3q8)
+Tool execution failed | step=1 | 
+tool=search_products | 
+error=(sqlite3.OperationalError) 
+no such table: listings
+[SQL: SELECT listings.ebay_id AS 
+listings_ebay_id 
+FROM listings 
+WHERE listings.ebay_id IN (?, ?, 
+?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+?, ?, ?, ?, ?, ?, ?)]
+[parameters: 
+('v1|297688898385|0', 
+'v1|134462474903|433932601759', 
+'v1|147197751706|0', 
+'v1|316823259087|0', 
+'v1|167942173758|0', 
+'v1|167942153916|0', 
+'v1|188036776825|0', 
+'v1|298111436444|0', 
+'v1|227249449436|0', 
+'v1|298019804648|0', 
+'v1|124260411809|0', 
+'v1|137030903702|0', 
+'v1|297691588940|0', 
+'v1|135620321195|0', 
+'v1|156792000620|0', 
+'v1|156794316506|0', 
+'v1|389594195983|0', 
+'v1|358314304790|0', 
+'v1|287195692999|0', 
+'v1|257381678164|0')]
+(Background on this error at: 
+https://sqlalche.me/e/20/e3q8)
+Query expansion failed: 
+'NoneType' object has no 
+attribute 'strip'
+RAG retrieve failed: Storage 
+folder qdrant_storage is already 
+accessed by another instance of 
+Qdrant client. If you require 
+concurrent access, use Qdrant 
+server instead.
+ToolExecutor attempt failed | 
+tool=search_products | 
+attempt=1/1 | 
+error=(sqlite3.OperationalError) 
+no such table: listings
+[SQL: SELECT listings.ebay_id AS 
+listings_ebay_id 
+FROM listings 
+WHERE listings.ebay_id IN (?, ?, 
+?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+?, ?, ?, ?, ?, ?, ?)]
+[parameters: 
+('v1|297688898385|0', 
+'v1|134462474903|433932601759', 
+'v1|147197751706|0', 
+'v1|316823259087|0', 
+'v1|167942173758|0', 
+'v1|167942153916|0', 
+'v1|188036776825|0', 
+'v1|298111436444|0', 
+'v1|227249449436|0', 
+'v1|298019804648|0', 
+'v1|124260411809|0', 
+'v1|137030903702|0', 
+'v1|297691588940|0', 
+'v1|135620321195|0', 
+'v1|156792000620|0', 
+'v1|156794316506|0', 
+'v1|389594195983|0', 
+'v1|358314304790|0', 
+'v1|287195692999|0', 
+'v1|257381678164|0')]
+(Background on this error at: 
+https://sqlalche.me/e/20/e3q8)
+Traceback (most recent call last):
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1960, in 
+_exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 924, in 
+do_execute
+    cursor.execute(statement, 
+parameters)
+sqlite3.OperationalError: no such 
+table: listings
+
+The above exception was the 
+direct cause of the following 
+exception:
+
+Traceback (most recent call last):
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\agent\executor.py", line 68, in 
+execute
+    result = await self._execute_o
+nce(tool_call=tool_call, 
+spec=spec)
+             ^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\agent\executor.py", line 180, 
+in _execute_once
+    result = await 
+asyncio.to_thread(spec.executor, 
+tool_call.input, self.context)
+             ^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^
+  File "C:\Users\paolo\AppData\Loc
+al\Programs\Python\Python311\Lib\a
+syncio\threads.py", line 25, in 
+to_thread
+    return await 
+loop.run_in_executor(None, 
+func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\AppData\Loc
+al\Programs\Python\Python311\Lib\c
+oncurrent\futures\thread.py", 
+line 58, in run
+    result = self.fn(*self.args, 
+**self.kwargs)
+             
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\tools\search_tool.py", line 50, 
+in execute_search_tool
+    payload = run_search_pipeline(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\services\search_pipeline.py", 
+line 373, in run_search_pipeline
+    results_out, saved_count = 
+_prepare_and_persist_items(
+                               
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\services\search_pipeline.py", 
+line 176, in 
+_prepare_and_persist_items
+    existing_ids = _batch_fetch_ex
+isting_ebay_ids(db, items)
+                   ^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\paolo\MCP_ECOM\ap
+p\services\search_pipeline.py", 
+line 165, in 
+_batch_fetch_existing_ebay_ids
+    .all()
+     ^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\query.py", line 2672, in all
+    return self._iter().all()  # 
+type: ignore
+           ^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\query.py", line 2826, in _iter
+    result: 
+Union[ScalarResult[_T], 
+Result[_T]] = 
+self.session.execute(
+                                  
+                
+^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\session.py", line 2306, in 
+execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\session.py", line 2191, in 
+_execute_internal
+    result: Result[Any] = compile_
+state_cls.orm_execute_statement(
+                          ^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\o
+rm\context.py", line 293, in 
+orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1408, in 
+execute
+    return meth(
+           ^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\s
+ql\elements.py", line 513, in 
+_execute_on_connection
+    return 
+connection._execute_clauseelement(
+           
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1630, in 
+_execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1839, in 
+_execute_context
+    return 
+self._exec_single_context(
+           
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1979, in 
+_exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 2335, in 
+_handle_dbapi_exception
+    raise sqlalchemy_exception.wit
+h_traceback(exc_info[2]) from e
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\base.py", line 1960, in 
+_exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 924, in 
+do_execute
+    cursor.execute(statement, 
+parameters)
+sqlalchemy.exc.OperationalError: 
+(sqlite3.OperationalError) no 
+such table: listings
+[SQL: SELECT listings.ebay_id AS 
+listings_ebay_id 
+FROM listings 
+WHERE listings.ebay_id IN (?, ?, 
+?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+?, ?, ?, ?, ?, ?, ?)]
+[parameters: 
+('v1|297688898385|0', 
+'v1|134462474903|433932601759', 
+'v1|147197751706|0', 
+'v1|316823259087|0', 
+'v1|167942173758|0', 
+'v1|167942153916|0', 
+'v1|188036776825|0', 
+'v1|298111436444|0', 
+'v1|227249449436|0', 
+'v1|298019804648|0', 
+'v1|124260411809|0', 
+'v1|137030903702|0', 
+'v1|297691588940|0', 
+'v1|135620321195|0', 
+'v1|156792000620|0', 
+'v1|156794316506|0', 
+'v1|389594195983|0', 
+'v1|358314304790|0', 
+'v1|287195692999|0', 
+'v1|257381678164|0')]
+(Background on this error at: 
+https://sqlalche.me/e/20/e3q8)
+Tool execution failed | step=2 | 
+tool=search_products | 
+error=(sqlite3.OperationalError) 
+no such table: listings
+[SQL: SELECT listings.ebay_id AS 
+listings_ebay_id 
+FROM listings 
+WHERE listings.ebay_id IN (?, ?, 
+?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+?, ?, ?, ?, ?, ?, ?)]
+[parameters: 
+('v1|297688898385|0', 
+'v1|134462474903|433932601759', 
+'v1|147197751706|0', 
+'v1|316823259087|0', 
+'v1|167942173758|0', 
+'v1|167942153916|0', 
+'v1|188036776825|0', 
+'v1|298111436444|0', 
+'v1|227249449436|0', 
+'v1|298019804648|0', 
+'v1|124260411809|0', 
+'v1|137030903702|0', 
+'v1|297691588940|0', 
+'v1|135620321195|0', 
+'v1|156792000620|0', 
+'v1|156794316506|0', 
+'v1|389594195983|0', 
+'v1|358314304790|0', 
+'v1|287195692999|0', 
+'v1|257381678164|0')]
+(Background on this error at: 
+https://sqlalche.me/e/20/e3q8)
+----- PARSED IPHONE QUERY -----
+{'original_query': 'Trova un iPhone 15 Pro usato e dimmi quanto costa spedirlo a Roma AP 00100).', 'semantic_query': 'iPhone quanto', 'product': 'quanto', 'brands': ['iPhone'], 'compatibilities': {}, 'constraints': [{'type': 'condition', 'value': 'used'}], 'preferences': [], '_meta': {'llm_enabled': False, 'llm_success': False, 'llm_provider': None, 'confidence': 0.65}}
+eBay hits for iPhone: 1
+
+----- AGENT RUN FOR MACBOOK -----
+>> TOOL CALLED: search_products with {'query': 'cerca un portatile macbook pro m3 e dimmi esattamente quali sono le specifiche tecniche del primo risultato, specialmente la ram e il materiale della scocca.'}
+<< TOOL RESULT: search_products status=error
+>> TOOL CALLED: search_products with {'query': 'cerca un portatile macbook pro m3 e dimmi esattamente quali sono le specifiche tecniche del primo risultato, specialmente la ram e il materiale della scocca.'}
+<< TOOL RESULT: search_products status=error
+<< FINAL EVENT
+Exception during reset or similar
+Traceback (most recent call last):
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\p
+ool\base.py", line 986, in 
+_finalize_fairy
+    fairy._reset(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\p
+ool\base.py", line 1432, in _reset
+    
+pool._dialect.do_rollback(self)
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 692, in 
+do_rollback
+    dbapi_connection.rollback()
+sqlite3.ProgrammingError: SQLite 
+objects created in a thread can 
+only be used in that same thread. 
+The object was created in thread 
+id 30352 and this is thread id 
+21348.
+Exception terminating connection 
+<sqlite3.Connection object at 
+0x000002A29780FA60>
+Traceback (most recent call last):
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\p
+ool\base.py", line 986, in 
+_finalize_fairy
+    fairy._reset(
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\p
+ool\base.py", line 1432, in _reset
+    
+pool._dialect.do_rollback(self)
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 692, in 
+do_rollback
+    dbapi_connection.rollback()
+sqlite3.ProgrammingError: SQLite 
+objects created in a thread can 
+only be used in that same thread. 
+The object was created in thread 
+id 30352 and this is thread id 
+21348.
+
+During handling of the above 
+exception, another exception 
+occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\p
+ool\base.py", line 374, in 
+_close_connection
+    self._dialect.do_terminate(con
+nection)
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 698, in 
+do_terminate
+    
+self.do_close(dbapi_connection)
+  File "C:\Users\paolo\MCP_ECOM\.v
+env\Lib\site-packages\sqlalchemy\e
+ngine\default.py", line 701, in 
+do_close
+    dbapi_connection.close()
+sqlite3.ProgrammingError: SQLite 
+objects created in a thread can 
+only be used in that same thread. 
+The object was created in thread 
+id 30352 and this is thread id 
+21348.

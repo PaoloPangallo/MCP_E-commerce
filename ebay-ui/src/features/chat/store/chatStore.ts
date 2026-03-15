@@ -1,12 +1,13 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
-import { getToken } from "../../../auth/authStore"
+
 
 import type {
   ChatEntry,
   Message,
   SearchBlock
 } from "../../../types/searchTypes.ts"
+import {getToken} from "../../../auth/authStore.ts";
 
 export type ChatSession = {
   id: string

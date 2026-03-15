@@ -16,9 +16,9 @@ def normalize_profile_arguments(action_input: Dict[str, Any], fallback_query: st
     return {"query": query}
 
 
-def execute_profile_tool(action_input: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_profile_tool(action_input: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
     clean = normalize_profile_arguments(action_input)
-    parsed = parse_query_service(clean["query"])
+    parsed = await parse_query_service(clean["query"])
 
     if not isinstance(parsed, dict):
         parsed = {"result": parsed}

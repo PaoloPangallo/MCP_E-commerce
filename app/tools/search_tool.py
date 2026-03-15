@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional, Protocol
 
+from app.utils.text import clean_text as _clean_text
+
 from app.services.search_pipeline import run_search_pipeline
 
 
@@ -12,8 +14,7 @@ class ToolContextLike(Protocol):
     llm_engine: str
 
 
-def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+# Using shared _clean_text from app.utils.text
 
 
 def clean_search_query(query: str) -> str:
@@ -44,10 +45,10 @@ def normalize_search_arguments(action_input: Dict[str, Any], fallback_query: str
     return {"query": query}
 
 
-def execute_search_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
+async def execute_search_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_search_arguments(action_input)
 
-    payload = run_search_pipeline(
+    payload = await run_search_pipeline(
         query=clean["query"],
         db=context.db,
         user=getattr(context, "user", None),

@@ -14,6 +14,7 @@ from app.agent.schemas import (
     AgentRequest,
     AgentResponse,
     AgentStep,
+    AnswerChunkEvent,
     FinalEvent,
     StartEvent,
     ThinkingEvent,
@@ -23,7 +24,7 @@ from app.agent.schemas import (
 from app.agent.task_decomposer import decompose_query
 from app.agent.tool_registry import ToolContext, analyze_user_query
 from app.mcp.client import MCPToolClient
-from app.services.parser import call_gemini, call_ollama
+from app.services.parser import call_gemini, call_ollama, call_llm
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class EbayReactAgent:
         )
 
         trace: List[AgentStep] = []
-        final_answer: Optional[str] = None
+        final_answer: str = ""
         executed_actions = 0
 
         yield StartEvent(
@@ -168,14 +169,19 @@ class EbayReactAgent:
                     memory.detected_intent = decision.intent
 
                 if decision.should_stop or (decision.action is None and not decision.actions):
-                    final_answer = decision.final_answer or await self._finalize(
-                        memory=memory,
-                        llm_engine=request.llm_engine,
-                    )
-                    yield ThinkingEvent(
-                        step=step_index,
-                        message="Sto preparando la risposta.",
-                    ).model_dump()
+                    if decision.final_answer:
+                        final_answer = decision.final_answer
+                    else:
+                        yield ThinkingEvent(
+                            step=step_index,
+                            message="Sto preparando la risposta.",
+                        ).model_dump()
+                        
+                        full_text = ""
+                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
+                            full_text += chunk
+                            yield AnswerChunkEvent(chunk=chunk).model_dump()
+                        final_answer = full_text
                     break
 
                 planned_actions = decision.planned_actions()
@@ -212,6 +218,7 @@ class EbayReactAgent:
                         final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                     break
 
+                has_terminal = False
                 for action, observation in zip(planned_actions, observations):
                     memory.apply_observation(observation)
                     executed_actions += 1
@@ -261,10 +268,16 @@ class EbayReactAgent:
                     )
 
                     if observation.terminal:
-                        final_answer = observation.summary or await self._finalize(
-                            memory=memory,
-                            llm_engine=request.llm_engine,
-                        )
+                        yield ThinkingEvent(
+                            step=step_index,
+                            message="Sto terminando l'analisi...",
+                        ).model_dump()
+                        
+                        full_text = ""
+                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
+                            full_text += chunk
+                            yield AnswerChunkEvent(chunk=chunk).model_dump()
+                        final_answer = full_text
 
                         self._persist_outcome_safely(memory, final_answer)
 
@@ -297,30 +310,32 @@ class EbayReactAgent:
                         should_abort = step_index >= max_steps
 
                     if should_abort:
-                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+                        full_text = ""
+                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
+                            full_text += chunk
+                            yield AnswerChunkEvent(chunk=chunk).model_dump()
+                        final_answer = full_text
                         break
 
                     continue
 
                 try:
                     if planner.can_stop_early(memory):
-                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+                        full_text = ""
+                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
+                            full_text += chunk
+                            yield AnswerChunkEvent(chunk=chunk).model_dump()
+                        final_answer = full_text
                         break
                 except Exception as exc:
                     logger.warning("Planner early-stop check failed: %s", exc)
 
-            if final_answer is None:
-                if memory.has_any_terminal_state():
-                    last = memory.recent_observations(limit=1)
-                    if last:
-                        final_answer = last[0].get("summary") or await self._finalize(
-                            memory=memory,
-                            llm_engine=request.llm_engine,
-                        )
-                    else:
-                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
-                else:
-                    final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+            if not final_answer:
+                full_text = ""
+                async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
+                    full_text += chunk
+                    yield AnswerChunkEvent(chunk=chunk).model_dump()
+                final_answer = full_text
 
             import asyncio
             await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)
@@ -338,7 +353,7 @@ class EbayReactAgent:
         except Exception as exc:
             logger.warning("Persisting memory outcome failed: %s", exc)
 
-    async def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
+    async def _finalize_stream(self, memory: AgentMemory, llm_engine: str) -> AsyncGenerator[str, None]:
         intent = (memory.detected_intent or "").lower()
 
         if intent == "conversation":
@@ -349,23 +364,31 @@ class EbayReactAgent:
                 custom_instructions=getattr(self.user, "custom_instructions", None)
             )
 
-            llm_text = await self._call_final_llm(prompt, llm_engine)
-            if llm_text and llm_text.strip():
+            got_any = False
+            async for chunk in self._call_final_llm_stream(prompt, llm_engine):
+                got_any = True
+                yield chunk
+            
+            if got_any:
                 memory.register_llm_call("final")
-                return llm_text.strip()
+                return
 
-            return "Non riesco a generare una risposta conversazionale in questo momento."
+            yield "Non riesco a generare una risposta conversazionale in questo momento."
+            return
 
         if intent == "comparison":
-            return self._build_comparison_answer(memory)
+            yield self._build_comparison_answer(memory)
+            return
 
         fallback = self._fallback_final_answer(memory)
 
         if self._is_fallback_good_enough(memory, fallback):
-            return fallback
+            yield fallback
+            return
 
         if not self._should_use_llm_for_final(memory, llm_engine):
-            return fallback
+            yield fallback
+            return
 
         prompt = build_final_answer_prompt(
             user_query=memory.user_query,
@@ -374,25 +397,36 @@ class EbayReactAgent:
             custom_instructions=getattr(self.user, "custom_instructions", None)
         )
 
-        llm_text = await self._call_final_llm(prompt, llm_engine)
-        if llm_text and llm_text.strip():
+        got_any = False
+        async for chunk in self._call_final_llm_stream(prompt, llm_engine):
+            got_any = True
+            yield chunk
+
+        if got_any:
             memory.register_llm_call("final")
-            return llm_text.strip()
+        else:
+            yield fallback
 
-        return fallback
-
-    @staticmethod
-    async def _call_final_llm(prompt: str, llm_engine: str) -> Optional[str]:
-        import asyncio
+    async def _call_final_llm_stream(self, prompt: str, llm_engine: str) -> AsyncGenerator[str, None]:
         try:
             if llm_engine == "gemini":
-                return await asyncio.to_thread(call_gemini, prompt)
-            if llm_engine == "ollama":
-                return await asyncio.to_thread(call_ollama, prompt)
-            return None
+                gen = await call_gemini(prompt, stream=True)
+                async for chunk in gen:
+                    yield chunk
+            elif llm_engine == "ollama":
+                gen = await call_ollama(prompt, stream=True)
+                async for chunk in gen:
+                    yield chunk
         except Exception as exc:
-            logger.warning("Final answer LLM failed: %s", exc)
-            return None
+            logger.warning("Final answer streaming LLM failed: %s", exc)
+            yield ""
+
+    async def _finalize(self, memory: AgentMemory, llm_engine: str) -> str:
+        """Versione sincrona (non-generator) di finalize per compatibilità."""
+        full = ""
+        async for chunk in self._finalize_stream(memory, llm_engine):
+            full += chunk
+        return full
 
     @staticmethod
     def _is_fallback_good_enough(memory: AgentMemory, fallback: str) -> bool:

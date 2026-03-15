@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
 
+from app.db.redis import redis_client
 from app.agent.schemas import Observation
 
 
@@ -226,29 +227,32 @@ class LongTermMemory:
 
 class MemoryService:
     """
-    Small persistence facade.
-    It is intentionally backend-agnostic: today it keeps state in memory,
-    but its interface is stable enough to be swapped with Redis/DB/vector storage.
+    Persistence facade that stores session and long-term memory in Redis.
     """
-
-    _session_store: Dict[str, SessionMemory] = {}
-    _long_term_store: Dict[str, LongTermMemory] = {}
 
     def load_session_memory(self, user: Optional[object]) -> SessionMemory:
         user_key = _safe_user_key(user)
-        stored = self._session_store.get(user_key)
-        if stored is None:
-            stored = SessionMemory(user_key=user_key)
-            self._session_store[user_key] = stored
-        return stored
+        key = f"session_memory:{user_key}"
+        data = redis_client.get_json(key)
+        if data:
+            return SessionMemory(**data)
+        return SessionMemory(user_key=user_key)
 
     def load_long_term_memory(self, user: Optional[object]) -> LongTermMemory:
         user_key = _safe_user_key(user)
-        stored = self._long_term_store.get(user_key)
-        if stored is None:
-            stored = LongTermMemory(user_key=user_key)
-            self._long_term_store[user_key] = stored
-        return stored
+        key = f"long_term_memory:{user_key}"
+        data = redis_client.get_json(key)
+        if data:
+            return LongTermMemory(**data)
+        return LongTermMemory(user_key=user_key)
+
+    def save_session_memory(self, memory: SessionMemory) -> None:
+        key = f"session_memory:{memory.user_key}"
+        redis_client.set_json(key, asdict(memory), ttl_seconds=86400)  # 1 day
+
+    def save_long_term_memory(self, memory: LongTermMemory) -> None:
+        key = f"long_term_memory:{memory.user_key}"
+        redis_client.set_json(key, asdict(memory), ttl_seconds=2592000)  # 30 days
 
     def hydrate_request_state(self, user_query: str, user: Optional[object]) -> "RequestState":
         session_memory = self.load_session_memory(user)
@@ -261,6 +265,9 @@ class MemoryService:
             session_memory.add_query(clean_query)
             long_term_memory.remember_search(clean_query)
             long_term_memory.remember_brand_hint(clean_query)
+            
+            self.save_session_memory(session_memory)
+            self.save_long_term_memory(long_term_memory)
 
         return RequestState(
             user_query=str(user_query or "").strip(),
@@ -282,6 +289,9 @@ class MemoryService:
 
         for observation in state.observations[-5:]:
             state.session_memory.add_tool_result(observation.tool, observation.summary)
+            
+        self.save_session_memory(state.session_memory)
+        self.save_long_term_memory(state.long_term_memory)
 
 
 @dataclass

@@ -48,9 +48,8 @@ async def run_agent(
     }
 
     try:
-        # eseguo la pipeline bloccante fuori dal loop async
-        payload = await asyncio.to_thread(
-            run_search_pipeline,
+        # eseguo la pipeline asincrona direttamente
+        payload = await run_search_pipeline(
             query,
             db,
             user,
@@ -95,8 +94,7 @@ async def run_agent(
         }
 
         try:
-            seller_data = await asyncio.to_thread(
-                run_seller_pipeline,
+            seller_data = await run_seller_pipeline(
                 seller_name,
                 1,
                 10,

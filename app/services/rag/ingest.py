@@ -5,7 +5,7 @@ from app.services.rag.chunking import chunk_text
 from app.services.nlp_sentiment import extract_sentiment_label
 
 
-def ingest_seller_feedback(
+async def ingest_seller_feedback(
     seller_name: str,
     feedbacks: List[Dict],
     max_docs: int = 20
@@ -38,7 +38,7 @@ def ingest_seller_feedback(
             continue
 
         # Ask LLM for exact sentiment once per feedback
-        sentiment_label = extract_sentiment_label(comment)
+        sentiment_label = await extract_sentiment_label(comment)
 
         chunks = chunk_text(doc_text, chunk_size=150, overlap=30)
         
