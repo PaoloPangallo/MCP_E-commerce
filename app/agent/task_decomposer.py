@@ -32,10 +32,11 @@ def should_decompose_query(query: str) -> bool:
     if not profile["search_signal"]:
         return False
 
-    if not profile["seller_signal"]:
-        return False
-
     if profile["multi_signal"] or profile["comparison_signal"]:
+        return True
+
+    # If it's a generic search but with a seller, we also decompose (hybrid)
+    if profile["seller_signal"]:
         return True
 
     lowered = query.lower()
@@ -44,9 +45,9 @@ def should_decompose_query(query: str) -> bool:
 
 def _select_capability_tools() -> Dict[str, str | None]:
     return {
-        "seller": find_first_tool_by_tags("seller", "trust", "feedback"),
-        "search": find_first_tool_by_tags("search", "product", "catalog"),
-        "compare": find_first_tool_by_tags("compare", "product"),
+        "seller": find_first_tool_by_tags("seller", "trust", "feedback", match_all=True),
+        "search": find_first_tool_by_tags("search", "product", "catalog", match_all=True),
+        "compare": find_first_tool_by_tags("compare", "product", match_all=True),
     }
 
 

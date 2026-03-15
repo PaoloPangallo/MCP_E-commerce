@@ -16,6 +16,7 @@ from app.tools import (
     execute_compare_tool,
     execute_item_details_tool,
     execute_shipping_costs_tool,
+    execute_similar_items_tool,
 )
 
 
@@ -182,6 +183,17 @@ def _normalize_item_details_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "data": raw.get("data"),
         "error": raw.get("error"),
         "message": raw.get("message"),
+        "raw": raw,
+    }
+
+
+def _normalize_similar_items_output(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "status": raw.get("status", "ok"),
+        "item_id": raw.get("item_id"),
+        "results": raw.get("results", []),
+        "results_count": raw.get("results_count", 0),
+        "error": raw.get("error"),
         "raw": raw,
     }
 
@@ -546,6 +558,17 @@ def tools_catalog() -> str:
                             "item_id": {"type": "string"},
                             "country_code": {"type": "string", "default": "IT"},
                             "zip_code": {"type": "string", "default": ""},
+                        },
+                        "required": ["item_id"],
+                    },
+                },
+                {
+                    "name": "get_similar_items",
+                    "description": "Recupera prodotti simili o correlati per un oggetto (item_id)",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "item_id": {"type": "string"},
                         },
                         "required": ["item_id"],
                     },

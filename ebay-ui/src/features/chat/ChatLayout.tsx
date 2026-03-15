@@ -304,7 +304,7 @@ export default function ChatLayout({
           <Box
             sx={{
               width: "100%",
-              maxWidth: 800,
+              maxWidth: 1000,
               flex: 1,
               px: { xs: 2, md: 4 },
               py: 4

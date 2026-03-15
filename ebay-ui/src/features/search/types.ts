@@ -52,6 +52,10 @@ export interface ItemDetailsData {
   brand?: string
   color?: string
   mpn?: string
+  image?: Record<string, any>
+  additional_images?: any[]
+  item_url?: string
+  similar_items?: SearchItem[]
   [key: string]: any
 }
 

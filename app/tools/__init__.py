@@ -5,6 +5,7 @@ from app.tools.profile_tool import execute_profile_tool
 from app.tools.compare_tool import execute_compare_tool
 from app.tools.item_details_tool import execute_item_details_tool
 from app.tools.shipping_costs_tool import execute_shipping_costs_tool
+from app.tools.similar_items_tool import execute_similar_items_tool
 
 __all__ = [
     "execute_search_tool",
@@ -14,4 +15,5 @@ __all__ = [
     "execute_compare_tool",
     "execute_item_details_tool",
     "execute_shipping_costs_tool",
+    "execute_similar_items_tool",
 ]

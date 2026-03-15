@@ -29,7 +29,14 @@ def _get_qdrant() -> tuple[QdrantClient, SparseTextEmbedding]:
         if _client is not None and _sparse_model is not None:
             return _client, _sparse_model
             
-        _client = QdrantClient(path=QDRANT_PATH)
+        qdrant_url = os.getenv("QDRANT_URL")
+        qdrant_api_key = os.getenv("QDRANT_API_KEY")
+        
+        if qdrant_url:
+            _client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+        else:
+            _client = QdrantClient(path=QDRANT_PATH)
+            
         _sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
         
         try:

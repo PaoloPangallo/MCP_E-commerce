@@ -51,10 +51,16 @@ LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b-q4_K_M")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "45"))
 
-# Ollama Cloud (API diretta su ollama.com)
+# ---------------- OLLAMA CLOUD / LOCAL ----------------
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
-OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com")
+OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com").rstrip("/")
+
+# If API KEY is present, we might want to use the cloud host
+if OLLAMA_API_KEY:
+    OLLAMA_URL = f"{OLLAMA_CLOUD_HOST}/api/chat"
+else:
+    OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/") + "/api/chat"
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "12"))
@@ -470,15 +476,6 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 # LLM CALLS
 # ============================================================
 
-import logging
-from typing import Optional
-
-import requests
-
-logger = logging.getLogger(__name__)
-
-OLLAMA_URL = "http://localhost:11434/api/chat"
-
 
 async def call_ollama(
     prompt: str,
@@ -510,10 +507,14 @@ async def call_ollama(
         },
     }
 
+    headers = {}
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+
     if not stream:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-                response = await client.post(OLLAMA_URL, json=payload)
+                response = await client.post(OLLAMA_URL, json=payload, headers=headers)
                 response.raise_for_status()
                 data = response.json()
 
@@ -536,7 +537,7 @@ async def call_ollama(
         async def _ollama_generator():
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-                    async with client.stream("POST", OLLAMA_URL, json=payload) as response:
+                    async with client.stream("POST", OLLAMA_URL, json=payload, headers=headers) as response:
                         response.raise_for_status()
                         async for line in response.aiter_lines():
                             if not line:
@@ -682,6 +683,12 @@ async def call_ollama_cloud(
 async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
     primary = LLM_PROVIDER
     fallback = LLM_FALLBACK_PROVIDER
+
+    # Auto-upgrade ollama to ollama_cloud if API key exists
+    if primary == "ollama" and OLLAMA_API_KEY:
+        primary = "ollama_cloud"
+    if fallback == "ollama" and OLLAMA_API_KEY:
+        fallback = "ollama_cloud"
 
     async def _call(provider: str) -> Optional[str]:
         if provider == "ollama":

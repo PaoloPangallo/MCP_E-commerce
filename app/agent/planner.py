@@ -554,13 +554,13 @@ class ReactPlanner:
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
     def _search_tool_name(self) -> Optional[str]:
-        return find_first_tool_by_tags("search", "product", "catalog")
+        return find_first_tool_by_tags("search", "product", "catalog", match_all=True)
 
     def _seller_tool_name(self) -> Optional[str]:
-        return find_first_tool_by_tags("seller", "trust", "feedback")
+        return find_first_tool_by_tags("seller", "trust", "feedback", match_all=True)
 
     def _compare_tool_name(self) -> Optional[str]:
-        return find_first_tool_by_tags("compare", "product")
+        return find_first_tool_by_tags("compare", "product", match_all=True)
 
     def _ordered_tools_for_intent(self, intent: str) -> list[str]:
         seller_tool = self._seller_tool_name()
@@ -674,7 +674,7 @@ class ReactPlanner:
 
         comparison_hits = len(token_set & COMPARISON_CUES)
         if comparison_hits:
-            ev.add("comparison", min(0.35 + 0.15 * comparison_hits, 0.8), "comparison_lexicon")
+            ev.add("comparison", min(0.45 + 0.15 * comparison_hits, 0.9), "comparison_lexicon")
             ev.add("product", 0.2, "comparison_implies_product")
 
         shipping_hits = len(token_set & SHIPPING_CUES)

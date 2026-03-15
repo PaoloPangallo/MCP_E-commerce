@@ -6,6 +6,7 @@ import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import httpx
+import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -439,7 +440,8 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
 
-    url = f"{ITEM_URL}{item_id}"
+    encoded_item_id = urllib.parse.quote(item_id)
+    url = f"{ITEM_URL}{encoded_item_id}"
 
     async with httpx.AsyncClient() as client:
         try:
@@ -450,10 +452,11 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
                 response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             
             if response.status_code != 200:
+                logger.warning("EBAY GET ITEM ERROR | status=%s | body=%s", response.status_code, response.text)
                 return None
 
             data = response.json()
-            return {
+            item_details = {
                 "item_id": data.get("itemId"),
                 "title": data.get("title"),
                 "description": data.get("description"),
@@ -461,9 +464,70 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
                 "seller": data.get("seller", {}),
                 "price": data.get("price", {}),
                 "brand": data.get("brand"),
+                "image": data.get("image", {}),
+                "additional_images": data.get("additionalImages", []),
+                "item_url": data.get("itemWebUrl"),
+                "condition": data.get("condition"),
             }
-        except Exception:
+            
+            # Enrich with similar items
+            try:
+                item_details["similar_items"] = await get_similar_items(item_id)
+            except Exception as e:
+                logger.warning("Failed to fetch similar items for %s: %s", item_id, e)
+                item_details["similar_items"] = []
+                
+            return item_details
+        except Exception as e:
+            logger.error("EBAY GET ITEM EXCEPTION | item_id=%s | error=%s", item_id, e)
             return None
+
+# ============================================================
+# SIMILAR ITEMS API
+# ============================================================
+
+async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetches items similar to the given item_id using eBay's Browse API.
+    """
+    logger.info("EBAY GET SIMILAR ITEMS START | item_id=%s", item_id)
+
+    try:
+        token = await _get_oauth_token()
+    except Exception:
+        return []
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+    }
+
+    # eBay Browse API endpoint for similar items
+    # Note: Using product_id or seeds might be better in some cases, 
+    # but for simplicity we stick to item_id if the API supports it or use a search fallback.
+    # Actually, Browse API provides 'get_similar_items' via 'item' resource.
+    encoded_item_id = urllib.parse.quote(item_id)
+    url = f"{ITEM_URL}{encoded_item_id}/get_similar_items"
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+            if response.status_code == 401:
+                token = await _get_oauth_token(force_refresh=True)
+                headers["Authorization"] = f"Bearer {token}"
+                response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+
+            if response.status_code != 200:
+                logger.warning("EBAY GET SIMILAR ITEMS ERROR | status=%s | body=%s", response.status_code, response.text)
+                return []
+
+            data = response.json()
+            raw_items = data.get("itemSummaries", []) or []
+            
+            return [_normalize_item(i) for i in raw_items]
+        except Exception as e:
+            logger.error("EBAY GET SIMILAR ITEMS EXCEPTION | %s", e)
+            return []
 
 # ============================================================
 # SHIPPING COSTS API
@@ -485,7 +549,8 @@ async def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> 
         "X-EBAY-C-ENDUSERCTX": user_ctx,
     }
 
-    url = f"{ITEM_URL}{item_id}"
+    encoded_item_id = urllib.parse.quote(item_id)
+    url = f"{ITEM_URL}{encoded_item_id}"
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
