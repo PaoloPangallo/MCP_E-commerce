@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -20,26 +21,25 @@ logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from app.mcp.asgi import app as mcp_app
 
+_ENV = os.getenv("ENV", "development").strip().lower()
+_IS_PROD = _ENV in {"production", "prod"}
+
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     import asyncio
     from app.services.model_singleton import preload as _preload_model
 
-    # 1) Warm up the SentenceTransformer on the main thread before serving requests
     logger.info("Pre-loading SentenceTransformer model...")
     await asyncio.to_thread(_preload_model)
     logger.info("SentenceTransformer model ready.")
 
-    # 2) Check Redis Connectivity for session memory
     from app.db.redis import redis_client
     try:
-        # redis_client is a RedisManager, we need to check its internal state or just try an operation
         if redis_client.get_json("health_check") is None:
             logger.info("Redis cache ready (checked via RedisManager).")
     except Exception as e:
         logger.warning("Could not connect to Redis: %s. Session memory/history will fallback to local memory.", e)
 
-    # 3) Initialize shared HTTP client for eBay
     from app.services import ebay
     await ebay.init_http_client()
     logger.info("eBay shared HTTP client initialized.")
@@ -47,20 +47,35 @@ async def app_lifespan(app: FastAPI):
     async with mcp_app.router.lifespan_context(app):
         yield
 
-    # 4) Cleanup shared HTTP client
     await ebay.close_http_client()
     logger.info("App shutdown complete.")
 
-app = FastAPI(title="MCP E-Commerce API", lifespan=app_lifespan)
+
+# Build CORS origins from environment
+_allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
+_ngrok_url = os.getenv("NGROK_URL", "").strip()
+if _ngrok_url:
+    _allowed_origins.append(_ngrok_url)
+    logger.info("CORS: Added ngrok origin: %s", _ngrok_url)
+
+
+app = FastAPI(
+    title="MCP E-Commerce API",
+    lifespan=app_lifespan,
+    # Disable interactive docs in production
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

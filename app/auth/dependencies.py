@@ -59,29 +59,18 @@ def get_current_user(
         )
 
     try:
-
         payload = decode_token(token)
-
         user_id = get_user_id_from_payload(payload)
 
         if not user_id:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token"
-            )
+            raise HTTPException(status_code=401, detail="Invalid token")
 
         user = db.query(User).filter(User.id == user_id).first()
 
         if not user:
-            raise HTTPException(
-                status_code=401,
-                detail="User not found"
-            )
+            raise HTTPException(status_code=401, detail="User not found")
 
         return user
 
     except TokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
+        raise HTTPException(status_code=401, detail="Invalid token")
