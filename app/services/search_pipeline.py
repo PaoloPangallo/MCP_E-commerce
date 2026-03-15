@@ -70,7 +70,7 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     for c in constraints:
         ctype = c.get("type")
         val = c.get("value")
-        if ctype not in ("price", "condition") and val:
+        if ctype not in ("price", "condition", "aspect") and val:
             if isinstance(val, list):
                 parts.extend(str(v) for v in val)
             else:
@@ -191,9 +191,12 @@ def _prepare_and_persist_items(
     saved_count = 0
     results_out: List[Dict[str, Any]] = []
 
+    logger.info("_prepare_and_persist_items: received %d items", len(items))
+
     for item in items:
         ebay_id = item.get("ebay_id")
         if not ebay_id:
+            logger.warning("Skipping item without ebay_id: title=%s", item.get("title", "?"))
             continue
 
         already = ebay_id in existing_ids
@@ -327,7 +330,7 @@ async def run_search_pipeline(
             return results
         except Exception as e:
             logger.error(f"eBay search failed: {e}")
-            return []
+            return {"itemSummaries": [], "aspectDistributions": []}
 
     async def _do_rag():
         try:
@@ -343,11 +346,13 @@ async def run_search_pipeline(
         _do_ebay_search(parsed, MAX_RESULTS_FROM_EBAY),
         _do_rag()
     )
-    items = results[0] or []
+    items = results[0].get("itemSummaries", []) if isinstance(results[0], dict) else []
+    aspect_distributions = results[0].get("aspectDistributions", []) if isinstance(results[0], dict) else []
+    logger.info("eBay returned %d itemSummaries", len(items))
     expanded_query, rag_docs = results[1]
     
     timings["parallel_io_s"] = round(time.time() - t, 3)
-    items = _dedupe_items(items)
+    items = _dedupe_items(items) if items else []
 
     # Separate RAG docs for reranker
     product_docs = [d for d in rag_docs if d.get("type") == "product"]
@@ -465,6 +470,7 @@ async def run_search_pipeline(
         "saved_new_count": saved_count,
         "analysis": analysis,
         "results": results_out,
+        "aspect_distributions": aspect_distributions,
         "rag_context": rag_context_text,
         "metrics": metrics,
         "_timings": timings,

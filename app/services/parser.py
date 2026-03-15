@@ -90,6 +90,8 @@ BRAND_WHITELIST = {
     "dyson": "Dyson",
     "bose": "Bose",
     "jbl": "JBL",
+    "nike": "Nike",
+    "adidas": "Adidas",
 }
 
 CONDITION_SYNONYMS = {
@@ -790,6 +792,11 @@ def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return normalize_price_item(c)
     if ctype == "condition":
         return normalize_condition_item(c)
+    if ctype == "aspect":
+        name = c.get("name")
+        value = c.get("value")
+        if name and value:
+            return {"type": "aspect", "name": str(name), "value": str(value)}
 
     return None
 
@@ -927,15 +934,21 @@ Optional brand preference:
   "value": "Samsung"
 }}
 
+Specific attribute/aspect (color, material, storage, size, model_version, etc.):
+{{
+  "type": "aspect",
+  "name": "Color" | "Material" | "Storage" | "Size" | "Model",
+  "value": "Blue" | "Leather" | "256GB" | "42" | "iPhone 13"
+}}
+
 Rules:
 - Put ONLY mandatory requirements in constraints.
 - Put optional wishes in preferences.
+- Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
 - Do NOT invent brands or products.
-- If max budget is given, use only "<=".
-- If min budget is given, use only ">=".
-- If min and max are given, use "between".
-- If approximate budget is given, use +/-20% with "between".
 - Output JSON only.
+- If you see a size like "taglia 43" or "size 43", categorize it as an aspect with name "Size" and value "43".
+- If you see a color like "blue" or "rosa", categorize it as an aspect with name "Color" and value the color name.
 
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()

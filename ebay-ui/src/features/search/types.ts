@@ -98,6 +98,7 @@ export interface SearchBlock {
   item_details?: ItemDetailsData | null
   shipping_costs?: ShippingCostsData | null
   final_answer?: string | null
+  aspect_distributions?: any[]
   mode?: AppMode
   errors?: string[]
 }
@@ -120,6 +121,7 @@ export interface SearchPipelineResponse {
   analysis?: string
   rag_context?: RagContext
   metrics?: IRMetrics
+  aspect_distributions?: any[]
   _timings?: Record<string, number>
 }
 

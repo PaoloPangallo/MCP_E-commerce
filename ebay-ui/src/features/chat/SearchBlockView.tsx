@@ -49,7 +49,10 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
 
             {search.mode !== "seller" && hasResults ? (
                 <Box mt={2.5}>
-                    <SearchResultList results={search.results} />
+                    <SearchResultList
+                        results={search.results}
+                        aspect_distributions={search.aspect_distributions}
+                    />
                 </Box>
             ) : null}
 

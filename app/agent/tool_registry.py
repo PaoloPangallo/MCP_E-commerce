@@ -34,7 +34,7 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
         r"\b(feedback|recensioni|reputazione|affidabile|affidabilit[aà]|trust)\b",
     ),
     "search": (
-        r"\b(cerca|trova|mostra|compara|compari|comparami|confronta|confrontami|prezzo|prodotto|prodotti|compra|vende|vendita)\b",
+        r"\b(cerca|trova|mostra|prezzo|prodotto|prodotti|compra|vende|vendita)\b",
         r"\b\d+[\.,]?\d*\s*(euro|eur|€)\b",
         r"\b(taglia|misura|numero|colore|modello|marca)\b",
     ),

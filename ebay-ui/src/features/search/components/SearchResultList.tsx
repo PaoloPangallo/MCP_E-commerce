@@ -4,10 +4,12 @@ import EmojiEventsIcon from "@mui/icons-material/EmojiEvents"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 
 import SearchResultCard from "./SearchResultCard"
+import FilterSidebar from "./FilterSidebar"
 import type { SearchItem } from "../types"
 
 interface Props {
   results?: SearchItem[]
+  aspect_distributions?: any[]
 }
 
 function getTopTrust(results: SearchItem[]) {
@@ -16,7 +18,7 @@ function getTopTrust(results: SearchItem[]) {
   return Math.max(...values)
 }
 
-export default function SearchResultList({ results = [] }: Props) {
+export default function SearchResultList({ results = [], aspect_distributions = [] }: Props) {
   const [visibleCount, setVisibleCount] = useState(5)
   const safeResults = useMemo(() => results.filter(Boolean), [results])
 
@@ -36,8 +38,15 @@ export default function SearchResultList({ results = [] }: Props) {
     )
   }
 
+  const handleFilterClick = (aspectName: string, value: string) => {
+    const detail = `Cerca ${aspectName} ${value} per i risultati correnti`
+    window.dispatchEvent(new CustomEvent("send-chat", { detail }))
+  }
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <FilterSidebar distributions={aspect_distributions} onFilterClick={handleFilterClick} />
+
       <Box sx={{ border: "1px solid #e5e7eb", bgcolor: "#ffffff", borderRadius: 4, px: 2.25, py: 1.75 }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
           <Box>

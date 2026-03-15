@@ -198,6 +198,21 @@ def _build_condition_filter(constraints: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
+def _build_aspect_filter(constraints: List[Dict[str, Any]]) -> List[str]:
+    """
+    Builds a list of aspect filters.
+    Syntax: aspect_filter:Name:{Value}
+    """
+    aspect_filters = []
+    for c in constraints:
+        if c.get("type") == "aspect":
+            name = c.get("name")
+            value = c.get("value")
+            if name and value:
+                aspect_filters.append(f"aspect_filter:{name}:{{{value}}}")
+    return aspect_filters
+
+
 def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
     filters: List[str] = []
 
@@ -209,6 +224,10 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
     condition_filter = _build_condition_filter(constraints)
     if condition_filter:
         filters.append(condition_filter)
+
+    aspect_filters = _build_aspect_filter(constraints)
+    if aspect_filters:
+        filters.extend(aspect_filters)
 
     if not filters:
         return None
@@ -237,7 +256,7 @@ def _build_query(parsed: Dict[str, Any]) -> str:
     for c in constraints:
         ctype = c.get("type")
         val = c.get("value")
-        if ctype not in ("price", "condition") and val:
+        if ctype not in ("price", "condition", "aspect") and val:
             if isinstance(val, list):
                 parts.extend(str(v) for v in val)
             else:
@@ -322,6 +341,7 @@ async def _perform_search_request(
         "q": query,
         "limit": limit,
         "offset": offset,
+        "fieldgroups": "FULL",
     }
 
     if filter_string:
@@ -367,17 +387,17 @@ async def _perform_search_request(
 async def search_items(
     parsed_query: Dict[str, Any],
     limit: int = 20,
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
 
     logger.info("EBAY SEARCH START")
     query = _build_query(parsed_query)
     if not query:
-        return []
+        return {"itemSummaries": [], "aspectDistributions": []}
 
     try:
         token = await _get_oauth_token()
     except Exception:
-        return []
+        return {"itemSummaries": [], "aspectDistributions": []}
 
     constraints = parsed_query.get("constraints") or []
     preferences = parsed_query.get("preferences") or []
@@ -389,6 +409,7 @@ async def search_items(
     items: List[Dict[str, Any]] = []
     offset = 0
     pages_done = 0
+    aspects: List[Dict[str, Any]] = []
 
     async with httpx.AsyncClient() as client:
         while len(items) < wanted and pages_done < MAX_OFFSET_PAGES:
@@ -406,6 +427,11 @@ async def search_items(
                 break
 
             page_items = data.get("itemSummaries", []) or []
+            logger.info("eBay page response keys=%s, page_items=%d", list(data.keys()), len(page_items))
+            if pages_done == 0:
+                refinement = data.get("refinement") or {}
+                aspects = refinement.get("aspectDistributions", []) or []
+            
             if not page_items:
                 break
 
@@ -417,7 +443,10 @@ async def search_items(
             pages_done += 1
 
     items = _dedupe_keep_order(items)
-    return items[:wanted]
+    return {
+        "itemSummaries": items[:wanted],
+        "aspectDistributions": aspects if 'aspects' in locals() else []
+    }
 
 
 # ============================================================
