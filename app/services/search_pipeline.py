@@ -294,6 +294,7 @@ async def run_search_pipeline(
     db: Session,
     user: Optional[object] = None,
     llm_engine: str = "gemini",
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     if not query or not query.strip():
         raise ValueError("Query vuota")
@@ -308,11 +309,22 @@ async def run_search_pipeline(
 
     logger.info("PIPELINE STEP 1: parse_query")
 
+    # Recupera il contesto se disponibile (session_id or user_id)
+    context_info = ""
+    target_id = session_id or (str(getattr(user, "id", "")) if user else None)
+    if target_id:
+        history = redis_client.get_user_queries(target_id)
+        if history:
+            # Prendi le ultime 3 per non appesantire troppo il prompt
+            context_info = " | ".join(history[:3])
+            logger.info("PIPELINE: Found context in history: %s", context_info)
+
     t = time.time()
     parsed = await parse_query_service(
         query,
         use_llm=(llm_engine != "rule_based"),
         include_meta=True,
+        context_info=context_info,
     )
     timings["parse_query_s"] = round(time.time() - t, 3)
 

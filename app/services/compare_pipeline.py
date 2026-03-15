@@ -47,11 +47,11 @@ def _overall_score(price_score: float, trust: float, relevance: float, condition
     )
 
 
-async def _run_single_search(query: str, db: Any, llm_engine: str = "ollama") -> Dict[str, Any]:
+async def _run_single_search(query: str, db: Any, llm_engine: str = "ollama", session_id: Optional[str] = None) -> Dict[str, Any]:
     """Runs one query through run_search_pipeline."""
     from app.services.search_pipeline import run_search_pipeline  # avoid circular
     try:
-        result = await run_search_pipeline(query=query, db=db, llm_engine=llm_engine)
+        result = await run_search_pipeline(query=query, db=db, llm_engine=llm_engine, session_id=session_id)
         results = result.get("results") or []
         # Return only the top-1 item plus metadata
         return {
@@ -74,6 +74,7 @@ async def run_compare_pipeline(
     db: Any,
     llm_engine: str = "ollama",
     max_queries: int = 4,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run up to `max_queries` searches in parallel and compare their top results.
@@ -100,7 +101,7 @@ async def run_compare_pipeline(
 
     # Run all searches in parallel
     tasks = [
-        _run_single_search(q, db, llm_engine)
+        _run_single_search(q, db, llm_engine, session_id=session_id)
         for q in queries
     ]
     raw_results: List[Dict[str, Any]] = await asyncio.gather(*tasks, return_exceptions=False)

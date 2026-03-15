@@ -222,6 +222,22 @@ def build_final_answer_prompt(
         system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS (Apply these specifically to your tone/style/content):\n{custom_instructions}"
         
     pref_str = ""
+    # Estrai le preferenze utente dalla long_term_memory nello scratchpad
+    # (build_final_answer_prompt riceve final_data che include long_term_memory)
+    ltm = compact_final_data.get("long_term_memory") or {}
+    if ltm:
+        prefs = ltm.get("user_preferences") or {}
+        pref_parts = []
+        if prefs.get("favorite_sellers"):
+            pref_parts.append(f"Venditori preferiti: {', '.join(str(s) for s in prefs['favorite_sellers'][:3])}")
+        if prefs.get("recent_brand_hints"):
+            pref_parts.append(f"Brand/hint recenti: {', '.join(str(b) for b in prefs['recent_brand_hints'][:3])}")
+        prev = ltm.get("previous_searches") or []
+        if prev:
+            pref_parts.append(f"Ricerche precedenti: {', '.join(str(q) for q in prev[:3])}")
+        if pref_parts:
+            pref_str = "\n".join(pref_parts)
+
     # Make sure we don't blow up context with massive scratchpad
     base_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(user_query) + _estimate_tokens(context_info)
     budget_chars = max(1000, (MAX_LLM_PROMPT_TOKENS - base_tokens) * ROUGH_CHARS_PER_TOKEN)

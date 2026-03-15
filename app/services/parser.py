@@ -894,10 +894,14 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
 # LLM PARSE
 # ============================================================
 
-async def llm_parse(query: str) -> Tuple[Optional[Dict[str, Any]], str]:
+async def llm_parse(query: str, context_info: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], str]:
+    context_block = ""
+    if context_info:
+        context_block = f"\nCONVERSATION CONTEXT (History of recent topics/products):\n{context_info}\n"
+
     prompt = f"""
 You are a strict semantic query parser for an e-commerce assistant.
-
+{context_block}
 Return ONLY valid minified JSON.
 No markdown.
 No explanations.
@@ -946,6 +950,7 @@ Rules:
 - Put optional wishes in preferences.
 - Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
 - Do NOT invent brands or products.
+- IMPORTANT: If the user uses pronouns (e.g., "li", "le", "quelli", "them", "it") or says "find THEM", use the CONVERSATION CONTEXT to resolve what product/brand they are referring to.
 - Output JSON only.
 - If you see a size like "taglia 43" or "size 43", categorize it as an aspect with name "Size" and value "43".
 - If you see a color like "blue" or "rosa", categorize it as an aspect with name "Color" and value the color name.
@@ -1087,13 +1092,14 @@ async def parse_query_service(
     text: str,
     use_llm: bool = True,
     include_meta: bool = True,
+    context_info: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
     text = normalize_text(text)
     text = correct_brands_in_text(text)
 
-    # Caching check
-    cache_key = f"query_parse:{text}:{use_llm}"
+    # Caching check (includes context to avoid collisions)
+    cache_key = f"query_parse:{text}:{use_llm}:{context_info or ''}"
     if use_llm:
         cached = redis_client.get_json(cache_key)
         if cached:
@@ -1107,7 +1113,7 @@ async def parse_query_service(
     effective_use_llm = use_llm and should_try_llm(text)
 
     if effective_use_llm:
-        parsed_llm, used_provider = await llm_parse(text)
+        parsed_llm, used_provider = await llm_parse(text, context_info=context_info)
         llm_result = parsed_llm
 
     final = merge_results(rule_result, llm_result)

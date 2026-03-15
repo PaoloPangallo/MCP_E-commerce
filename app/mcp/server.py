@@ -235,6 +235,7 @@ async def search_products(query: str, include_shipping: bool = False, session_id
             db=db,
             user=context.user,
             llm_engine=context.llm_engine,
+            session_id=session_id,
         )
 
         normalized = _normalize_search_output(raw)
@@ -310,7 +311,7 @@ async def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, sessi
 )
 async def profile_query(query: str, session_id: str = "") -> str:
     try:
-        parsed = await parse_query_service(query)
+        parsed = await parse_query_service(query, session_id=session_id, context_info=session_id) # Using session_id as anchor for history
         return _safe_json(
             {
                 "status": "ok",

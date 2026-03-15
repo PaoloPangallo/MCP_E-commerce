@@ -378,12 +378,33 @@ class EbayReactAgent:
             return
 
         if intent == "comparison":
+            # Se c'è una gem, usa il LLM per arricchire la risposta con la personalità dell'utente
+            custom_instructions = getattr(self.user, "custom_instructions", None)
+            if custom_instructions and self._should_use_llm_for_final(memory, llm_engine):
+                prompt = build_final_answer_prompt(
+                    user_query=memory.user_query,
+                    scratchpad=memory.scratchpad(),
+                    final_data=memory.final_data(),
+                    custom_instructions=custom_instructions
+                )
+                got_any = False
+                async for chunk in self._call_final_llm_stream(prompt, llm_engine):
+                    got_any = True
+                    yield chunk
+                if got_any:
+                    memory.register_llm_call("final")
+                    return
             yield self._build_comparison_answer(memory)
             return
 
         fallback = self._fallback_final_answer(memory)
 
-        if self._is_fallback_good_enough(memory, fallback):
+        # Se l'utente ha una gem, non usare mai il fallback pre-confezionato:
+        # il LLM deve sempre generare la risposta per applicare la personalità.
+        custom_instructions = getattr(self.user, "custom_instructions", None)
+        if custom_instructions and self._should_use_llm_for_final(memory, llm_engine):
+            pass  # salta il fallback shortcut → va dritto al LLM sotto
+        elif self._is_fallback_good_enough(memory, fallback):
             yield fallback
             return
 
