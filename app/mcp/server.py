@@ -234,7 +234,7 @@ async def search_products(query: str, include_shipping: bool = False, session_id
             query=query,
             db=db,
             user=context.user,
-            llm_engine="ollama"
+            llm_engine=context.llm_engine,
         )
 
         normalized = _normalize_search_output(raw)

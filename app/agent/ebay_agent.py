@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -337,7 +338,7 @@ class EbayReactAgent:
                     yield AnswerChunkEvent(chunk=chunk).model_dump()
                 final_answer = full_text
 
-            import asyncio
+
             await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)
 
             yield FinalEvent(

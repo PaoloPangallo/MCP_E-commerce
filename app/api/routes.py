@@ -22,9 +22,6 @@ class SearchRequest(BaseModel):
     llm_engine: Literal["gemini", "ollama", "rule_based"] = "gemini"
 
 
-@router.get("/health")
-def health():
-    return {"status": "ok"}
 
 
 @router.post("/parse")

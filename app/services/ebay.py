@@ -18,7 +18,8 @@ EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
 EBAY_ENV = os.getenv("EBAY_ENV", "sandbox").strip().lower()
 EBAY_MARKETPLACE_ID = os.getenv("EBAY_MARKETPLACE_ID", "EBAY_IT").strip()
 
-REQUEST_TIMEOUT = int(os.getenv("EBAY_REQUEST_TIMEOUT", "15"))
+REQUEST_TIMEOUT = float(os.getenv("EBAY_REQUEST_TIMEOUT", "15")) # Changed to float for httpx client
+
 MAX_PAGE_SIZE = min(int(os.getenv("EBAY_PAGE_SIZE", "20")), 200)
 MAX_OFFSET_PAGES = int(os.getenv("EBAY_MAX_OFFSET_PAGES", "3"))
 
@@ -35,8 +36,29 @@ else:
     ITEM_URL = "https://api.sandbox.ebay.com/buy/browse/v1/item/"
 
 
-# We will use ephemeral clients or a global one if needed, but for now let's use async functions that create their own or take one.
+# ============================================================
+# HTTP CLIENT (SINGLETON)
+# ============================================================
 
+_shared_client: Optional[httpx.AsyncClient] = None
+
+async def init_http_client() -> None:
+    global _shared_client
+    if _shared_client is None:
+        _shared_client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+
+async def close_http_client() -> None:
+    global _shared_client
+    if _shared_client is not None:
+        await _shared_client.aclose()
+        _shared_client = None
+
+def get_client() -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is None:
+        logger.warning("EBAY shared HTTP client not initialized! Autocreating fallback.")
+        _shared_client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+    return _shared_client
 
 # ============================================================
 # TOKEN CACHE
@@ -46,6 +68,7 @@ _token_cache: Dict[str, Any] = {
     "access_token": None,
     "expires_at": 0.0,
 }
+_token_lock = asyncio.Lock()
 
 
 # ============================================================
@@ -87,6 +110,7 @@ def _dedupe_keep_order(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 async def _get_oauth_token(force_refresh: bool = False) -> str:
     global _token_cache
 
+    # Fast path: check cache without lock
     now = time.time()
     if (
         not force_refresh
@@ -95,22 +119,33 @@ async def _get_oauth_token(force_refresh: bool = False) -> str:
     ):
         return _token_cache["access_token"]
 
-    if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
-        raise RuntimeError("EBAY_CLIENT_ID o EBAY_CLIENT_SECRET mancanti")
+    # Slow path: acquire lock for refresh
+    async with _token_lock:
+        # Double-check after acquiring lock (another coroutine may have refreshed)
+        now = time.time()
+        if (
+            not force_refresh
+            and _token_cache["access_token"]
+            and now < float(_token_cache["expires_at"])
+        ):
+            return _token_cache["access_token"]
 
-    auth_string = f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}"
-    encoded_auth = base64.b64encode(auth_string.encode()).decode()
+        if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
+            raise RuntimeError("EBAY_CLIENT_ID o EBAY_CLIENT_SECRET mancanti")
 
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": f"Basic {encoded_auth}",
-    }
-    data = {
-        "grant_type": "client_credentials",
-        "scope": "https://api.ebay.com/oauth/api_scope",
-    }
+        auth_string = f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}"
+        encoded_auth = base64.b64encode(auth_string.encode()).decode()
 
-    async with httpx.AsyncClient() as client:
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {encoded_auth}",
+        }
+        data = {
+            "grant_type": "client_credentials",
+            "scope": "https://api.ebay.com/oauth/api_scope",
+        }
+
+        client = get_client()
         response = await client.post(
             OAUTH_URL,
             headers=headers,
@@ -118,17 +153,17 @@ async def _get_oauth_token(force_refresh: bool = False) -> str:
             timeout=REQUEST_TIMEOUT,
         )
 
-    if response.status_code != 200:
-        raise RuntimeError(f"OAuth error {response.status_code}: {response.text}")
+        if response.status_code != 200:
+            raise RuntimeError(f"OAuth error {response.status_code}: {response.text}")
 
-    token_data = response.json()
-    access_token = token_data.get("access_token")
-    expires_in = token_data.get("expires_in", 7200)
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+        expires_in = token_data.get("expires_in", 7200)
 
-    _token_cache["access_token"] = access_token
-    _token_cache["expires_at"] = now + float(expires_in) - 60
+        _token_cache["access_token"] = access_token
+        _token_cache["expires_at"] = now + float(expires_in) - 60
 
-    return access_token
+        return access_token
 
 
 # ============================================================
@@ -411,41 +446,41 @@ async def search_items(
     pages_done = 0
     aspects: List[Dict[str, Any]] = []
 
-    async with httpx.AsyncClient() as client:
-        while len(items) < wanted and pages_done < MAX_OFFSET_PAGES:
-            try:
-                data = await _perform_search_request(
-                    client=client,
-                    token=token,
-                    query=query,
-                    filter_string=filter_string,
-                    limit=page_size,
-                    offset=offset,
-                    sort=sort,
-                )
-            except Exception:
-                break
+    client = get_client()
+    while len(items) < wanted and pages_done < MAX_OFFSET_PAGES:
+        try:
+            data = await _perform_search_request(
+                client=client,
+                token=token,
+                query=query,
+                filter_string=filter_string,
+                limit=page_size,
+                offset=offset,
+                sort=sort,
+            )
+        except Exception:
+            break
 
-            page_items = data.get("itemSummaries", []) or []
-            logger.info("eBay page response keys=%s, page_items=%d", list(data.keys()), len(page_items))
-            if pages_done == 0:
-                refinement = data.get("refinement") or {}
-                aspects = refinement.get("aspectDistributions", []) or []
-            
-            if not page_items:
-                break
+        page_items = data.get("itemSummaries", []) or []
+        logger.info("eBay page response keys=%s, page_items=%d", list(data.keys()), len(page_items))
+        if pages_done == 0:
+            refinement = data.get("refinement") or {}
+            aspects = refinement.get("aspectDistributions", []) or []
+        
+        if not page_items:
+            break
 
-            items.extend([_normalize_item(i) for i in page_items])
-            if len(page_items) < page_size:
-                break
+        items.extend([_normalize_item(i) for i in page_items])
+        if len(page_items) < page_size:
+            break
 
-            offset += page_size
-            pages_done += 1
+        offset += page_size
+        pages_done += 1
 
     items = _dedupe_keep_order(items)
     return {
         "itemSummaries": items[:wanted],
-        "aspectDistributions": aspects if 'aspects' in locals() else []
+        "aspectDistributions": aspects,
     }
 
 
@@ -472,44 +507,44 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
     encoded_item_id = urllib.parse.quote(item_id)
     url = f"{ITEM_URL}{encoded_item_id}"
 
-    async with httpx.AsyncClient() as client:
-        try:
+    client = get_client()
+    try:
+        response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        if response.status_code == 401:
+            token = await _get_oauth_token(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
             response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-            if response.status_code == 401:
-                token = await _get_oauth_token(force_refresh=True)
-                headers["Authorization"] = f"Bearer {token}"
-                response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             
-            if response.status_code != 200:
-                logger.warning("EBAY GET ITEM ERROR | status=%s | body=%s", response.status_code, response.text)
-                return None
-
-            data = response.json()
-            item_details = {
-                "item_id": data.get("itemId"),
-                "title": data.get("title"),
-                "description": data.get("description"),
-                "item_specifics": data.get("localizedAspects", []),
-                "seller": data.get("seller", {}),
-                "price": data.get("price", {}),
-                "brand": data.get("brand"),
-                "image": data.get("image", {}),
-                "additional_images": data.get("additionalImages", []),
-                "item_url": data.get("itemWebUrl"),
-                "condition": data.get("condition"),
-            }
-            
-            # Enrich with similar items
-            try:
-                item_details["similar_items"] = await get_similar_items(item_id)
-            except Exception as e:
-                logger.warning("Failed to fetch similar items for %s: %s", item_id, e)
-                item_details["similar_items"] = []
-                
-            return item_details
-        except Exception as e:
-            logger.error("EBAY GET ITEM EXCEPTION | item_id=%s | error=%s", item_id, e)
+        if response.status_code != 200:
+            logger.warning("EBAY GET ITEM ERROR | status=%s | body=%s", response.status_code, response.text)
             return None
+
+        data = response.json()
+        item_details = {
+            "item_id": data.get("itemId"),
+            "title": data.get("title"),
+            "description": data.get("description"),
+            "item_specifics": data.get("localizedAspects", []),
+            "seller": data.get("seller", {}),
+            "price": data.get("price", {}),
+            "brand": data.get("brand"),
+            "image": data.get("image", {}),
+            "additional_images": data.get("additionalImages", []),
+            "item_url": data.get("itemWebUrl"),
+            "condition": data.get("condition"),
+        }
+        
+        # Enrich with similar items
+        try:
+            item_details["similar_items"] = await get_similar_items(item_id)
+        except Exception as e:
+            logger.warning("Failed to fetch similar items for %s: %s", item_id, e)
+            item_details["similar_items"] = []
+            
+        return item_details
+    except Exception as e:
+        logger.error("EBAY GET ITEM EXCEPTION | item_id=%s | error=%s", item_id, e)
+        return None
 
 # ============================================================
 # SIMILAR ITEMS API
@@ -538,25 +573,25 @@ async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
     encoded_item_id = urllib.parse.quote(item_id)
     url = f"{ITEM_URL}{encoded_item_id}/get_similar_items"
 
-    async with httpx.AsyncClient() as client:
-        try:
+    client = get_client()
+    try:
+        response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        if response.status_code == 401:
+            token = await _get_oauth_token(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
             response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-            if response.status_code == 401:
-                token = await _get_oauth_token(force_refresh=True)
-                headers["Authorization"] = f"Bearer {token}"
-                response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 
-            if response.status_code != 200:
-                logger.warning("EBAY GET SIMILAR ITEMS ERROR | status=%s | body=%s", response.status_code, response.text)
-                return []
-
-            data = response.json()
-            raw_items = data.get("itemSummaries", []) or []
-            
-            return [_normalize_item(i) for i in raw_items]
-        except Exception as e:
-            logger.error("EBAY GET SIMILAR ITEMS EXCEPTION | %s", e)
+        if response.status_code != 200:
+            logger.warning("EBAY GET SIMILAR ITEMS ERROR | status=%s | body=%s", response.status_code, response.text)
             return []
+
+        data = response.json()
+        raw_items = data.get("itemSummaries", []) or []
+            
+        return [_normalize_item(i) for i in raw_items]
+    except Exception as e:
+        logger.error("EBAY GET SIMILAR ITEMS EXCEPTION | %s", e)
+        return []
 
 # ============================================================
 # SHIPPING COSTS API
@@ -580,22 +615,22 @@ async def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> 
 
     encoded_item_id = urllib.parse.quote(item_id)
     url = f"{ITEM_URL}{encoded_item_id}"
-    async with httpx.AsyncClient() as client:
-        try:
+    client = get_client()
+    try:
+        response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        if response.status_code == 401:
+            token = await _get_oauth_token(force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
             response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-            if response.status_code == 401:
-                token = await _get_oauth_token(force_refresh=True)
-                headers["Authorization"] = f"Bearer {token}"
-                response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 
-            if response.status_code != 200:
-                return None
-
-            data = response.json()
-            return {
-                "item_id": item_id,
-                "shipping_options": data.get("shippingOptions", []),
-                "item_location": data.get("itemLocation", {}),
-            }
-        except Exception:
+        if response.status_code != 200:
             return None
+
+        data = response.json()
+        return {
+            "item_id": item_id,
+            "shipping_options": data.get("shippingOptions", []),
+            "item_location": data.get("itemLocation", {}),
+        }
+    except Exception:
+        return None

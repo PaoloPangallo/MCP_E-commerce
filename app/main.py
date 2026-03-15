@@ -39,9 +39,16 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Could not connect to Redis: %s. Session memory/history will fallback to local memory.", e)
 
+    # 3) Initialize shared HTTP client for eBay
+    from app.services import ebay
+    await ebay.init_http_client()
+    logger.info("eBay shared HTTP client initialized.")
+
     async with mcp_app.router.lifespan_context(app):
         yield
 
+    # 4) Cleanup shared HTTP client
+    await ebay.close_http_client()
     logger.info("App shutdown complete.")
 
 app = FastAPI(title="MCP E-Commerce API", lifespan=app_lifespan)
@@ -59,8 +66,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Base.metadata.create_all(bind=engine)
-logger.info("Database tables initialized")
 
 logger.info("Mounting MCP Server at /mcp")
 app.mount("/mcp", mcp_app)

@@ -165,7 +165,4 @@ async def get_seller_feedback(username: str, limit: int = 200) -> List[Dict]:
                 break
 
     return all_feedback[:limit]
-
-
-def clear_feedback_cache() -> None:
-    get_seller_feedback.cache_clear()
+
