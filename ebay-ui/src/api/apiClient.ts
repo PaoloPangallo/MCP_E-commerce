@@ -17,6 +17,9 @@ function buildHeaders(
     merged.set("Content-Type", "application/json")
   }
 
+  // Bypass ngrok browser warning for API requests
+  merged.set("ngrok-skip-browser-warning", "true")
+
   if (token) {
     merged.set("Authorization", `Bearer ${token}`)
   }

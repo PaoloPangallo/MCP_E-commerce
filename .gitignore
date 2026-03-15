@@ -1,20 +1,41 @@
+# Environment
+.env
+*.env
+.env.*
+!.env.example
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.db
-.env
-
-# Virtual environment
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
 venv/
-.env/
+env/
 
-# PyCharm
+# Data & Storage
+qdrant_storage/
+postgres_data/
+*.sqlite
+*.db
+*.faiss
+*.pkl
+
+# Logs
+*.log
+debug/
+tmp/
+
+# IDE
+.vscode/
 .idea/
+*.swp
 
-# OS
-.DS_Store
-
-# FAISS index
-*.index
+# Test artifacts
+test_trace.json
+tmp_test_parser.py
+reproduce_error.py

@@ -58,10 +58,13 @@ _allowed_origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 ]
-_ngrok_url = os.getenv("NGROK_URL", "").strip()
-if _ngrok_url:
-    _allowed_origins.append(_ngrok_url)
-    logger.info("CORS: Added ngrok origin: %s", _ngrok_url)
+_frontend_urls = os.getenv("FRONTEND_URLS", "").strip()
+if _frontend_urls:
+    # Support multiple comma-separated URLs
+    origins = [u.strip() for u in _frontend_urls.split(",") if u.strip()]
+    _allowed_origins.extend(origins)
+    for u in origins:
+        logger.info("CORS: Added remote frontend origin: %s", u)
 
 
 app = FastAPI(
@@ -89,6 +92,15 @@ app.include_router(search_router)
 app.include_router(seller_router)
 app.include_router(auth_router)
 app.include_router(agent_stream_router)
+
+
+@app.get("/")
+def root():
+    return {
+        "message": "MCP E-Commerce API is running",
+        "health_check": "/health",
+        "documentation": "Disabled in production" if _IS_PROD else "/docs"
+    }
 
 
 @app.get("/health")

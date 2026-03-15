@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+import logging
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
@@ -23,29 +24,41 @@ router = APIRouter(
     prefix="/auth",
     tags=["auth"]
 )
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------
-# Rate Limiting
+# Rate Limiting (Redis-backed)
 # ---------------------------------------------------
 
-_RATE_LIMIT_WINDOW = 60.0  # 1 minute
-_RATE_LIMIT_MAX = 5  # max attempts per window
-_rate_store: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60  # 1 minute
+_RATE_LIMIT_MAX = 5     # max attempts per window
 
+from app.db.redis import redis_client
 
 def _check_rate_limit(key: str) -> None:
-    """Raise 429 if too many requests from this key in the time window."""
-    now = time.time()
-    bucket = _rate_store[key]
-    # Purge old entries
-    _rate_store[key] = [t for t in bucket if now - t < _RATE_LIMIT_WINDOW]
-    if len(_rate_store[key]) >= _RATE_LIMIT_MAX:
-        raise HTTPException(
-            status_code=429,
-            detail="Troppi tentativi. Riprova tra un minuto."
-        )
-    _rate_store[key].append(now)
+    """Raise 429 if too many requests from this key in the time window using Redis."""
+    redis_key = f"rate_limit:{key}"
+    
+    try:
+        # Increment and get the current count
+        current_count = redis_client.client.incr(redis_key)
+        
+        # If it's the first hit, set the expiration
+        if current_count == 1:
+            redis_client.client.expire(redis_key, _RATE_LIMIT_WINDOW)
+            
+        if current_count > _RATE_LIMIT_MAX:
+            raise HTTPException(
+                status_code=429,
+                detail="Troppi tentativi. Riprova tra un minuto."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Fallback to allow request if Redis is down, but log it
+        logger.warning("Redis rate limit check failed: %s", e)
+        return
 
 
 # ---------------------------------------------------

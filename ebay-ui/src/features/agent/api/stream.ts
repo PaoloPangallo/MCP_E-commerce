@@ -24,6 +24,7 @@ export function streamAgent(
   const headers: Record<string, string> = {
     "Accept": "text/event-stream",
     "Cache-Control": "no-cache",
+    "ngrok-skip-browser-warning": "true",
   }
 
   if (token) {

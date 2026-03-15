@@ -21,6 +21,7 @@ from app.services.rag.reranker import rerank_products
 from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
 from app.services.user_profiling import update_user_profile
+from app.services.advisor import get_market_insights
 
 logger = logging.getLogger(__name__)
 
@@ -475,6 +476,17 @@ async def run_search_pipeline(
 
     timings["total_s"] = round(time.time() - t0, 3)
 
+    market_advisor = None
+    if results_out:
+        top_item = results_out[0]
+        if top_item.get("epid"):
+            try:
+                from app.services.advisor import get_market_insights
+                logger.info("PIPELINE STEP 11: market_advisor for epid=%s", top_item["epid"])
+                market_advisor = await get_market_insights(top_item)
+            except Exception as e:
+                logger.warning("Market advisor failed: %s", e)
+
     return {
         "parsed_query": parsed,
         "ebay_query_used": ebay_query_used,
@@ -482,6 +494,7 @@ async def run_search_pipeline(
         "saved_new_count": saved_count,
         "analysis": analysis,
         "results": results_out,
+        "market_advisor": market_advisor,
         "aspect_distributions": aspect_distributions,
         "rag_context": rag_context_text,
         "metrics": metrics,
