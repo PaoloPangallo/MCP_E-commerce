@@ -1,11 +1,12 @@
 import logging
-from app.services.parser import call_ollama
+from typing import Optional
+from app.services.parser import call_llm
 
 logger = logging.getLogger(__name__)
 
-async def expand_query(query: str) -> str:
+async def expand_query(query: str, llm_engine: Optional[str] = None) -> str:
     """
-    Expands the user query using a fast LLM call (Ollama).
+    Expands the user query using a fast LLM call.
     Example: 'compara iphone 15 max' -> 'Apple iPhone 15 Pro Max smartphone comparison'
     This helps the Sparse (BM25) and Dense retrieval stages find more relevant matches.
     """
@@ -22,7 +23,8 @@ async def expand_query(query: str) -> str:
     User query: "{query}"
     """
     try:
-        res = await call_ollama(prompt)
+        # Use generic call_llm to respect preferred provider/engine
+        res, used_provider = await call_llm(prompt, engine=llm_engine)
         if res is None:
             return query
             

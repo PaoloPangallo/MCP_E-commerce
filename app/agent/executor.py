@@ -167,6 +167,9 @@ class ToolExecutor:
             if user_id:
                 tool_call.input["session_id"] = str(user_id)
 
+        if self.context.llm_engine:
+            tool_call.input["llm_engine"] = self.context.llm_engine
+
         if self._should_use_mcp(tool_call.tool):
             try:
                 logger.info(

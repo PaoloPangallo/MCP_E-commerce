@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.redis import redis_client
 from app.models.listing import Listing
-from app.services.ebay import search_items
+from app.services.ebay import search_items, build_ebay_query
 from app.services.feedback import get_seller_feedback
 from app.services.metrics.ir_metrics import ndcg_at_k, precision_at_k, recall_at_k
 from app.services.nlp_sentiment import compute_sentiment_score
@@ -34,7 +34,7 @@ FEEDBACK_WORKERS = 6
 
 def _normalize_llm_engine(llm_engine: str) -> str:
     llm_engine = (llm_engine or "").strip().lower()
-    if llm_engine in {"gemini", "ollama", "rule_based"}:
+    if llm_engine in {"gemini", "ollama", "ollama_cloud", "rule_based"}:
         return llm_engine
     return "ollama"
 
@@ -54,43 +54,6 @@ def _dedupe_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return deduped
 
 
-def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
-    parts: List[str] = []
-    
-    brands = parsed.get("brands") or []
-    product = parsed.get("product")
-    
-    if brands:
-        parts.extend(str(b).strip() for b in brands if str(b).strip())
-    if product:
-        parts.append(str(product).strip())
-        
-    # Includiamo constraints testuali (no price/condition)
-    constraints = parsed.get("constraints") or []
-    for c in constraints:
-        ctype = c.get("type")
-        val = c.get("value")
-        if ctype not in ("price", "condition") and val:
-            if isinstance(val, list):
-                parts.extend(str(v) for v in val)
-            else:
-                parts.append(str(val))
-                
-    if not parts:
-        return fallback_query
-        
-    # Deduplicazione parole mantenendo ordine
-    final_tokens: List[str] = []
-    seen_tokens_low = set()
-    
-    raw_query = " ".join(parts)
-    for word in raw_query.split():
-        w_low = word.lower()
-        if w_low not in seen_tokens_low:
-            final_tokens.append(word)
-            seen_tokens_low.add(w_low)
-            
-    return " ".join(final_tokens).strip()
 
 
 async def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
@@ -310,10 +273,12 @@ async def run_search_pipeline(
         query,
         use_llm=(llm_engine != "rule_based"),
         include_meta=True,
+        llm_engine=llm_engine,
     )
     timings["parse_query_s"] = round(time.time() - t, 3)
 
-    ebay_query_used = _build_ebay_query(parsed, query)
+    ebay_query_used = build_ebay_query(parsed)
+
 
     # ============================================================
     # 2) PARALLEL: EBAY SEARCH + RAG RETRIEVAL (including expansion)
@@ -331,7 +296,7 @@ async def run_search_pipeline(
 
     async def _do_rag():
         try:
-            expanded = await expand_query(query)
+            expanded = await expand_query(query, llm_engine=llm_engine)
             docs = await asyncio.to_thread(retrieve_context, expanded, k=10)
             return expanded, docs
         except Exception as e:

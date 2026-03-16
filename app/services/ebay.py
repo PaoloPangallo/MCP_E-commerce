@@ -219,7 +219,7 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
 # QUERY BUILDING
 # ============================================================
 
-def _build_query(parsed: Dict[str, Any]) -> str:
+def build_ebay_query(parsed: Dict[str, Any]) -> str:
     # 1) Elaboriamo i componenti principali
     parts: List[str] = []
     
@@ -242,22 +242,62 @@ def _build_query(parsed: Dict[str, Any]) -> str:
             else:
                 parts.append(str(val))
     
-    # 3) Se ancora vuoto, usiamo semantic/original query
-    if not parts:
+    # Remove stop words and noise
+    from app.services.parser import STOP_WORDS
+    
+    # Identify price values to ignore them in keyword search
+    price_values = set()
+    for c in constraints:
+        if c.get("type") == "price":
+            val = c.get("value")
+            if isinstance(val, (int, float)):
+                price_values.add(str(int(val)))
+            elif isinstance(val, list):
+                for v in val:
+                    price_values.add(str(int(v)))
+
+    clean_parts = []
+    for p in parts:
+        tokens = str(p).split()
+        filtered = [t for t in tokens if t.lower() not in STOP_WORDS and t not in price_values]
+        if filtered:
+            clean_parts.append(" ".join(filtered))
+            
+    if not clean_parts:
         fallback = parsed.get("semantic_query") or parsed.get("original_query")
         if fallback:
-            parts.append(str(fallback).strip())
+            # Still filter stop words from fallback
+            tokens = str(fallback).split()
+            filtered = [t for t in tokens if t.lower() not in STOP_WORDS]
+            if filtered:
+                clean_parts.append(" ".join(filtered))
+
+    parts = clean_parts
             
-    # 4) DEDUPLICAZIONE PAROLE MANTENENDO ORDINE
-    # Esempio: "iPhone iPhone 13 128gb" -> "iPhone 13 128gb"
+    # 4) DEDUPLICAZIONE E SINONIMI (MANTENENDO ORDINE)
     final_tokens: List[str] = []
     seen_tokens_low = set()
+    
+    # Mappa minima di sinonimi per migliorare il search recall
+    synonyms = {
+        "nero": "nero black",
+        "neri": "nero black",
+        "blu": "blu blue",
+        "baggy": "baggy relaxed fit",
+        "larghi": "baggy relaxed",
+        "chiaro": "chiaro light",
+    }
     
     raw_query = " ".join(parts)
     for word in raw_query.split():
         w_low = word.lower()
         if w_low not in seen_tokens_low:
-            final_tokens.append(word)
+            # Priority for brands (already at the front usually)
+            # Expand synonyms
+            if w_low in synonyms:
+                final_tokens.append(synonyms[w_low])
+            else:
+                final_tokens.append(word)
             seen_tokens_low.add(w_low)
             
     return " ".join(final_tokens).strip()
@@ -369,7 +409,7 @@ async def search_items(
 ) -> List[Dict[str, Any]]:
 
     logger.info("EBAY SEARCH START")
-    query = _build_query(parsed_query)
+    query = build_ebay_query(parsed_query)
     if not query:
         return []
 

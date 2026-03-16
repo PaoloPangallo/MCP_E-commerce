@@ -69,7 +69,9 @@ _EVENT_STREAM_MARKERS = (
 
 def _normalize_llm_engine(llm_engine: str) -> str:
     llm_engine = (llm_engine or "").strip().lower()
-    if llm_engine in {"gemini", "ollama", "rule_based"}:
+    if llm_engine == "ollama" and os.getenv("LLM_PROVIDER") == "ollama_cloud":
+        return "ollama_cloud"
+    if llm_engine in {"gemini", "ollama", "ollama_cloud", "rule_based"}:
         return llm_engine
     return "gemini"
 

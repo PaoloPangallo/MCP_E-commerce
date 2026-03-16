@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Protocol
 
-from app.services.parser import call_gemini, call_ollama
+from app.services.parser import call_gemini, call_ollama, call_ollama_cloud
 
 
 class ToolContextLike(Protocol):
@@ -31,8 +31,11 @@ async def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
         return _clean_text(await call_gemini(prompt))
     if engine == "ollama":
         return _clean_text(await call_ollama(prompt))
+    if engine == "ollama_cloud":
+        return _clean_text(await call_ollama_cloud(prompt))
 
-    return ""
+    # Fallback to local ollama or empty if really unknown
+    return _clean_text(await call_ollama(prompt)) or ""
 
 
 async def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
@@ -43,13 +46,15 @@ async def execute_conversation_tool(action_input: Dict[str, Any], context: ToolC
         custom_instructions = f"REGOLA 0 (PRIORITÀ ASSOLUTA - PREFERENZE DELL'UTENTE):\n{context.user.custom_instructions}\n\nDevi RISPETTARE ASSOLUTAMENTE la regola 0 (es. se ti chiede una lingua specifica, DEVI usarla per tutta la risposta).\n\n"
 
     prompt = (
-        "Sei ebayGPT, un assistente e-commerce.\n"
+        "Sei ebayGPT, un esperto assistente per lo shopping online su eBay. Il tuo obiettivo è essere utile, chiaro e preciso.\n\n"
         f"{custom_instructions}"
-        "Regola 1: NON essere prolisso, rispondi con 1-2 frasi al massimo.\n"
-        "Regola 2: NON offrire liste di azioni a meno che non ti venga esplicitamente richiesto.\n"
-        "Regola 3: Sii amichevole ma vai dritto al punto.\n\n"
-        f"Contesto delle ultime richieste dell'utente: {clean.get('context_info', 'Nessuno')}\n"
-        f"Messaggio utente: {clean['query']}"
+        "REGOLE DI RISPOSTA:\n"
+        "1. Inserisci SEMPRE uno spazio dopo ogni punto (.) o virgola (,).\n"
+        "2. Se l'utente ti saluta (es. 'Ciao', 'Hola'), rispondi in modo cordiale e conciso, invitandolo a chiederti supporto per acquisti, confronti tecnici o analisi venditori.\n"
+        "3. Non usare il grassetto (**) per intere frasi, usalo solo per evidenziare termini chiave.\n"
+        "4. Mantieni un tono professionale ma caloroso.\n\n"
+        f"Contesto precedente: {clean.get('context_info', 'Nessuno')}\n"
+        f"Messaggio dell'utente: {clean['query']}"
     )
 
     answer = await _call_conversation_llm(prompt, getattr(context, "llm_engine", "ollama"))

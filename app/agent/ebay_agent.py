@@ -172,15 +172,11 @@ class EbayReactAgent:
                     if decision.final_answer:
                         final_answer = decision.final_answer
                     else:
-                        yield ThinkingEvent(
-                            step=step_index,
-                            message="Sto preparando la risposta.",
-                        ).model_dump()
-                        
                         full_text = ""
                         async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                            full_text += chunk
-                            yield AnswerChunkEvent(chunk=chunk).model_dump()
+                            if chunk:
+                                full_text += chunk
+                                yield AnswerChunkEvent(chunk=chunk).model_dump()
                         final_answer = full_text
                     break
 
@@ -356,6 +352,16 @@ class EbayReactAgent:
     async def _finalize_stream(self, memory: AgentMemory, llm_engine: str) -> AsyncGenerator[str, None]:
         intent = (memory.detected_intent or "").lower()
 
+        # PRIORITÀ: Se abbiamo già una risposta generata dal tool conversation, usiamola direttamente.
+        # Questo evita doppie chiamate LLM e incoerenze tra trace e risposta finale.
+        conv_state = memory.tool_states.get("conversation")
+        if conv_state:
+            # L'answer è dentro la chiave 'data' salvata in memory.py
+            ans = (conv_state.get("data") or {}).get("answer")
+            if ans:
+                yield ans
+                return
+
         if intent == "conversation":
             prompt = build_final_answer_prompt(
                 user_query=memory.user_query,
@@ -364,16 +370,17 @@ class EbayReactAgent:
                 custom_instructions=getattr(self.user, "custom_instructions", None)
             )
 
-            got_any = False
+            has_real_content = False
             async for chunk in self._call_final_llm_stream(prompt, llm_engine):
-                got_any = True
-                yield chunk
+                if chunk and chunk.strip():
+                    has_real_content = True
+                    yield chunk
             
-            if got_any:
+            if has_real_content:
                 memory.register_llm_call("final")
                 return
 
-            yield "Non riesco a generare una risposta conversazionale in questo momento."
+            yield "Ciao! Sono ebayGPT. Come posso aiutarti oggi con i tuoi acquisti su eBay?"
             return
 
         if intent == "comparison":
@@ -397,12 +404,13 @@ class EbayReactAgent:
             custom_instructions=getattr(self.user, "custom_instructions", None)
         )
 
-        got_any = False
+        has_real_content = False
         async for chunk in self._call_final_llm_stream(prompt, llm_engine):
-            got_any = True
-            yield chunk
+            if chunk:
+                has_real_content = True
+                yield chunk
 
-        if got_any:
+        if has_real_content:
             memory.register_llm_call("final")
         else:
             yield fallback
@@ -415,6 +423,11 @@ class EbayReactAgent:
                     yield chunk
             elif llm_engine == "ollama":
                 gen = await call_ollama(prompt, stream=True)
+                async for chunk in gen:
+                    yield chunk
+            elif llm_engine == "ollama_cloud":
+                from app.services.parser import call_ollama_cloud
+                gen = await call_ollama_cloud(prompt, stream=True)
                 async for chunk in gen:
                     yield chunk
         except Exception as exc:
@@ -436,9 +449,9 @@ class EbayReactAgent:
         if (memory.detected_intent or "").lower() == "conversation":
             return False
 
-        if memory.search_payload or memory.seller_payload:
-            return True
-
+        # We always prefer LLM synthesis for product search or seller results
+        # if the engine allows it. The dry fallback is only for errors or
+        # when synthesis is disabled.
         if memory.errors:
             return True
 
@@ -455,12 +468,13 @@ class EbayReactAgent:
         if (memory.detected_intent or "").lower() == "conversation":
             return True
 
+        # Use LLM synthesis even if we only have one successful tool result (e.g., just a search)
         useful_states = [
             state
             for state in memory.tool_states.values()
             if state.get("quality") in {"partial", "good"}
         ]
-        if len(useful_states) >= 2 and not memory.errors:
+        if len(useful_states) >= 1 and not memory.errors:
             return True
 
         return False

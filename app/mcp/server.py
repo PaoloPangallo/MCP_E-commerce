@@ -207,7 +207,7 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "per il primo risultato."
     ),
 )
-async def search_products(query: str, include_shipping: bool = False, session_id: str = "") -> str:
+async def search_products(query: str, include_shipping: bool = False, llm_engine: str = "ollama", session_id: str = "") -> str:
     db = None
 
     try:
@@ -216,13 +216,13 @@ async def search_products(query: str, include_shipping: bool = False, session_id
 
         db = _get_db()
 
-        context = _build_context(db=db, session_id=session_id)
+        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
 
         raw = await run_search_pipeline(
             query=query,
             db=db,
             user=context.user,
-            llm_engine="ollama"
+            llm_engine=context.llm_engine
         )
 
         normalized = _normalize_search_output(raw)
@@ -270,7 +270,7 @@ async def search_products(query: str, include_shipping: bool = False, session_id
     name="analyze_seller",
     description="Analizza un venditore e-commerce usando feedback, trust score e sentiment.",
 )
-async def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id: str = "") -> str:
+async def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, llm_engine: str = "ollama", session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
@@ -296,9 +296,9 @@ async def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, sessi
         "utile per capire brand, prezzo, taglia, categoria e altri vincoli."
     ),
 )
-async def profile_query(query: str, session_id: str = "") -> str:
+async def profile_query(query: str, llm_engine: str = "ollama", session_id: str = "") -> str:
     try:
-        parsed = await parse_query_service(query)
+        parsed = await parse_query_service(query, llm_engine=llm_engine)
         return _safe_json(
             {
                 "status": "ok",
@@ -401,11 +401,11 @@ async def compare_products(queries: str, llm_engine: str = "ollama", session_id:
         "conoscendo il suo ID eBay (item_id)."
     ),
 )
-async def get_item_details(item_id: str, session_id: str = "") -> str:
+async def get_item_details(item_id: str, llm_engine: str = "ollama", session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
-        context = _build_context(db=db, session_id=session_id)
+        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
         logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
         
         result = await execute_item_details_tool(
@@ -431,11 +431,11 @@ async def get_item_details(item_id: str, session_id: str = "") -> str:
         "(item_id) verso un CAP (zip_code) e Paese (country_code)."
     ),
 )
-async def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: str = "", session_id: str = "") -> str:
+async def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: str = "", llm_engine: str = "ollama", session_id: str = "") -> str:
     db = None
     try:
         db = _get_db()
-        context = _build_context(db=db, session_id=session_id)
+        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
         logger.info("MCP TOOL get_shipping_costs START | item_id=%s", item_id)
         
         result = await execute_shipping_costs_tool(

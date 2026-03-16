@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class SearchRequest(BaseModel):
     query: str
-    llm_engine: Literal["gemini", "ollama", "rule_based"] = "gemini"
+    llm_engine: Literal["gemini", "ollama", "ollama_cloud", "rule_based"] = "gemini"
 
 
 @router.get("/health")

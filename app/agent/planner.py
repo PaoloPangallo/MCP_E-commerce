@@ -34,7 +34,7 @@ CONVERSATION_CUES = {
 }
 
 GREETING_CUES = {
-    "ciao", "salve", "buongiorno", "buonasera", "hey", "ehi", "hello",
+    "ciao", "salve", "buongiorno", "buonasera", "hey", "ehi", "hello", "eila", "uè",
 }
 
 SELLER_CUES = {
@@ -45,7 +45,8 @@ SELLER_CUES = {
 TRANSACTIONAL_CUES = {
     "cerca", "cerco", "trova", "trovami", "mostra", "vorrei", "voglio", "mi serve",
     "compra", "acquistare", "prezzo", "prezzi", "costo", "budget", "massimo",
-    "minimo", "sotto", "meno", "entro", "offerta", "offerte",
+    "minimo", "sotto", "meno", "entro", "offerta", "offerte", "consiglia",
+    "consigliami", "aiutami", "scegliere", "quale", "migliore",
 }
 
 COMPARISON_CUES = {
@@ -57,8 +58,9 @@ ATTRIBUTE_CUES = {
     "taglia", "numero", "misura", "colore", "materiale", "marca", "modello",
     "uomo", "donna", "bambino", "bambina", "adulto", "adulti", "nuovo", "usato",
     "con", "senza", "zip", "cappuccio", "manica", "maniche",
-    "nero", "nera", "bianco", "bianca", "blu", "rosso", "rossa",
-    "verde", "grigio", "grigia", "beige", "m", "l", "xl", "xxl", "xs", "s",
+    "nero", "nera", "neri", "nere", "bianco", "bianca", "bianchi", "bianche",
+    "blu", "rosso", "rossa", "rossi", "rosse", "verde", "verdi",
+    "grigio", "grigia", "grigi", "grigie", "beige", "m", "l", "xl", "xxl", "xs", "s",
 }
 
 SHIPPING_CUES = {
@@ -186,42 +188,6 @@ class ReactPlanner:
         return self._safe_fallback_decide(memory)
 
     def _conversation_fast_path(self, memory: AgentMemory) -> Optional[PlannerOutput]:
-
-        text = (memory.user_query or "").strip().lower()
-
-        if text in {"ciao", "hey", "hello", "salve"}:
-            return PlannerOutput(
-                thought="Saluto semplice.",
-                should_stop=True,
-                intent="conversation",
-            )
-
-        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
-
-        if intent != "conversation":
-            return None
-
-        # alta confidenza conversazionale
-        if confidence >= self.intent_threshold:
-            return PlannerOutput(
-                thought="La richiesta è chiaramente conversazionale.",
-                should_stop=True,
-                intent="conversation",
-            )
-
-        # anche con confidenza media, se non ci sono segnali seller/search,
-        # evitiamo di mandare una banalità a Ollama solo per decidere.
-        if (
-                evidence.conversation >= 0.40
-                and evidence.product < 0.30
-                and evidence.seller < 0.30
-        ):
-            return PlannerOutput(
-                thought="La richiesta sembra conversazionale.",
-                should_stop=True,
-                intent="conversation",
-            )
-
         return None
 
     def can_stop_early(self, memory: AgentMemory) -> bool:
@@ -509,6 +475,9 @@ class ReactPlanner:
                 return await call_gemini(prompt)
             if self.llm_engine == "ollama":
                 return await call_ollama(prompt)
+            if self.llm_engine == "ollama_cloud":
+                from app.services.parser import call_ollama_cloud
+                return await call_ollama_cloud(prompt)
         except Exception as exc:
             logger.warning("Planner LLM failed: %s", exc)
         return None

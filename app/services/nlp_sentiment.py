@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 from app.services.model_singleton import get_sentence_transformer as _get_model
-from app.services.parser import call_gemini, call_ollama
+from app.services.parser import call_llm
 
 
 
@@ -207,7 +207,7 @@ def compute_sentiment_score(
 
 async def extract_sentiment_label(text: str) -> str:
     """
-    Uses LLM (fastest available, e.g. Gemini) to label a single feedback 
+    Uses LLM to label a single feedback 
     as exactly one word: POSITIVE, NEGATIVE, or NEUTRAL.
     """
     if not text.strip():
@@ -221,14 +221,16 @@ async def extract_sentiment_label(text: str) -> str:
     Comment: "{text}"
     """
     try:
-        # Fallback to Ollama if Gemini is not set/fails, but call_gemini is usually faster
-        res = await call_ollama(prompt)
+        # call_llm will use LLM_PROVIDER which is likely ollama_cloud or gemini
+        res, used_provider = await call_llm(prompt)
+        if not res:
+            return "NEUTRAL"
         res = res.strip().upper()
         if "POSITIVE" in res: return "POSITIVE"
         if "NEGATIVE" in res: return "NEGATIVE"
         return "NEUTRAL"
     except Exception as e:
-        logger.warning(f"Extrac_sentiment LLM failed: {e}")
+        logger.warning(f"Extract_sentiment LLM failed: {e}")
         # fallback to heuristic
         pos_hits = sum(1 for w in _POS_WORDS if w in text.lower())
         neg_hits = sum(1 for w in _NEG_WORDS if w in text.lower())

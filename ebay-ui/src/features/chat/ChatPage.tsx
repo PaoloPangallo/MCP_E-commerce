@@ -52,7 +52,7 @@ export default function ChatPage() {
         <Box
           sx={{
             width: "100%",
-            maxWidth: 880,
+            maxWidth: 1000,
             mx: "auto",
             px: { xs: 2, md: 3 },
             pt: { xs: 3, md: 4 },
@@ -76,10 +76,10 @@ export default function ChatPage() {
           )}
 
           {/* STREAMING RESPONSE OR THINKING PIPELINE */}
-          {(running || finalPayload) && (
+          {running && (
             <Box mt={1.5} mb={3}>
               {/* Show thinking pipeline if we are running and don't have a final answer yet, or if it's the "thinking" phase */}
-              {running && (!finalPayload || !finalPayload.finalAnswer) ? (
+              {!finalPayload?.finalAnswer ? (
                 <MessageBubble role="assistant" isTyping={true}>
                   <Paper
                     elevation={0}
@@ -101,7 +101,7 @@ export default function ChatPage() {
               ) : null}
 
               {/* Show streaming answer if it exists */}
-              {!chat.some((entry) => entry.type === "search") && finalPayload?.finalAnswer ? (
+              {finalPayload?.finalAnswer ? (
                 <MessageBubble role="assistant">
                   {finalPayload.finalAnswer}
                 </MessageBubble>

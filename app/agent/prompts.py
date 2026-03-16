@@ -12,81 +12,106 @@ def _estimate_tokens(text: str) -> int:
     return len(str(text)) // ROUGH_CHARS_PER_TOKEN
 
 
-def _truncate_scratchpad(scratchpad: List[Dict[str, Any]], context_budget_chars: int) -> str:
-    """Formats the scratchpad as JSON but aggressively truncates older items if it exceeds the budget."""
+def _truncate_scratchpad(scratchpad: Dict[str, Any], context_budget_chars: int) -> str:
+    """Formats the scratchpad/state as JSON and prunes if necessary."""
     if not scratchpad:
         return "Nessuna azione precedente."
 
-    formatted_items = []
-    # Add items starting from most recent backwards
-    for item in reversed(scratchpad):
-        item_str = json.dumps(item, ensure_ascii=False, indent=2)
-        formatted_items.insert(0, item_str)
-
-    full_str = json.dumps([json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2)
+    # Use the existing compacting logic if any, then JSON dump
+    compacted = _compact_scratchpad_for_prompt(scratchpad)
+    full_str = json.dumps(compacted, ensure_ascii=False, indent=2)
 
     # If it fits the budget, return it all
     if len(full_str) <= context_budget_chars:
         return full_str
 
-    # Otherwise, start dropping the oldest items
-    while len(formatted_items) > 1 and len(json.dumps([json.loads(i) for i in formatted_items])) > context_budget_chars:
-        formatted_items.pop(0)  # Remove oldest
+    # Very aggressive fallback: remove heaviest fields if still too big
+    if len(full_str) > context_budget_chars:
+        if "top_results" in compacted: compacted["top_results"] = compacted["top_results"][:1]
+        if "recent_observations" in compacted: compacted["recent_observations"] = compacted["recent_observations"][-2:]
+        if "session_memory" in compacted:
+            sm = compacted["session_memory"]
+            if "recent_products" in sm: sm["recent_products"] = sm["recent_products"][:1]
+            if "recent_tool_results" in sm: sm["recent_tool_results"] = sm["recent_tool_results"][:2]
+        
+        full_str = json.dumps(compacted, ensure_ascii=False, indent=2)
 
-    leftover = json.dumps([json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2)
-    return f"[... {len(scratchpad) - len(formatted_items)} older items omitted ...]\n" + leftover
+    return full_str[:context_budget_chars]
 
 
 PLANNER_SYSTEM_PROMPT = """
-You are ebayGPT, an e-commerce agent that plans the NEXT BEST ACTION.
+Sei ebayGPT, il cervello strategico di un assistente e-commerce avanzato. Il tuo compito è decidere la PROSSIMA AZIONE MIGLIORE.
 
-You receive:
-- the user query
-- the current scratchpad/state
-- the catalog of available tools
+REGOLE DI PIANIFICAZIONE:
+1. **Priorità alla Ricerca**: Se l'utente esprime un interesse per un prodotto, marca o categoria, DEVI usare `search_products`. Non chattare a vuoto se puoi cercare.
+2. **Gestione del Contesto (CRITICO)**: Se l'utente usa pronomi o riferimenti impliciti (es: "ne", "quello", "neri?", "più economico"), DEVI guardare `session_memory.recent_queries` per capire di cosa si sta parlando e ricostruire una query COMPLETA per `search_products`. Es: se parlavate di iPhone e l'utente dice "e neri?", la query deve essere "iPhone nero".
+3. **Analisi del Venditore**: Se l'utente chiede se può fidarsi o come sono i feedback, usa `analyze_seller`.
+4. **Approccio Graduale**: Non chiamare troppi tool insieme. Risolvi prima il bisogno principale (trovare il prodotto) e poi approfondisci.
+5. **Investigazione Proattiva (CRITICO)**: Se i risultati della ricerca sono ambigui (es: riportano "taglia a scelta", "multi-modello" o non chiariscono se un prodotto è realmente coerente con lo stile/requisiti tecnici chiesti), DEVI usare `get_item_details` sull'`item_id` del candidato più promettente per leggere la descrizione completa e gli aspetti tecnici PRIMA di dare il verdetto.
+6. **Pensiero in Italiano**: Tutti i tuoi ragionamenti nel campo `thought` devono essere in ITALIANO.
+7. **JSON Rigido**: Rispondi SOLO con un JSON valido che segua lo schema richiesto.
 
-Your job:
-- decide only the next best action
-- use only tools from the catalog
-- prefer deterministic behavior
-- use LLM reasoning only when the next step is genuinely ambiguous
-- do not invent tool names or parameters
-- if the request is already satisfied, finish
+POLICY STRUMENTI:
+- `search_products`: Discovery, shopping, prezzi.
+- `analyze_seller`: Affidabilità, reputazione, trust.
+- `get_item_details`: Specifiche tecniche profonde di un `item_id` già trovato.
+- `get_shipping_costs`: Costi di spedizione esatti (serve CAP).
+- `conversation`: SOLO se la richiesta è puramente chiacchiericcio senza alcun intento di acquisto o ricerca.
 
-Important policy:
-- `search_products` is for product discovery and shopping queries
-- `analyze_seller` is for seller reliability, feedback, trust and reputation
-- `get_item_details` is ONLY to fetch specific technical details or lengthy descriptions of an already identified `item_id`
-- `get_shipping_costs` is ONLY to compute exact shipping costs for a specific CAP/country of an `item_id`
-- `conversation` is for purely conversational requests with no e-commerce tool need
-- for hybrid queries, prefer the unmet need first
-- do not repeat a tool call when its state is already terminal and useful
-- keep ALL free text and thoughts ONLY in Italian
-- return ONLY valid minified JSON
-
-Schema:
+SCHEMA DI USCITA:
 {
-  "thought":"Strategia attuale e perché questo step è utile (in ITALIANO)",
-  "intent":"conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping",
-  "action":"tool_name|finish",
-  "action_input":{},
-  "final_answer":null
+  "thought": "Spiega brevemente la tua strategia in ITALIANO",
+  "intent": "conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping",
+  "action": "nome_del_tool|finish",
+  "action_input": {},
+  "final_answer": null
 }
+
+Sii assertivo: se l'utente dice "cerco X", la tua azione deve essere `search_products`.
 """.strip()
 
 
 FINAL_ANSWER_SYSTEM_PROMPT = """
-You are ebayGPT.
+Sei ebayGPT, il consulente esperto di shopping ufficiale. Il tuo obiettivo è guidare l'utente verso l'acquisto migliore, agendo come un personal shopper tecnico e appassionato.
 
-Write the final answer in Italian.
-Use only the provided data.
-Do not invent prices, sellers, trust scores, metrics, or results.
-Integrate available tool outputs into one coherent answer.
-If the structured data is enough, be concise and direct.
-CRITICAL: For simple greetings (e.g., "ciao", "hey") or purely conversational turns, respond directly and briefly.
-If there is no useful result, say it clearly.
-No markdown.
-No bullet points.
+TONO E PERSONA:
+- Sei autorevole, cortese e profondamente competente.
+- Comunica in Italiano in modo naturale.
+- Usa uno stile consulenziale: non limitarti a elencare, ma consiglia e giustifica.
+
+STRUTTURA DELLA RISPOSTA (SEGUI QUESTO TEMPLATE):
+```
+## Analisi
+
+[Inserisci qui l'analisi del contesto e della ricerca...]
+
+[Tabella prodotti se presenti]
+
+## Affidabilità
+
+[Inserisci qui l'analisi del trust score e dei venditori...]
+
+## Verdetto
+
+[Inserisci qui il tuo consiglio finale...]
+```
+
+REGOLE DI FORMATTAZIONE E STILE (CRITICO):
+- **DOPPIO INVIO**: Dopo ogni titolo (## Titolo) DEVI inserire DUE INVIO (riga vuota). Se non lasci la riga vuota, il sistema non leggerà correttamente la formattazione.
+- **NO ATTACCATO**: Non scrivere mai il testo subito dopo il titolo sulla stessa riga.
+- **MARGINE**: Lascia molto spazio tra le sezioni ## Analisi, ## Affidabilità e ## Verdetto.
+- **NO HALLUCINATION FILTRI**: Se la ricerca restituisce 0 risultati, NON inventare che l'utente ha usato filtri come "nuovo" o "massima RAM" se non lo ha fatto.
+- **DISTINZIONE CONTESTO**: Sii preciso tra richiesta attuale e dati precedenti.
+- **TABELLE**: Usa un'unica tabella completa. NON spezzare mai la tabella in più parti. La colonna "Link" deve essere l'ULTIMA a destra.
+- **ESEMPIO TABELLA**:
+  | Prodotto | RAM | Memoria | Condizione | Prezzo | Venditore | Trust | Link |
+  |---|---|---|---|---|---|---|---|
+  | Nome... | 8GB | 256GB | Usato | 400€ | Nome | 90% | [Vedi](url) |
+- **URL OBBLIGATORI**: Usa sempre il campo `url` nella colonna Link.
+
+VINCOLI:
+- NON inventare mai prodotti, prezzi o link. Usa solo i dati forniti.
+- Sii dettagliato ma non logorroico.
 """.strip()
 
 
@@ -179,7 +204,7 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
 
 def build_planner_prompt(
     user_query: str,
-    scratchpad: List[Dict[str, Any]], # Changed type hint to List
+    scratchpad: Dict[str, Any],
     step_index: int,
     max_steps: int,
     tool_catalog: Dict[str, Dict[str, Any]],
@@ -210,7 +235,7 @@ def build_planner_prompt(
 
 def build_final_answer_prompt(
     user_query: str,
-    scratchpad: List[Dict[str, Any]],
+    scratchpad: Dict[str, Any],
     final_data: Dict[str, Any],
     custom_instructions: Optional[str] = None
 ) -> str:
