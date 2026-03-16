@@ -25,8 +25,8 @@ InputNormalizer = Callable[[Dict[str, Any], Any], Dict[str, Any]]
 
 _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
     "conversation": (
-        r"\b(ciao|salve|buongiorno|buonasera|hey)\b",
-        r"\b(come va|come stai|tutto bene)\b",
+        r"\b(ciao+|salve|buongiorno|buonasera|hey+|ehi+)\b",
+        r"\b(come\s+va|come\s+stai|tutto\s+bene|che\s+si\s+dice)\b",
         r"\b(cosa ne pensi|che ne pensi|secondo te|mi spieghi|spiegami)\b",
     ),
     "seller": (
@@ -658,7 +658,7 @@ def _bootstrap_tools() -> None:
     register_tool(
         ToolSpec(
             name="get_item_details",
-            description="Recupera i dettagli estesi, descrizione e specifiche tecniche di un prodotto conoscendo il suo ID eBay (item_id).",
+            description="Recupera i dettagli estesi, la descrizione testuale completa e le specifiche tecniche di un prodotto. Fondamentale per verificare stili (es. baggy) o taglie (es. quando l'annuncio dice 'taglia a scelta') che non sono chiari dai soli risultati di ricerca.",
             input_schema={
                 "type": "object",
                 "properties": {

@@ -35,35 +35,6 @@ class _LocalCacheDict:
             if name in self._store:
                 del self._store[name]
 
-    def push_list(self, name: str, value: str, limit: int = 5) -> None:
-        with self._lock:
-            item = self._store.get(name)
-            if not item or not isinstance(item.get("val"), list):
-                self._store[name] = {
-                    "val": [],
-                    "expires_at": time.time() + 86400  # Default 24h
-                }
-                item = self._store[name]
-            
-            lst = item["val"]
-            lst.insert(0, value)
-            if len(lst) > limit:
-                item["val"] = lst[:limit]
-            
-            # Reset expiration
-            item["expires_at"] = time.time() + 86400
-
-    def get_list(self, name: str) -> list:
-        with self._lock:
-            item = self._store.get(name)
-            if not item:
-                return []
-            if time.time() > item["expires_at"]:
-                del self._store[name]
-                return []
-            val = item["val"]
-            return val if isinstance(val, list) else []
-
 
 class RedisManager:
     """Wrapper that tries to use Redis, but falls back to in-memory dict."""
@@ -118,31 +89,5 @@ class RedisManager:
                 self._local.delete(key)
         except Exception as e:
             logger.error(f"Cache delete error for {key}: {e}")
-
-    def push_user_query(self, user_id: str, query: str, limit: int = 5) -> None:
-        key = f"user_queries:{user_id}"
-        try:
-            if self._redis:
-                # Usa una pipeline per eseguire LPUSH e LTRIM atomici
-                pipe = self._redis.pipeline()
-                pipe.lpush(key, query)
-                pipe.ltrim(key, 0, limit - 1)
-                pipe.expire(key, 86400) # Mantieni storia per 24h
-                pipe.execute()
-            else:
-                self._local.push_list(key, query, limit=limit)
-        except Exception as e:
-            logger.error(f"Cache push_user_query error for {key}: {e}")
-
-    def get_user_queries(self, user_id: str) -> list[str]:
-        key = f"user_queries:{user_id}"
-        try:
-            if self._redis:
-                return self._redis.lrange(key, 0, -1)
-            else:
-                return self._local.get_list(key)
-        except Exception as e:
-            logger.error(f"Cache get_user_queries error for {key}: {e}")
-            return []
 
 redis_client = RedisManager()

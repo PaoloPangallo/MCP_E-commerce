@@ -12,6 +12,8 @@ import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import PsychologyIcon from "@mui/icons-material/Psychology"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 import type { AgentStep, PlannedTask } from "../types"
 
@@ -235,17 +237,34 @@ export default function AIThinkingPipeline({
                   </Box>
 
                   {step.thought && (
-                    <Typography sx={{ fontSize: 13.5, color: "#334155", lineHeight: 1.6, fontWeight: 500 }}>
-                      {step.thought}
-                    </Typography>
+                    <Box sx={{ 
+                      fontSize: 13.5, 
+                      color: "#334155", 
+                      lineHeight: 1.6, 
+                      fontWeight: 500,
+                      "& p": { my: 0.5 },
+                      "& strong": { fontWeight: 700, color: "#0f172a" }
+                    }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {step.thought}
+                      </ReactMarkdown>
+                    </Box>
                   )}
 
                   {step.observation_summary && (
                     <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: "rgba(0,0,0,0.02)", border: "1px dashed #e2e8f0" }}>
                       <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#64748b", mb: 0.5, textTransform: "uppercase" }}>Risultato</Typography>
-                      <Typography sx={{ fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
-                        {step.observation_summary}
-                      </Typography>
+                      <Box sx={{ 
+                        fontSize: 12.5, 
+                        color: "#475569", 
+                        lineHeight: 1.5,
+                        "& p": { my: 0 },
+                        "& strong": { fontWeight: 700, color: "#334155" }
+                      }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {step.observation_summary}
+                        </ReactMarkdown>
+                      </Box>
                     </Box>
                   )}
                 </Box>

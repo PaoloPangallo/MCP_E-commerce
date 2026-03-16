@@ -14,7 +14,7 @@ class AgentRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     query: str
-    llm_engine: Literal["gemini", "ollama", "rule_based"] = "gemini"
+    llm_engine: Literal["gemini", "ollama", "ollama_cloud", "rule_based"] = "gemini"
     max_steps: int = 4
     return_trace: bool = True
 

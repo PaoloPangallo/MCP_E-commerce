@@ -51,16 +51,10 @@ LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b-q4_K_M")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "45"))
 
-# ---------------- OLLAMA CLOUD / LOCAL ----------------
+# Ollama Cloud (API diretta su ollama.com)
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
-OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com").rstrip("/")
-
-# If API KEY is present, we might want to use the cloud host
-if OLLAMA_API_KEY:
-    OLLAMA_URL = f"{OLLAMA_CLOUD_HOST}/api/chat"
-else:
-    OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/") + "/api/chat"
+OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com")
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "12"))
@@ -90,8 +84,15 @@ BRAND_WHITELIST = {
     "dyson": "Dyson",
     "bose": "Bose",
     "jbl": "JBL",
+    "levis": "Levi's",
+    "levi": "Levi's",
     "nike": "Nike",
     "adidas": "Adidas",
+    "puma": "Puma",
+    "reebok": "Reebok",
+    "zara": "Zara",
+    "bimby": "Bimby",
+    "folletto": "Folletto",
 }
 
 CONDITION_SYNONYMS = {
@@ -109,6 +110,13 @@ VAGUE_PRODUCT_TERMS = {
     "una cosa",
     "roba tipo",
     "prodotto",
+}
+
+STOP_WORDS = {
+    "ciao", "buon", "buongiorno", "buonasera", "ehi", "hey",
+    "stavo", "cercando", "cerco", "trovami", "mostrami", "fammi", "vedere",
+    "per", "favore", "piacere", "grazie", "grazie mille",
+    "un", "una", "uno", "dei", "degli", "delle", "il", "lo", "la", "i", "gli", "le",
 }
 
 DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
@@ -363,25 +371,29 @@ def fuzzy_brand_detection(text: str, threshold: int = 88) -> List[str]:
     words = re.findall(r"\b\w+\b", text.lower())
     found = []
 
+    # COMMON ITALIAN ADJECTIVES / WORDS to NOT fuzzy match as brands
+    _FORBIDDEN_FUZZY = {"neri", "nero", "rossi", "rosso", "bianchi", "bianco", "blu", "verdi", "verde", "taglia", "misura", "italia"}
+
     for word in words:
-        if len(word) < 4:
+        if len(word) < 4 or word in _FORBIDDEN_FUZZY:
             continue
 
         match = process.extractOne(
             word,
             cast(List[str], list(vocab)),
-            scorer=fuzz.partial_ratio
+            scorer=fuzz.token_sort_ratio # Stricter
         )
 
         if match:
             brand, score, _ = match
-            if score >= threshold and abs(len(word) - len(brand)) <= 3:
+            # Higher threshold for automatic detection
+            if score >= 90 and abs(len(word) - len(brand)) <= 2:
                 found.append(brand)
 
     return dedupe_keep_order(found)
 
 
-def extract_brands(doc, original_text: str) -> List[str]:
+def extract_brands(doc, original_text: str, allow_fuzzy: bool = True) -> List[str]:
     found: List[str] = []
     text_norm = normalize_for_matching(original_text)
     vocab = set(load_brand_vocab())
@@ -390,8 +402,8 @@ def extract_brands(doc, original_text: str) -> List[str]:
         if re.search(rf"\b{re.escape(raw)}\b", text_norm):
             found.append(canonical)
 
-    # only fuzzy if whitelist found nothing
-    if not found:
+    # only fuzzy if whitelist found nothing and allowed
+    if not found and allow_fuzzy:
         found.extend(fuzzy_brand_detection(original_text))
 
     for ent in getattr(doc, "ents", []):
@@ -447,11 +459,11 @@ def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]
 # RULE PARSE
 # ============================================================
 
-def rule_based_parse(query: str) -> Dict[str, Any]:
+def rule_based_parse(query: str, allow_fuzzy: bool = True) -> Dict[str, Any]:
     normalized = normalize_text(query)
     doc = get_nlp()(normalized)
 
-    brands = extract_brands(doc, query)
+    brands = extract_brands(doc, query, allow_fuzzy=allow_fuzzy)
     min_price, max_price = extract_base_price(query)
     condition = extract_condition(query)
     product = extract_product(doc, query, brands)
@@ -477,6 +489,15 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
 # ============================================================
 # LLM CALLS
 # ============================================================
+
+import logging
+from typing import Optional
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+OLLAMA_URL = "http://localhost:11434/api/chat"
 
 
 async def call_ollama(
@@ -509,14 +530,10 @@ async def call_ollama(
         },
     }
 
-    headers = {}
-    if OLLAMA_API_KEY:
-        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
-
     if not stream:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-                response = await client.post(OLLAMA_URL, json=payload, headers=headers)
+                response = await client.post(OLLAMA_URL, json=payload)
                 response.raise_for_status()
                 data = response.json()
 
@@ -539,7 +556,7 @@ async def call_ollama(
         async def _ollama_generator():
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-                    async with client.stream("POST", OLLAMA_URL, json=payload, headers=headers) as response:
+                    async with client.stream("POST", OLLAMA_URL, json=payload) as response:
                         response.raise_for_status()
                         async for line in response.aiter_lines():
                             if not line:
@@ -682,15 +699,9 @@ async def call_ollama_cloud(
         return _ollama_cloud_generator()
 
 
-async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
-    primary = LLM_PROVIDER
+async def call_llm(prompt: str, engine: Optional[str] = None) -> Tuple[Optional[str], str]:
+    primary = engine.strip().lower() if engine else LLM_PROVIDER
     fallback = LLM_FALLBACK_PROVIDER
-
-    # Auto-upgrade ollama to ollama_cloud if API key exists
-    if primary == "ollama" and OLLAMA_API_KEY:
-        primary = "ollama_cloud"
-    if fallback == "ollama" and OLLAMA_API_KEY:
-        fallback = "ollama_cloud"
 
     async def _call(provider: str) -> Optional[str]:
         if provider == "ollama":
@@ -792,11 +803,6 @@ def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return normalize_price_item(c)
     if ctype == "condition":
         return normalize_condition_item(c)
-    if ctype == "aspect":
-        name = c.get("name")
-        value = c.get("value")
-        if name and value:
-            return {"type": "aspect", "name": str(name), "value": str(value)}
 
     return None
 
@@ -894,14 +900,10 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
 # LLM PARSE
 # ============================================================
 
-async def llm_parse(query: str, context_info: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], str]:
-    context_block = ""
-    if context_info:
-        context_block = f"\nCONVERSATION CONTEXT (History of recent topics/products):\n{context_info}\n"
-
+async def llm_parse(query: str, engine: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], str]:
     prompt = f"""
 You are a strict semantic query parser for an e-commerce assistant.
-{context_block}
+
 Return ONLY valid minified JSON.
 No markdown.
 No explanations.
@@ -938,27 +940,20 @@ Optional brand preference:
   "value": "Samsung"
 }}
 
-Specific attribute/aspect (color, material, storage, size, model_version, etc.):
-{{
-  "type": "aspect",
-  "name": "Color" | "Material" | "Storage" | "Size" | "Model",
-  "value": "Blue" | "Leather" | "256GB" | "42" | "iPhone 13"
-}}
-
 Rules:
 - Put ONLY mandatory requirements in constraints.
 - Put optional wishes in preferences.
-- Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
 - Do NOT invent brands or products.
-- IMPORTANT: If the user uses pronouns (e.g., "li", "le", "quelli", "them", "it") or says "find THEM", use the CONVERSATION CONTEXT to resolve what product/brand they are referring to.
+- If max budget is given, use only "<=".
+- If min budget is given, use only ">=".
+- If min and max are given, use "between".
+- If approximate budget is given, use +/-20% with "between".
 - Output JSON only.
-- If you see a size like "taglia 43" or "size 43", categorize it as an aspect with name "Size" and value "43".
-- If you see a color like "blue" or "rosa", categorize it as an aspect with name "Color" and value the color name.
 
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()
 
-    response, used_provider = await call_llm(prompt)
+    response, used_provider = await call_llm(prompt, engine=engine)
     if not response:
         return None, used_provider
 
@@ -1092,31 +1087,42 @@ async def parse_query_service(
     text: str,
     use_llm: bool = True,
     include_meta: bool = True,
-    context_info: Optional[str] = None,
+    llm_engine: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
+    # 1. CLEAN NORMALIZATION (NO FUZZY DESTRUCTION)
     text = normalize_text(text)
-    text = correct_brands_in_text(text)
+    original_clean = text
 
-    # Caching check (includes context to avoid collisions)
-    cache_key = f"query_parse:{text}:{use_llm}:{context_info or ''}"
+    # Caching check
+    cache_key = f"query_parse:{text}:{use_llm}:{llm_engine or 'ollama'}"
     if use_llm:
         cached = redis_client.get_json(cache_key)
         if cached:
             logger.info("Parser cache hit for query: %s", text)
             return cached
 
-    rule_result = rule_based_parse(text)
+    # 2. LLM ATTEMPT (PRIMARY)
     llm_result = None
     used_provider: Optional[str] = None
-
     effective_use_llm = use_llm and should_try_llm(text)
 
     if effective_use_llm:
-        parsed_llm, used_provider = await llm_parse(text, context_info=context_info)
-        llm_result = parsed_llm
+        llm_result, used_provider = await llm_parse(text, engine=llm_engine)
+
+    # 3. RULE BASED (NO FUZZY BY DEFAULT IF LLM WORKED)
+    allow_fuzzy_init = not effective_use_llm or llm_result is None
+    rule_result = rule_based_parse(text, allow_fuzzy=allow_fuzzy_init)
 
     final = merge_results(rule_result, llm_result)
+
+    # 4. FALLBACK: IF NO PRODUCT/BRANDS FOUND, TRY FUZZY REPAIR
+    if not final.get("product") and not final.get("brands"):
+        text_fuzz = correct_brands_in_text(original_clean)
+        if text_fuzz != original_clean:
+            logger.info("Retrying with fuzzy correction: %s", text_fuzz)
+            rule_fuzzy = rule_based_parse(text_fuzz, allow_fuzzy=True)
+            final = merge_results(rule_fuzzy, llm_result)
 
     if include_meta:
         final["_meta"] = {
@@ -1129,7 +1135,7 @@ async def parse_query_service(
         final.pop("_meta", None)
 
     # Cache the result if LLM was used and successful or if rule-based was enough
-    if effective_use_llm and llm_result:
+    if use_llm:
         redis_client.set_json(cache_key, final, ttl_seconds=3600) # 1 hour cache
 
     return final

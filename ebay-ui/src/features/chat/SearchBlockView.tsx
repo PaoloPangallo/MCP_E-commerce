@@ -1,7 +1,6 @@
 import { Box, Paper, Typography } from "@mui/material"
 import type { SearchBlock } from "../../types/searchTypes.ts"
 import AIThinkingPipeline from "../agent/components/AIThinkingPipeline.tsx"
-import AIAnalysisCard from "../agent/components/AIAnalysisCard.tsx"
 import ItemDetailsCard from "./ItemDetailsCard.tsx"
 import ShippingCostsCard from "./ShippingCostsCard.tsx"
 import SearchResultList from "../search/components/SearchResultList.tsx"
@@ -11,7 +10,6 @@ import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
 export default function SearchBlockView({ search }: { search: SearchBlock }) {
     const hasSeller = !!search.seller_summary?.seller_name
     const hasResults = Array.isArray(search.results) && search.results.length > 0
-    const hasAnalysis = !!search.analysis || !!search.metrics || !!search.rag_context
     const hasComparison = !!search.comparison && Array.isArray(search.comparison.comparison_matrix) && search.comparison.comparison_matrix.length > 0
     const hasTrace = Array.isArray(search.agent_trace) && search.agent_trace.length > 0
 
@@ -37,15 +35,7 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
                 </Paper>
             ) : null}
 
-            {hasAnalysis ? (
-                <Box mt={2.5}>
-                    <AIAnalysisCard
-                        text={search.analysis ?? undefined}
-                        metrics={search.metrics}
-                        rag_context={search.rag_context}
-                    />
-                </Box>
-            ) : null}
+            {/* AI Analysis card removed as it repeats final answer synthesis */}
 
             {search.mode !== "seller" && hasResults ? (
                 <Box mt={2.5}>

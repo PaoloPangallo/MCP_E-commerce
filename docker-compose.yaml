@@ -1,38 +1,39 @@
+version: '3.8'
+
 services:
-  # Redis - Bind to localhost only, with password auth
+  # Redis per caching e session memory
   redis:
     image: redis:alpine
     container_name: mcp-redis
     ports:
-      - "127.0.0.1:6379:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme_redis}
+      - "6379:6379"
     restart: always
     networks:
       - mcp-network
 
-  # Qdrant - Bind to localhost only
+  # Qdrant come Vector DB per il sistema RAG
   qdrant:
     image: qdrant/qdrant:latest
     container_name: mcp-qdrant
     ports:
-      - "127.0.0.1:6333:6333"
-      - "127.0.0.1:6334:6334"
+      - "6333:6333"
+      - "6334:6334"
     volumes:
       - ./qdrant_storage:/qdrant/storage:z
     restart: always
     networks:
       - mcp-network
 
-  # PostgreSQL - Bind to localhost only, password from env
+  # Database Relazionale (PostgreSQL)
   db:
     image: postgres:15-alpine
     container_name: mcp-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}
-      POSTGRES_DB: ${POSTGRES_DB:-mcp_ecom}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pangallo
+      POSTGRES_DB: mcp_ecom
     ports:
-      - "127.0.0.1:5435:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: always

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.redis import redis_client
 from app.models.listing import Listing
-from app.services.ebay import search_items
+from app.services.ebay import search_items, build_ebay_query
 from app.services.feedback import get_seller_feedback
 from app.services.metrics.ir_metrics import ndcg_at_k, precision_at_k, recall_at_k
 from app.services.nlp_sentiment import compute_sentiment_score
@@ -21,7 +21,6 @@ from app.services.rag.reranker import rerank_products
 from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
 from app.services.user_profiling import update_user_profile
-from app.services.advisor import get_market_insights
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ FEEDBACK_WORKERS = 6
 
 def _normalize_llm_engine(llm_engine: str) -> str:
     llm_engine = (llm_engine or "").strip().lower()
-    if llm_engine in {"gemini", "ollama", "rule_based"}:
+    if llm_engine in {"gemini", "ollama", "ollama_cloud", "rule_based"}:
         return llm_engine
     return "ollama"
 
@@ -55,43 +54,6 @@ def _dedupe_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return deduped
 
 
-def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
-    parts: List[str] = []
-    
-    brands = parsed.get("brands") or []
-    product = parsed.get("product")
-    
-    if brands:
-        parts.extend(str(b).strip() for b in brands if str(b).strip())
-    if product:
-        parts.append(str(product).strip())
-        
-    # Includiamo constraints testuali (no price/condition)
-    constraints = parsed.get("constraints") or []
-    for c in constraints:
-        ctype = c.get("type")
-        val = c.get("value")
-        if ctype not in ("price", "condition", "aspect") and val:
-            if isinstance(val, list):
-                parts.extend(str(v) for v in val)
-            else:
-                parts.append(str(val))
-                
-    if not parts:
-        return fallback_query
-        
-    # Deduplicazione parole mantenendo ordine
-    final_tokens: List[str] = []
-    seen_tokens_low = set()
-    
-    raw_query = " ".join(parts)
-    for word in raw_query.split():
-        w_low = word.lower()
-        if w_low not in seen_tokens_low:
-            final_tokens.append(word)
-            seen_tokens_low.add(w_low)
-            
-    return " ".join(final_tokens).strip()
 
 
 async def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
@@ -192,12 +154,9 @@ def _prepare_and_persist_items(
     saved_count = 0
     results_out: List[Dict[str, Any]] = []
 
-    logger.info("_prepare_and_persist_items: received %d items", len(items))
-
     for item in items:
         ebay_id = item.get("ebay_id")
         if not ebay_id:
-            logger.warning("Skipping item without ebay_id: title=%s", item.get("title", "?"))
             continue
 
         already = ebay_id in existing_ids
@@ -295,7 +254,6 @@ async def run_search_pipeline(
     db: Session,
     user: Optional[object] = None,
     llm_engine: str = "gemini",
-    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     if not query or not query.strip():
         raise ValueError("Query vuota")
@@ -310,26 +268,17 @@ async def run_search_pipeline(
 
     logger.info("PIPELINE STEP 1: parse_query")
 
-    # Recupera il contesto se disponibile (session_id or user_id)
-    context_info = ""
-    target_id = session_id or (str(getattr(user, "id", "")) if user else None)
-    if target_id:
-        history = redis_client.get_user_queries(target_id)
-        if history:
-            # Prendi le ultime 3 per non appesantire troppo il prompt
-            context_info = " | ".join(history[:3])
-            logger.info("PIPELINE: Found context in history: %s", context_info)
-
     t = time.time()
     parsed = await parse_query_service(
         query,
         use_llm=(llm_engine != "rule_based"),
         include_meta=True,
-        context_info=context_info,
+        llm_engine=llm_engine,
     )
     timings["parse_query_s"] = round(time.time() - t, 3)
 
-    ebay_query_used = _build_ebay_query(parsed, query)
+    ebay_query_used = build_ebay_query(parsed)
+
 
     # ============================================================
     # 2) PARALLEL: EBAY SEARCH + RAG RETRIEVAL (including expansion)
@@ -343,11 +292,11 @@ async def run_search_pipeline(
             return results
         except Exception as e:
             logger.error(f"eBay search failed: {e}")
-            return {"itemSummaries": [], "aspectDistributions": []}
+            return []
 
     async def _do_rag():
         try:
-            expanded = await expand_query(query)
+            expanded = await expand_query(query, llm_engine=llm_engine)
             docs = await asyncio.to_thread(retrieve_context, expanded, k=10)
             return expanded, docs
         except Exception as e:
@@ -359,13 +308,11 @@ async def run_search_pipeline(
         _do_ebay_search(parsed, MAX_RESULTS_FROM_EBAY),
         _do_rag()
     )
-    items = results[0].get("itemSummaries", []) if isinstance(results[0], dict) else []
-    aspect_distributions = results[0].get("aspectDistributions", []) if isinstance(results[0], dict) else []
-    logger.info("eBay returned %d itemSummaries", len(items))
+    items = results[0] or []
     expanded_query, rag_docs = results[1]
     
     timings["parallel_io_s"] = round(time.time() - t, 3)
-    items = _dedupe_items(items) if items else []
+    items = _dedupe_items(items)
 
     # Separate RAG docs for reranker
     product_docs = [d for d in rag_docs if d.get("type") == "product"]
@@ -476,17 +423,6 @@ async def run_search_pipeline(
 
     timings["total_s"] = round(time.time() - t0, 3)
 
-    market_advisor = None
-    if results_out:
-        top_item = results_out[0]
-        if top_item.get("epid"):
-            try:
-                from app.services.advisor import get_market_insights
-                logger.info("PIPELINE STEP 11: market_advisor for epid=%s", top_item["epid"])
-                market_advisor = await get_market_insights(top_item)
-            except Exception as e:
-                logger.warning("Market advisor failed: %s", e)
-
     return {
         "parsed_query": parsed,
         "ebay_query_used": ebay_query_used,
@@ -494,8 +430,6 @@ async def run_search_pipeline(
         "saved_new_count": saved_count,
         "analysis": analysis,
         "results": results_out,
-        "market_advisor": market_advisor,
-        "aspect_distributions": aspect_distributions,
         "rag_context": rag_context_text,
         "metrics": metrics,
         "_timings": timings,

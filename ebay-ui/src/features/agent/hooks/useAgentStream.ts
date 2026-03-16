@@ -222,10 +222,10 @@ export function useAgentStream(options?: {
 
         setResults(finalResults)
         setFinalPayload(payload)
+        setRunning(false)
         options?.onDone?.(payload, query)
 
         setSteps(finalTrace)
-        setRunning(false)
 
         if (sourceRef.current) {
           sourceRef.current.close()

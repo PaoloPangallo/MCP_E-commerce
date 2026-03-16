@@ -266,16 +266,6 @@ class MemoryService:
             long_term_memory.remember_search(clean_query)
             long_term_memory.remember_brand_hint(clean_query)
             
-            # --- PERSISTENZA DELLE ULTIME 5 QUERY IN REDIS (Richiesta Utente) ---
-            user_key = _safe_user_key(user)
-            # Salva la nuova query nello stack globale dell'utente su Redis
-            redis_client.push_user_query(user_id=user_key, query=clean_query, limit=5)
-            # Recupera l'ultimo stack e forzalo dentro la memoria di sessione
-            # in modo che il LLM ne abbia contesto
-            last_queries = redis_client.get_user_queries(user_id=user_key)
-            session_memory.recent_queries = getattr(last_queries, "val", last_queries) if last_queries else []
-            # --------------------------------------------------------------------
-
             self.save_session_memory(session_memory)
             self.save_long_term_memory(long_term_memory)
 

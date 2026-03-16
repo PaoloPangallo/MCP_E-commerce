@@ -16,12 +16,15 @@ from app.services.search_pipeline import run_search_pipeline
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_IS_PROD = os.getenv("ENV", "development").strip().lower() in {"production", "prod"}
-
 
 class SearchRequest(BaseModel):
     query: str
-    llm_engine: Literal["gemini", "ollama", "rule_based"] = "gemini"
+    llm_engine: Literal["gemini", "ollama", "ollama_cloud", "rule_based"] = "gemini"
+
+
+@router.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @router.post("/parse")
@@ -38,11 +41,7 @@ async def parse(request: SearchRequest):
             include_meta=True,
         )
     except Exception as e:
-        logger.exception("Parse error")
-        raise HTTPException(
-            status_code=500,
-            detail="Errore interno del server." if _IS_PROD else f"Errore parser: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Errore parser: {str(e)}")
 
 
 @router.post("/search")
@@ -67,10 +66,7 @@ async def search(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("Search pipeline error")
-        raise HTTPException(
-            status_code=500,
-            detail="Errore interno del server." if _IS_PROD else str(e)
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/agent")
@@ -90,7 +86,4 @@ async def agent_search(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("Agent execution error")
-        raise HTTPException(
-            status_code=500,
-            detail="Errore interno del server." if _IS_PROD else f"Agent error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")

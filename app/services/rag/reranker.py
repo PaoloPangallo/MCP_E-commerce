@@ -361,6 +361,59 @@ def rerank_products(
         )
 
         # ----------------------------------------
+        # COLOR & FIT MATCHING (CRITICAL)
+        # ----------------------------------------
+        
+        color_penalty = 0.0
+        fit_boost = 0.0
+        
+        # Color match logic (simple but effective for Italian/English)
+        colors_requested = []
+        if "nero" in query.lower() or "neri" in query.lower() or "black" in query.lower():
+            colors_requested.append("black")
+        if "blu" in query.lower() or "blue" in query.lower():
+            colors_requested.append("blue")
+        if "bianco" in query.lower() or "white" in query.lower():
+            colors_requested.append("white")
+            
+        # Brand match penalty (CRITICAL)
+        brand_penalty = 0.0
+        requested_brands = []
+        # Fallback list of known brands from query (simple scan)
+        from app.services.parser import BRAND_WHITELIST
+        for b_low, b_canonical in BRAND_WHITELIST.items():
+            if b_low in query.lower():
+                requested_brands.append(b_canonical.lower())
+        
+        if requested_brands:
+            # If ANY requested brand is NOT found in the title, apply penalty
+            found_any = False
+            for rb in requested_brands:
+                if rb in title_lower:
+                    found_any = True
+                    break
+            if not found_any:
+                brand_penalty = 0.45 # Massive penalty for wrong brand
+            
+        conflicting_colors = {
+            "black": ["blu", "blue", "bianco", "white", "rosso", "red", "chiaro", "light"],
+            "blue": ["nero", "black", "bianco", "white", "rosso", "red"],
+        }
+        
+        for cr in colors_requested:
+            if cr in conflicting_colors:
+                for conflict in conflicting_colors[cr]:
+                    if conflict in title_lower:
+                        color_penalty += 0.20 # Sharp penalty for wrong color
+                        
+        # Fit match booster
+        if "baggy" in query.lower() or "relaxed" in query.lower() or "larghi" in query.lower():
+            if any(w in title_lower for w in ["baggy", "relaxed", "loose", "wide", "ampio", "largo"]):
+                fit_boost += 0.15
+            elif any(w in title_lower for w in ["slim", "skinny", "tight", "stretto"]):
+                color_penalty += 0.15 # Using same accumulator for generic fit penalty
+        
+        # ----------------------------------------
         # FINAL SCORE
         # ----------------------------------------
 
@@ -371,7 +424,10 @@ def rerank_products(
             0.08 * rating -
             0.05 * price_penalty -
             acc_penalty -
-            length_penalty +
+            length_penalty -
+            color_penalty -
+            brand_penalty +
+            fit_boost +
             personalization +
             product_rag_boost +
             seller_rag_boost +
