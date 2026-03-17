@@ -17,6 +17,7 @@ from app.tools import (
     execute_item_details_tool,
     execute_shipping_costs_tool,
     execute_similar_items_tool,
+    execute_metadata_tool,
 )
 
 
@@ -471,6 +472,68 @@ async def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: s
         _close_db(db)
 
 
+@mcp.tool(
+    name="get_similar_items",
+    description=(
+        "Recupera prodotti simili o correlati per un oggetto (item_id)."
+    )
+)
+async def get_similar_items(item_id: str, session_id: str = "") -> str:
+    db = None
+    try:
+        db = _get_db()
+        context = _build_context(db=db, session_id=session_id)
+        logger.info("MCP TOOL get_similar_items START | item_id=%s", item_id)
+        
+        result = await execute_similar_items_tool(
+            {"item_id": item_id},
+            context
+        )
+        normalized = _normalize_similar_items_output(result)
+        normalized["_backend"] = "mcp"
+        
+        logger.info("MCP TOOL get_similar_items END")
+        return _safe_json(normalized)
+    except Exception as exc:
+        logger.exception("MCP get_similar_items failed")
+        return _tool_error(item_id=item_id, error=str(exc))
+    finally:
+        _close_db(db)
+
+@mcp.tool(
+    name="get_marketplace_metadata",
+    description=(
+        "Recupera i metadata delle policy eBay per un marketplace: condizioni articolo, "
+        "politiche di reso, struttura listino (varianti). "
+        "Specifica policy_type tra 'item_conditions', 'return_policies', 'listing_structure'."
+    )
+)
+async def get_marketplace_metadata(policy_type: str = "item_conditions", marketplace_id: str = "", category_id: str = "", session_id: str = "") -> str:
+    db = None
+    try:
+        db = _get_db()
+        context = _build_context(db=db, session_id=session_id)
+        logger.info("MCP TOOL get_marketplace_metadata START | policy_type=%s", policy_type)
+        
+        result = await execute_metadata_tool(
+            {
+                "policy_type": policy_type,
+                "marketplace_id": marketplace_id,
+                "category_id": category_id or None,
+            },
+            context
+        )
+        
+        result["_backend"] = "mcp"
+        
+        logger.info("MCP TOOL get_marketplace_metadata END")
+        return _safe_json(result)
+    except Exception as exc:
+        logger.exception("MCP get_marketplace_metadata failed")
+        return _tool_error(policy_type=policy_type, error=str(exc))
+    finally:
+        _close_db(db)
+
 # ============================================================
 # MCP RESOURCES
 # ============================================================
@@ -574,6 +637,18 @@ def tools_catalog() -> str:
                         "required": ["item_id"],
                     },
                 },
+                {
+                    "name": "get_marketplace_metadata",
+                    "description": "Recupera i metadata delle policy eBay per un marketplace",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "policy_type": {"type": "string", "default": "item_conditions"},
+                            "marketplace_id": {"type": "string", "default": ""},
+                            "category_id": {"type": "string", "default": ""},
+                        },
+                    },
+                },
             ]
         }
     )
@@ -601,30 +676,45 @@ async def query_profile_resource(text: str) -> str:
 
 @mcp.resource("memory://session/{user_key}")
 def session_memory_resource(user_key: str) -> str:
+    from app.services.memory_service import get_session_memory
+    memory = get_session_memory(user_key)
     return _safe_json(
         {
             "user_key": user_key,
             "session_memory": {
-                "recent_queries": [],
-                "recent_sellers": [],
-                "recent_products": [],
+                "recent_queries": memory.get("recent_queries", []),
+                "recent_sellers": memory.get("recent_sellers", []),
+                "recent_products": memory.get("history", []),
             },
-            "note": "Collega qui il tuo memory service reale se vuoi esporre stato sessione.",
+            "note": "Session memory fetched from Redis.",
         }
     )
 
 
 @mcp.resource("memory://long-term/{user_key}")
 def long_term_memory_resource(user_key: str) -> str:
+    db = _get_db()
+    user_preferences = {}
+    if db:
+        try:
+            user = resolve_user_by_id(user_key)
+            if user:
+                user_preferences = {
+                    "favorite_brands": user.favorite_brands,
+                    "price_preference": user.price_preference
+                }
+        finally:
+            _close_db(db)
+            
     return _safe_json(
         {
             "user_key": user_key,
             "long_term_memory": {
-                "user_preferences": {},
+                "user_preferences": user_preferences,
                 "previous_searches": [],
                 "user_behaviour": {},
             },
-            "note": "Collega qui Redis/DB/vector store per memoria persistente.",
+            "note": "Long-term memory user preferences fetched from DB.",
         }
     )
 
@@ -636,12 +726,38 @@ def long_term_memory_resource(user_key: str) -> str:
 @mcp.prompt(name="search_assistant_prompt")
 def search_assistant_prompt(query: str) -> str:
     return f"""
-Sei un assistente e-commerce.
-Usa il tool `search_products` per cercare prodotti rilevanti per questa richiesta:
+Sei un assistente e-commerce intelligente in grado di utilizzare session memory, 
+long-term memory (es. preferenze utente come favorite_brands e price_preference) 
+e diversi strumenti per assistere l'utente.
+
+Usa il tool `search_products` per cercare prodotti rilevanti basandoti sulla seguente richiesta:
 
 Query utente: {query}
 
+Passi da seguire se applicabili:
+1. Controlla le history e memory per personalizzare i risultati.
+2. Controlla e confronta i risultati per fornire le migliori opzioni.
+3. Se menzionati, fai riferimento ai costi di spedizione.
 Rispondi in modo sintetico, utile e concreto.
+""".strip()
+
+
+@mcp.prompt(name="shopping_expert_prompt")
+def shopping_expert_prompt(query: str) -> str:
+    return f"""
+Sei un Shopping Expert Agent molto accurato ed esauriente.
+Segui attentamente questo flusso quando rispondi all'utente:
+
+Query utente: {query}
+
+FLUSSO CONSIGLIATO:
+1. Esegui `profile_query` per capire esattamente intenti, categoria, budget e preferenze della query.
+2. Esegui `search_products` (o più ricerche mirate) tenendo in considerazione questi attributi.
+3. Se l'utente chiede informazioni su regole, condizioni, resi o politiche del marketplace, usa `get_marketplace_metadata`.
+4. Esegui `compare_products` passando gli ID o titoli dei risultati migliori trovati per fornire un'analisi dettagliata.
+5. (Opzionale) Ottieni ulteriori dettagli o oggetti simili se la richiesta dell'utente è vaga.
+
+Sintetizza i risultati con una chiara raccomandazione finale.
 """.strip()
 
 

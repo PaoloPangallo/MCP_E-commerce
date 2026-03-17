@@ -322,6 +322,7 @@ class RequestState:
     search_analysis: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
     compare_payload: Optional[Dict[str, Any]] = None
+    metadata_payload: Optional[Dict[str, Any]] = None
     item_details_payload: Optional[Dict[str, Any]] = None
     shipping_costs_payload: Optional[Dict[str, Any]] = None
     final_answer: Optional[str] = None
@@ -396,6 +397,9 @@ class RequestState:
         if observation.tool == "search_products" and observation.ok:
             self._apply_search_payload(observation.data)
 
+        if observation.tool == "get_marketplace_metadata" and observation.ok:
+            self._apply_metadata_payload(observation.data)
+
         if observation.tool == "analyze_seller" and observation.ok:
             self._apply_seller_payload(observation.data)
 
@@ -446,6 +450,11 @@ class RequestState:
         seller_name = payload.get("seller_name")
         if seller_name:
             self.last_seller_name = str(seller_name)
+
+    def _apply_metadata_payload(self, payload: Dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            return
+        self.metadata_payload = payload
 
     @property
     def search_payload(self) -> Optional[Dict[str, Any]]:
@@ -540,8 +549,10 @@ class RequestState:
             "task_pointer": self.task_pointer,
             "has_search_payload": self.search_payload is not None,
             "has_seller_payload": self.seller_payload is not None,
+            "has_metadata_payload": self.metadata_payload is not None,
             "search_status": self.state_status("search"),
             "seller_status": self.state_status("seller"),
+            "metadata_status": self.state_status("metadata"),
             "has_search_results": self.has_search_results(),
             "last_seller_name": self.last_seller_name,
             "top_results": top_results,
@@ -550,6 +561,7 @@ class RequestState:
             "seller_summary": seller_summary,
             "item_details": self.item_details_payload,
             "shipping_costs": self.shipping_costs_payload,
+            "metadata": self.metadata_payload,
             "tool_calls": dict(self.tool_call_counts),
             "llm_calls": dict(self.llm_call_counts),
             "tool_states": self.tool_state_summaries(),
@@ -566,6 +578,7 @@ class RequestState:
             "search": self.search_payload,
             "seller": self.seller_payload,
             "compare": self.compare_payload,
+            "metadata": self.metadata_payload,
             "item_details": self.item_details_payload,
             "shipping_costs": self.shipping_costs_payload,
             "top_result": compact_top,

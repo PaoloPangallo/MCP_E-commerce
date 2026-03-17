@@ -593,6 +593,9 @@ async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
         logger.error("EBAY GET SIMILAR ITEMS EXCEPTION | %s", e)
         return []
 
+
+
+
 # ============================================================
 # SHIPPING COSTS API
 # ============================================================

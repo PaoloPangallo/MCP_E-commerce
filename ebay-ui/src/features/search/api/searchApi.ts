@@ -16,3 +16,9 @@ export async function searchProducts(
     })
   })
 }
+
+export async function clearAgentMemory(): Promise<{status: string, message: string}> {
+  return apiFetch<{status: string, message: string}>("/agent/memory", {
+    method: "DELETE"
+  })
+}

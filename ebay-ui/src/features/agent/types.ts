@@ -64,6 +64,7 @@ export type FinalPayload = {
   comparison?: import("../search/types").ComparisonData | null
   itemDetails?: import("../search/types").ItemDetailsData | null
   shippingCosts?: import("../search/types").ShippingCostsData | null
+  metadata?: any | null
   trace: AgentStep[]
   errors?: string[]
 

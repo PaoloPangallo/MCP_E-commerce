@@ -22,6 +22,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import { useChatStore } from "./store/chatStore"
 import { useSidebarStore } from "./store/sidebarStore"
 import AuthPanel from "../../auth/ui/AuthPanel"
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 
 interface Props {
   children: React.ReactNode
@@ -124,6 +125,7 @@ export default function ChatLayout({
   const createSession = useChatStore((s) => s.createSession)
   const switchSession = useChatStore((s) => s.switchSession)
   const deleteSession = useChatStore((s) => s.deleteSession)
+  const clearMemory = useChatStore((s) => s.clearMemory)
 
   const mobileOpen = useSidebarStore((s) => s.mobileOpen)
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen)
@@ -131,6 +133,15 @@ export default function ChatLayout({
   const handleNewChat = () => {
     createSession()
     onNewChat?.()
+  }
+
+  const handleClearMemory = () => {
+    if (confirm("Vuoi davvero svuotare la memoria dell'agente? La cronologia della chat e le ricerche verranno resettate e cancellate dai server MCP.")) {
+      clearMemory()
+      if (isMobile) {
+        setMobileOpen(false)
+      }
+    }
   }
 
   const sidebarContent = (
@@ -216,6 +227,29 @@ export default function ChatLayout({
             />
           ))}
         </List>
+      </Box>
+
+      {/* FOOTER ACTIONS */}
+      <Box sx={{ p: 2, borderTop: "1px solid #e5e7eb" }}>
+        <Button
+          fullWidth
+          variant="text"
+          color="error"
+          startIcon={<DeleteSweepIcon />}
+          onClick={handleClearMemory}
+          sx={{
+            justifyContent: "flex-start",
+            textTransform: "none",
+            borderRadius: 2,
+            fontWeight: 600,
+            fontSize: 13,
+            px: 1.5,
+            color: "#ef4444",
+            "&:hover": { bgcolor: "#fef2f2" }
+          }}
+        >
+          Svuota Memoria Server
+        </Button>
       </Box>
 
     </Box>

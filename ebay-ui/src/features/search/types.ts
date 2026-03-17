@@ -97,6 +97,7 @@ export interface SearchBlock {
   comparison?: ComparisonData | null
   item_details?: ItemDetailsData | null
   shipping_costs?: ShippingCostsData | null
+  metadata?: any | null
   final_answer?: string | null
   aspect_distributions?: any[]
   mode?: AppMode
@@ -134,6 +135,7 @@ export interface AgentResponse {
     seller?: import("../seller/types").SellerFeedbackResponse
     item_details?: ItemDetailsData
     shipping_costs?: ShippingCostsData
+    metadata?: any
     top_result?: SearchItem | null
     last_seller_name?: string | null
     errors?: string[]

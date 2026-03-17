@@ -13,6 +13,7 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
     const hasResults = Array.isArray(search.results) && search.results.length > 0
     const hasAnalysis = !!search.analysis || !!search.metrics || !!search.rag_context
     const hasComparison = !!search.comparison && Array.isArray(search.comparison.comparison_matrix) && search.comparison.comparison_matrix.length > 0
+    const hasMetadata = !!search.metadata && search.metadata.status === "ok"
     const hasTrace = Array.isArray(search.agent_trace) && search.agent_trace.length > 0
 
     const showSellerCard =
@@ -53,6 +54,42 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
                         results={search.results}
                         aspect_distributions={search.aspect_distributions}
                     />
+                </Box>
+            ) : null}
+
+            {hasMetadata ? (
+                <Box mt={2.5}>
+                    <Typography
+                        variant="h6"
+                        sx={{
+                            fontSize: 16,
+                            fontWeight: 700,
+                            mb: 1.5,
+                            color: "#111827",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1
+                        }}
+                    >
+                        📋 Metadata Marketplace
+                    </Typography>
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            p: 2,
+                            borderRadius: 3,
+                            border: "1px solid #e5e7eb",
+                            bgcolor: "#f9fafb",
+                            maxHeight: 400,
+                            overflow: "auto"
+                        }}
+                    >
+                        <Typography
+                            sx={{ fontSize: 13, color: "#374151", whiteSpace: "pre-wrap", fontFamily: "monospace" }}
+                        >
+                            {JSON.stringify(search.metadata.results, null, 2)}
+                        </Typography>
+                    </Paper>
                 </Box>
             ) : null}
 

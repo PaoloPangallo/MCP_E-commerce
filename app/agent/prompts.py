@@ -58,6 +58,7 @@ Important policy:
 - `analyze_seller` is for seller reliability, feedback, trust and reputation
 - `get_item_details` is ONLY to fetch specific technical details or lengthy descriptions of an already identified `item_id`
 - `get_shipping_costs` is ONLY to compute exact shipping costs for a specific CAP/country of an `item_id`
+- `get_marketplace_metadata` is for retrieving eBay marketplace policies (item conditions, return policies, listing structure)
 - `conversation` is for purely conversational requests with no e-commerce tool need
 - for hybrid queries, prefer the unmet need first
 - do not repeat a tool call when its state is already terminal and useful
@@ -67,7 +68,7 @@ Important policy:
 Schema:
 {
   "thought":"Strategia attuale e perché questo step è utile (in ITALIANO)",
-  "intent":"conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping",
+  "intent":"conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping|metadata",
   "action":"tool_name|finish",
   "action_input":{},
   "final_answer":null
@@ -81,7 +82,7 @@ You are ebayGPT.
 Write the final answer in Italian.
 Use only the provided data.
 Do not invent prices, sellers, trust scores, metrics, or results.
-Integrate available tool outputs into one coherent answer.
+Integrate available tool outputs (items, metadata, seller analysis) into one coherent answer.
 If the structured data is enough, be concise and direct.
 CRITICAL: For simple greetings (e.g., "ciao", "hey") or purely conversational turns, respond directly and briefly.
 If there is no useful result, say it clearly.
@@ -125,8 +126,10 @@ def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]
         "has_search_payload": scratchpad.get("has_search_payload"),
         "has_seller_payload": scratchpad.get("has_seller_payload"),
         "has_search_results": scratchpad.get("has_search_results"),
+        "has_metadata_payload": scratchpad.get("has_metadata_payload"),
         "last_seller_name": scratchpad.get("last_seller_name"),
         "top_results": scratchpad.get("top_results") or [],
+        "metadata": scratchpad.get("metadata"),
         "seller_summary": scratchpad.get("seller_summary"),
         "search_analysis": scratchpad.get("search_analysis"),
         "metrics": scratchpad.get("metrics"),
@@ -162,6 +165,7 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
     return {
         "intent": final_data.get("intent"),
         "search": compact_search,
+        "metadata": final_data.get("metadata"),
         "seller": compact_seller,
         "compare": final_data.get("compare"),
         "top_result": final_data.get("top_result"),

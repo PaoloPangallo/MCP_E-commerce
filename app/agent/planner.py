@@ -21,7 +21,7 @@ from app.services.parser import call_gemini, call_ollama, extract_first_json_obj
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -71,6 +71,13 @@ DETAILS_CUES = {
     "scheda", "descrizione", "info", "informazioni", "memoria", "gb", "tb"
 }
 
+METADATA_CUES = {
+    "regole", "regola", "politica", "politiche", "policy", "policies",
+    "condizioni", "condizione", "reso", "resi", "restituzione",
+    "varianti", "variante", "metadata", "categorie", "categoria",
+    "listino", "struttura", "marketplace", "ebay", "regolamento"
+}
+
 PERSONAL_PRONOUNS = {
     "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
 }
@@ -99,8 +106,12 @@ class IntentEvidence:
     comparison: float = 0.0
     shipping: float = 0.0
     item_details: float = 0.0
+    metadata: float = 0.0
     reasons: Dict[str, list[str]] = field(
-        default_factory=lambda: {"product": [], "seller": [], "conversation": [], "comparison": [], "shipping": [], "item_details": []}
+        default_factory=lambda: {
+            "product": [], "seller": [], "conversation": [], "comparison": [], 
+            "shipping": [], "item_details": [], "metadata": []
+        }
     )
 
     def add(self, label: str, value: float, reason: str) -> None:
@@ -116,6 +127,8 @@ class IntentEvidence:
             self.shipping += value
         elif label == "item_details":
             self.item_details += value
+        elif label == "metadata":
+            self.metadata += value
         if reason:
             self.reasons.setdefault(label, []).append(reason)
 
@@ -128,6 +141,7 @@ class IntentEvidence:
                 ("comparison", self.comparison),
                 ("shipping", self.shipping),
                 ("item_details", self.item_details),
+                ("metadata", getattr(self, "metadata", 0.0)),
             ],
             key=lambda x: x[1],
             reverse=True,
@@ -582,6 +596,9 @@ class ReactPlanner:
         if intent == "shipping":
             return [tool for tool in [search_tool, "get_shipping_costs"] if tool]
 
+        if intent == "metadata":
+            return ["get_marketplace_metadata"]
+
         if intent == "hybrid":
             ordered = [tool for tool in [search_tool, seller_tool, "get_item_details", "get_shipping_costs"] if tool]
             seen: set[str] = set()
@@ -641,6 +658,8 @@ class ReactPlanner:
             return label, evidence.shipping, evidence
         if label == "item_details" and evidence.item_details >= self.intent_threshold:
             return label, evidence.item_details, evidence
+        if label == "metadata" and getattr(evidence, "metadata", 0.0) >= self.intent_threshold:
+            return label, getattr(evidence, "metadata", 0.0), evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
         if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
@@ -684,6 +703,10 @@ class ReactPlanner:
         details_hits = len(token_set & DETAILS_CUES)
         if details_hits:
             ev.add("item_details", min(0.35 + 0.15 * details_hits, 0.8), "details_lexicon")
+
+        metadata_hits = len(token_set & METADATA_CUES)
+        if metadata_hits:
+            ev.add("metadata", min(0.40 + 0.20 * metadata_hits, 0.9), "metadata_lexicon")
 
         attribute_hits = len(token_set & ATTRIBUTE_CUES)
         if attribute_hits:
@@ -754,6 +777,7 @@ class ReactPlanner:
             "comparison": evidence.reasons.get("comparison", []),
             "shipping": evidence.reasons.get("shipping", []),
             "item_details": evidence.reasons.get("item_details", []),
+            "metadata": evidence.reasons.get("metadata", []),
             "hybrid": evidence.reasons.get("seller", []) + evidence.reasons.get("product", []),
         }
         reasons = [r for r in mapping.get(intent, []) if r]
@@ -769,6 +793,8 @@ class ReactPlanner:
             return f"La richiesta richiede dettagli specifici ({compact})."
         if intent == "comparison":
             return f"La richiesta ha struttura da comparazione prodotti ({compact})."
+        if intent == "metadata":
+            return f"La richiesta riguarda metadata e policy del marketplace ({compact})."
         if intent == "product_search":
             return f"La richiesta ha struttura da ricerca prodotto ({compact})."
         if intent == "seller_analysis":

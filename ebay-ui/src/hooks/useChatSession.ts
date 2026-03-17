@@ -64,6 +64,7 @@ export function useChatSession() {
         comparison: payload.comparison || null,
         item_details: payload.itemDetails || null,
         shipping_costs: payload.shippingCosts || null,
+        metadata: payload.metadata || null,
         final_answer:
           payload.finalAnswer ||
           "Ho completato l’analisi della richiesta.",

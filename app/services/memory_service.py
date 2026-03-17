@@ -49,6 +49,17 @@ def add_chat_message(user_key: str, message: str):
     redis_client.ltrim(f"session:{user_key}:history", 0, 50)
 
 
+def clear_session_memory(user_key: str):
+    """Clears all session memory (history, queries, sellers) from Redis for a specific user."""
+    keys = [
+        f"session:{user_key}:history",
+        f"session:{user_key}:queries",
+        f"session:{user_key}:sellers"
+    ]
+    for key in keys:
+        redis_client.delete(key)
+
+
 # ============================================================
 # POSTGRES (LONG TERM MEMORY)
 # ============================================================

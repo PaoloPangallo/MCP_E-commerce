@@ -8,6 +8,7 @@ import type {
   SearchBlock
 } from "../../../types/searchTypes.ts"
 import {getToken} from "../../../auth/authStore.ts";
+import { clearAgentMemory } from "../../search/api/searchApi.ts"
 
 export type ChatSession = {
   id: string
@@ -16,13 +17,15 @@ export type ChatSession = {
   createdAt: number
 }
 
-function getWelcomeMessage(): ChatEntry {
+function getWelcomeMessage(options?: { memoryCleared?: boolean }): ChatEntry {
+  const isCleared = options?.memoryCleared
   return {
     type: "message",
     msg: {
       role: "assistant",
-      content:
-        "Ciao! Sono ebayGPT. Posso cercare prodotti, confrontare risultati, spiegare il ranking e analizzare l’affidabilità di un venditore eBay."
+      content: isCleared 
+        ? "Memoria di sessione ripristinata. Sono pronto per una nuova ricerca partendo da un contesto pulito!" 
+        : "Ciao! Sono ebayGPT. Posso cercare prodotti, confrontare risultati, spiegare il ranking e analizzare l’affidabilità di un venditore eBay."
     }
   }
 }
@@ -38,6 +41,7 @@ type ChatStore = {
   deleteSession: (id: string) => void
   switchSession: (id: string) => void
   resetConversation: () => void // Resets current session
+  clearMemory: () => Promise<void> // Clears MCP redis memory and resets current session
 
   setLoadingQuery: (query: string | null) => void
   appendMessage: (msg: Message) => void
@@ -98,6 +102,24 @@ export const useChatStore = create<ChatStore>()(
           )
         }
       }),
+
+      clearMemory: async () => {
+        try {
+          await clearAgentMemory()
+        } catch (e) {
+          console.error("Failed to clear memory on server", e)
+        }
+        set((state) => {
+          const sid = state.activeSessionId || (state.sessions[0]?.id)
+          if (!sid) return state
+
+          return {
+            sessions: state.sessions.map(s =>
+              s.id === sid ? { ...s, chat: [getWelcomeMessage({ memoryCleared: true })], title: "Nuova Ricerca" } : s
+            )
+          }
+        })
+      },
 
       setLoadingQuery: (query) => set({ loadingQuery: query }),
 

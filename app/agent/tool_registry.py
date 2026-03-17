@@ -15,6 +15,7 @@ from app.tools import (
     execute_seller_tool,
     execute_item_details_tool,
     execute_shipping_costs_tool,
+    execute_metadata_tool,
 )
 from app.tools.search_tool import clean_search_query, normalize_search_arguments
 from app.tools.seller_tool import extract_explicit_seller, normalize_seller_arguments
@@ -512,6 +513,14 @@ def _summarize_shipping_costs(payload: Dict[str, Any]) -> str:
     return f"Recuperati con successo i costi di spedizione per l'oggetto {item_id}"
 
 
+def _summarize_metadata(payload: Dict[str, Any]) -> str:
+    status = payload.get("status")
+    if status != "ok":
+        return f"Errore nel recupero metadata: {payload.get('error', 'sconosciuto')}"
+    policy_type = payload.get("policy_type", "metadata")
+    return f"Recuperati con successo i metadata eBay ({policy_type})."
+
+
 def _bootstrap_tools() -> None:
     TOOLS.clear()
 
@@ -721,6 +730,38 @@ def _bootstrap_tools() -> None:
             terminal_resolver=lambda _: True,
             result_normalizer=_normalize_shipping_costs_result,
             summarizer=_summarize_shipping_costs,
+        )
+    )
+    register_tool(
+        ToolSpec(
+            name="get_marketplace_metadata",
+            description="Recupera i metadata delle policy eBay per un marketplace: condizioni articolo, politiche di reso, struttura listino (varianti). Specifica policy_type tra 'item_conditions', 'return_policies', 'listing_structure'.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "policy_type": {"type": "string", "description": "Tipo di policy: 'item_conditions', 'return_policies', 'listing_structure'", "default": "item_conditions"},
+                    "marketplace_id": {"type": "string", "description": "ID marketplace eBay (es. EBAY_IT, EBAY_US)", "default": ""},
+                    "category_id": {"type": "string", "description": "ID categoria opzionale per filtrare i risultati"},
+                },
+            },
+            executor=execute_metadata_tool,
+            tags=("metadata", "policies", "category", "ebay"),
+            examples=(
+                "quali condizioni sono supportate per la categoria cellulari",
+                "mostrami le politiche di reso per il marketplace italiano",
+            ),
+            required_fields=(),
+            state_key="metadata",
+            max_retries=0,
+            cost=1,
+            latency_class="low",
+            dependencies=(),
+            produced_entities=("metadata", "policies"),
+            can_run_in_parallel=True,
+            use_cache=True,
+            status_resolver=_resolve_search_status,
+            terminal_resolver=lambda _: True,
+            summarizer=_summarize_metadata,
         )
     )
 
