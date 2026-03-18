@@ -5,47 +5,22 @@ interface Props {
 }
 
 export default function SellerTrustGauge({ score }: Props) {
-
   const percent = Math.round(score * 100)
+  const good = percent >= 90
+  const mid  = percent >= 70
+
+  const barColor = good ? "#6ee7b7" : mid ? "#fcd34d" : "#fca5a5"
+  const textColor = good ? "#059669" : mid ? "#d97706" : "#dc2626"
 
   return (
-    <Box mt={1}>
-      <Typography
-        sx={{
-          fontSize: 13,
-          color: "#6b7280",
-          mb: 0.5
-        }}
-      >
-        Seller trust
-      </Typography>
-
-      <Box
-        sx={{
-          height: 6,
-          borderRadius: 999,
-          background: "#e5e7eb",
-          overflow: "hidden"
-        }}
-      >
-        <Box
-          sx={{
-            width: `${percent}%`,
-            height: "100%",
-            background: percent > 70 ? "#22c55e" : "#f59e0b"
-          }}
-        />
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.4 }}>
+        <Typography sx={{ fontSize: 11, color: "#9ca3af" }}>seller trust</Typography>
+        <Typography sx={{ fontSize: 11, fontWeight: 500, color: textColor }}>{percent}%</Typography>
       </Box>
-
-      <Typography
-        sx={{
-          fontSize: 12,
-          color: "#6b7280",
-          mt: 0.5
-        }}
-      >
-        {percent}% reliability
-      </Typography>
+      <Box sx={{ height: 4, borderRadius: 4, bgcolor: "#f3f4f6", overflow: "hidden" }}>
+        <Box sx={{ width: `${percent}%`, height: "100%", bgcolor: barColor, borderRadius: 4 }} />
+      </Box>
     </Box>
   )
 }

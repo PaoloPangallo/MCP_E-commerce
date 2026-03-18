@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Set
 from sqlalchemy.orm import Session
 
 from app.db.redis import redis_client
+from app.config.cache import SEARCH_PIPELINE_TTL
 from app.models.listing import Listing
 from app.services.ebay import search_items
 from app.services.feedback import get_seller_feedback
@@ -24,7 +25,7 @@ from app.services.user_profiling import update_user_profile
 
 logger = logging.getLogger(__name__)
 
-_CACHE_TTL = 300.0  # 5 minutes
+_CACHE_TTL = SEARCH_PIPELINE_TTL
 
 MAX_RESULTS_FROM_EBAY = 20
 MAX_SELLERS_FOR_TRUST = 5
@@ -395,9 +396,22 @@ async def run_search_pipeline(
             logger.warning("User profiling update failed")
 
     # ============================================================
-    # 4) RERANK
+    # 4) SELLER TRUST  (deve venire PRIMA del rerank per alimentarlo)
     # ============================================================
-    logger.info("PIPELINE STEP 5: rerank")
+    logger.info("PIPELINE STEP 5: seller_trust")
+    t = time.time()
+    seller_trust_map = await _prefetch_top_sellers_feedback(items[:MAX_SELLERS_FOR_TRUST * 2])
+    timings["seller_trust_s"] = round(time.time() - t, 3)
+
+    # Inietta trust_score negli item prima del reranker
+    for item in items:
+        seller_name = item.get("seller_name")
+        item["trust_score"] = seller_trust_map.get(seller_name) if seller_name else None
+
+    # ============================================================
+    # 5) RERANK  (ora ha trust_score disponibile per ogni item)
+    # ============================================================
+    logger.info("PIPELINE STEP 6: rerank")
 
     t = time.time()
     if items:
@@ -411,14 +425,6 @@ async def run_search_pipeline(
         except Exception:
             logger.warning("Rerank failed, keeping original order")
     timings["rerank_s"] = round(time.time() - t, 3)
-
-    # ============================================================
-    # 5) SELLER TRUST
-    # ============================================================
-    logger.info("PIPELINE STEP 6: seller_trust")
-    t = time.time()
-    seller_trust_map = await _prefetch_top_sellers_feedback(items[:MAX_SELLERS_FOR_TRUST * 2])
-    timings["seller_trust_s"] = round(time.time() - t, 3)
 
     # ============================================================
     # 6) DB PERSIST

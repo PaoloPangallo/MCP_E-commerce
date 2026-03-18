@@ -444,9 +444,10 @@ def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]
         return None
 
     # 4. Pulizia stop words solo se all'inizio o alla fine (es. "un", "con", "di")
-    while content_tokens and get_nlp().vocab[content_tokens[0]].is_stop:
+    vocab = get_nlp().vocab
+    while content_tokens and vocab[content_tokens[0]].is_stop:
         content_tokens.pop(0)
-    while content_tokens and get_nlp().vocab[content_tokens[-1]].is_stop:
+    while content_tokens and vocab[content_tokens[-1]].is_stop:
         content_tokens.pop()
             
     if not content_tokens:
@@ -578,16 +579,18 @@ async def call_gemini(prompt: str, stream: bool = False) -> Any:
         return None
 
     method = "streamGenerateContent" if stream else "generateContent"
+    # API key nell'header, NON nella query string (evita leak nei log/proxy)
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:{method}?key={GEMINI_API_KEY}"
+        f"{GEMINI_MODEL}:{method}"
     )
+    headers = {"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
     if not stream:
         try:
             async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, json=payload, headers=headers)
                 if response.status_code != 200:
                     return None
                 data = response.json()
@@ -601,17 +604,11 @@ async def call_gemini(prompt: str, stream: bool = False) -> Any:
         async def _gemini_generator():
             try:
                 async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
-                    async with client.stream("POST", url, json=payload) as response:
+                    async with client.stream("POST", url, json=payload, headers=headers) as response:
                         response.raise_for_status()
                         async for line in response.aiter_lines():
                             if not line:
                                 continue
-                            # Gemini returns a list of objects or a sequence of JSON objects
-                            # In streamGenerateContent it's usually a JSON array or multiple objects
-                            # Actually it's often SSE or just a stream of JSON.
-                            # Standard Gemini REST API for streaming is a bit different.
-                            # Usually it returns a JSON array that grows or multiple JSON objects.
-                            # We'll try to parse each line as a potential JSON chunk.
                             line = line.strip()
                             if line.startswith("[") or line.startswith(","):
                                 line = line[1:].strip()

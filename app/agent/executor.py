@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.db.redis import redis_client
+from app.config.cache import TOOL_EXECUTOR_TTL
 from app.agent.schemas import Observation, ObservationQuality, ObservationStatus, ToolCall
 from app.agent.tool_registry import TOOLS, ToolContext, get_tool_spec
 from app.mcp.client import MCPToolClient
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolExecutor:
-    _CACHE_TTL = 120
+    _CACHE_TTL = TOOL_EXECUTOR_TTL
 
     def __init__(
         self,
@@ -174,7 +175,9 @@ class ToolExecutor:
                     tool_call.tool,
                     tool_call.input,
                 )
-                assert self.mcp_client is not None
+                assert self.mcp_client is not None  # noqa: S101 – controllato da _should_use_mcp
+                if self.mcp_client is None:
+                    raise RuntimeError("MCP client is None nonostante _should_use_mcp() == True")
                 result = await self.mcp_client.call_tool_async(tool_call.tool, tool_call.input)
                 result = self._normalize_result_payload(result)
                 result.setdefault("_backend", "mcp")
@@ -235,9 +238,17 @@ class ToolExecutor:
     def _set_cached_result(cls, cache_key: str, result: Dict[str, Any]) -> None:
         redis_client.set_json(cache_key, result, ttl_seconds=int(cls._CACHE_TTL))
 
-    @staticmethod
-    def _make_cache_key(tool_name: str, action_input: Dict[str, Any]) -> str:
-        return f"{tool_name}:{json.dumps(action_input or {}, sort_keys=True, ensure_ascii=False, default=str)}"
+    # Campi che non devono contribuire alla cache key (non semantici)
+    _CACHE_EXCLUDE_KEYS: frozenset = frozenset({"session_id", "conversation_history", "context_info"})
+
+    @classmethod
+    def _make_cache_key(cls, tool_name: str, action_input: Dict[str, Any]) -> str:
+        # Filtra i campi non semantici per permettere cache sharing tra utenti
+        semantic_input = {
+            k: v for k, v in (action_input or {}).items()
+            if k not in cls._CACHE_EXCLUDE_KEYS
+        }
+        return f"{tool_name}:{json.dumps(semantic_input, sort_keys=True, ensure_ascii=False, default=str)}"
 
     @staticmethod
     def _normalize_result_payload(result: Any) -> Dict[str, Any]:

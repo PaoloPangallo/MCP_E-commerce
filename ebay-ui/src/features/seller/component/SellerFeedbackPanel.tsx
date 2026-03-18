@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Divider,
-  Typography,
-  Chip
-} from "@mui/material"
+import { Box, CircularProgress, Collapse, Typography } from "@mui/material"
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 
 import SellerTrustGauge from "./SellerTrustGauge.tsx"
 import SellerFeedbackList from "../SellerFeedbackList.tsx"
@@ -27,83 +21,58 @@ interface Props {
 }
 
 async function fetchSellerFeedback(seller: string): Promise<ApiResponse> {
-  const encodedSeller = encodeURIComponent(seller)
-
-  const candidateUrls = [
-    `${API_BASE}/seller/${encodedSeller}/feedback`,
-    `${API_BASE}/seller-feedback?seller=${encodedSeller}`
+  const enc = encodeURIComponent(seller)
+  const urls = [
+    `${API_BASE}/seller/${enc}/feedback`,
+    `${API_BASE}/seller-feedback?seller=${enc}`
   ]
-
   let lastError: Error | null = null
-
-  for (const url of candidateUrls) {
+  for (const url of urls) {
     try {
       const res = await fetch(url)
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} on ${url}`)
-      }
-
-      const data = (await res.json()) as ApiResponse
-      return data
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return (await res.json()) as ApiResponse
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error("Unknown fetch error")
-      console.warn("Seller feedback fetch failed for:", url, lastError)
+      lastError = err instanceof Error ? err : new Error("Unknown error")
     }
   }
-
   throw lastError ?? new Error("Unable to load seller feedback")
 }
 
 export default function SellerFeedbackPanel({ seller }: Props) {
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
-  const [trustScore, setTrustScore] = useState<number | null>(null)
-  const [sentimentScore, setSentimentScore] = useState<number | null>(null)
+  const [open, setOpen]               = useState(false)
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState<string | null>(null)
+  const [feedbacks, setFeedbacks]     = useState<Feedback[]>([])
+  const [trustScore, setTrustScore]   = useState<number | null>(null)
+  const [sentiment, setSentiment]     = useState<number | null>(null)
 
   useEffect(() => {
     setOpen(false)
     setFeedbacks([])
     setTrustScore(null)
-    setSentimentScore(null)
+    setSentiment(null)
     setError(null)
   }, [seller])
 
-  const positive = useMemo(
-    () => feedbacks.filter((item) => (item.rating ?? 0) >= 4),
-    [feedbacks]
-  )
+  const positive = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) >= 4), [feedbacks])
+  const negative = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) <= 2), [feedbacks])
+  const neutral  = Math.max(feedbacks.length - positive.length - negative.length, 0)
 
-  const negative = useMemo(
-    () => feedbacks.filter((item) => (item.rating ?? 0) <= 2),
-    [feedbacks]
-  )
-
-  const neutral = Math.max(
-    feedbacks.length - positive.length - negative.length,
-    0
-  )
-
-  const loadFeedback = async () => {
+  const handleToggle = async () => {
     if (!seller || loading) return
 
+    // If already loaded, just toggle visibility
     if (feedbacks.length > 0) {
-      setOpen((prev) => !prev)
+      setOpen((v) => !v)
       return
     }
 
     try {
       setLoading(true)
       setError(null)
-
       const data = await fetchSellerFeedback(seller)
-
-      if (data.error) {
-        throw new Error(data.error)
-      }
+      if (data.error) throw new Error(data.error)
 
       const items = Array.isArray(data.feedbacks)
         ? data.feedbacks
@@ -112,18 +81,10 @@ export default function SellerFeedbackPanel({ seller }: Props) {
           : []
 
       setFeedbacks(items)
-
-      setTrustScore(
-        typeof data.trust_score === "number" ? data.trust_score : null
-      )
-
-      setSentimentScore(
-        typeof data.sentiment_score === "number" ? data.sentiment_score : null
-      )
-
+      setTrustScore(typeof data.trust_score === "number" ? data.trust_score : null)
+      setSentiment(typeof data.sentiment_score === "number" ? data.sentiment_score : null)
       setOpen(true)
     } catch (err) {
-      console.error("SellerFeedbackPanel error:", err)
       setError("Errore nel caricamento dell'analisi venditore")
     } finally {
       setLoading(false)
@@ -131,120 +92,141 @@ export default function SellerFeedbackPanel({ seller }: Props) {
   }
 
   return (
-    <Box mt={2}>
-      <Button
-        size="small"
-        variant="outlined"
-        disabled={loading || !seller}
-        onClick={loadFeedback}
+    <Box>
+      {/* Toggle button */}
+      <Box
+        component="button"
+        onClick={handleToggle}
+        disabled={!seller || loading}
         sx={{
-          textTransform: "none",
-          borderRadius: "16px",
-          borderColor: "#e5e5e5",
-          color: "#0d0d0d"
+          background: "none",
+          border: "none",
+          p: 0,
+          cursor: seller && !loading ? "pointer" : "default",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 0.5,
+          fontFamily: "inherit"
         }}
       >
         {loading ? (
-          <CircularProgress size={16} />
-        ) : open ? (
-          "Nascondi analisi venditore"
+          <CircularProgress size={12} sx={{ color: "#9ca3af" }} />
         ) : (
-          "Analizza venditore"
+          <>
+            <Typography
+              sx={{
+                fontSize: 12,
+                color: "#6b7280",
+                textDecoration: "underline",
+                textDecorationColor: "#e5e7eb",
+                textUnderlineOffset: "3px",
+                "&:hover": { color: "#374151" }
+              }}
+            >
+              {open ? "Nascondi analisi" : "Analisi venditore"}
+            </Typography>
+            <KeyboardArrowDownIcon
+              sx={{
+                fontSize: 14,
+                color: "#9ca3af",
+                transform: open ? "rotate(180deg)" : "none",
+                transition: "transform 0.2s"
+              }}
+            />
+          </>
         )}
-      </Button>
+      </Box>
 
-      {error && !open ? (
-        <Typography sx={{ mt: 1, color: "#c62828", fontSize: 13 }}>
-          {error}
-        </Typography>
-      ) : null}
+      {/* Error */}
+      {error && (
+        <Typography sx={{ mt: 0.75, fontSize: 12, color: "#dc2626" }}>{error}</Typography>
+      )}
 
-      {open ? (
+      {/* Panel */}
+      <Collapse in={open} timeout={200}>
         <Box
-          mt={2}
           sx={{
-            p: 2.5,
-            backgroundColor: "#f8f8f8",
-            borderRadius: "12px",
-            border: "1px solid #ececec"
+            mt: 1.25,
+            p: 1.75,
+            border: "1px solid #f0f0f0",
+            borderRadius: 3,
+            bgcolor: "#fafafa",
+            display: "flex",
+            flexDirection: "column",
+            gap: 1.5
           }}
         >
-          <Box
-            display="flex"
-            alignItems="flex-start"
-            justifyContent="space-between"
-            gap={2}
-            flexWrap="wrap"
-          >
-            <Box>
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  mb: 0.75
-                }}
-              >
-                Seller analysis
-              </Typography>
-
-              <Box display="flex" gap={1} flexWrap="wrap">
-                <Chip
-                  label={`${positive.length} positive`}
-                  size="small"
-                  sx={{ fontSize: 11 }}
-                />
-                <Chip
-                  label={`${negative.length} negative`}
-                  size="small"
-                  sx={{ fontSize: 11 }}
-                />
-                <Chip
-                  label={`${neutral} neutral`}
-                  size="small"
-                  sx={{ fontSize: 11 }}
-                />
-              </Box>
+          {/* Trust gauge */}
+          {trustScore !== null && (
+            <Box sx={{ maxWidth: 260 }}>
+              <SellerTrustGauge score={trustScore} />
             </Box>
+          )}
 
-            <Box sx={{ minWidth: 180, flex: 1, maxWidth: 320 }}>
-              <SellerTrustGauge score={trustScore ?? 0} />
+          {/* Sentiment + counts */}
+          <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+            {sentiment !== null && (
+              <Box>
+                <Typography sx={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Sentiment
+                </Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>
+                  {Math.round(sentiment * 100)}%
+                </Typography>
+              </Box>
+            )}
+            <Box>
+              <Typography sx={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Distribuzione
+              </Typography>
+              <Box sx={{ display: "flex", gap: 0.75, mt: 0.25, flexWrap: "wrap" }}>
+                {[
+                  { label: `${positive.length} pos`, color: "#059669" },
+                  { label: `${neutral} neu`,          color: "#d97706" },
+                  { label: `${negative.length} neg`,  color: "#dc2626" }
+                ].map((item) => (
+                  <Box
+                    key={item.label}
+                    sx={{
+                      px: 0.75,
+                      py: 0.15,
+                      borderRadius: "6px",
+                      bgcolor: "#f3f4f6",
+                      border: "1px solid #e5e7eb"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 11, color: item.color }}>{item.label}</Typography>
+                  </Box>
+                ))}
+              </Box>
             </Box>
           </Box>
 
-          {sentimentScore !== null ? (
-            <Typography sx={{ fontSize: 13, color: "#444", mt: 1.5 }}>
-              Sentiment score: {sentimentScore.toFixed(2)}
+          {/* Feedback lists */}
+          <Box sx={{ borderTop: "1px solid #f0f0f0", pt: 1 }}>
+            {positive.length > 0 && (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography sx={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
+                  Top positivi
+                </Typography>
+                <SellerFeedbackList feedbacks={positive.slice(0, 3)} initialLimit={3} title="" />
+              </Box>
+            )}
+            {negative.length > 0 && (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography sx={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
+                  Da attenzionare
+                </Typography>
+                <SellerFeedbackList feedbacks={negative.slice(0, 3)} initialLimit={3} title="" />
+              </Box>
+            )}
+            <Typography sx={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
+              Tutti i feedback
             </Typography>
-          ) : null}
-
-          <Divider sx={{ my: 2 }} />
-
-          {positive.length > 0 ? (
-            <Box mb={2}>
-              <SellerFeedbackList
-                feedbacks={positive.slice(0, 3)}
-                initialLimit={3}
-                title="Top positive feedback"
-              />
-            </Box>
-          ) : null}
-
-          {negative.length > 0 ? (
-            <Box mb={2}>
-              <SellerFeedbackList
-                feedbacks={negative.slice(0, 3)}
-                initialLimit={3}
-                title="Top negative feedback"
-              />
-            </Box>
-          ) : null}
-
-          <SellerFeedbackList
-            feedbacks={feedbacks}
-            title="Tutti i feedback"
-          />
+            <SellerFeedbackList feedbacks={feedbacks} title="" />
+          </Box>
         </Box>
-      ) : null}
+      </Collapse>
     </Box>
   )
 }

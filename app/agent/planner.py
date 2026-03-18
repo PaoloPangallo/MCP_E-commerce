@@ -109,30 +109,32 @@ class IntentEvidence:
     metadata: float = 0.0
     reasons: Dict[str, list[str]] = field(
         default_factory=lambda: {
-            "product": [], "seller": [], "conversation": [], "comparison": [], 
+            "product": [], "seller": [], "conversation": [], "comparison": [],
             "shipping": [], "item_details": [], "metadata": []
         }
     )
 
+    # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
+    _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
+        "product": "product",
+        "product_search": "product",
+        "seller": "seller",
+        "seller_analysis": "seller",
+        "conversation": "conversation",
+        "comparison": "comparison",
+        "shipping": "shipping",
+        "item_details": "item_details",
+        "metadata": "metadata",
+    })
+
     def add(self, label: str, value: float, reason: str) -> None:
-        if label == "product":
-            self.product += value
-        elif label == "seller":
-            self.seller += value
-        elif label == "conversation":
-            self.conversation += value
-        elif label == "comparison":
-            self.comparison += value
-        elif label == "shipping":
-            self.shipping += value
-        elif label == "item_details":
-            self.item_details += value
-        elif label == "metadata":
-            self.metadata += value
+        field_name = self._LABEL_TO_FIELD.get(label, label)
+        current = getattr(self, field_name, 0.0)
+        setattr(self, field_name, current + value)
         if reason:
             self.reasons.setdefault(label, []).append(reason)
 
-    def top_two(self) -> tuple[tuple[str, float], tuple[str, float]]:
+    def top_two(self) -> tuple:
         ordered = sorted(
             [
                 ("product_search", self.product),
@@ -141,7 +143,7 @@ class IntentEvidence:
                 ("comparison", self.comparison),
                 ("shipping", self.shipping),
                 ("item_details", self.item_details),
-                ("metadata", getattr(self, "metadata", 0.0)),
+                ("metadata", self.metadata),
             ],
             key=lambda x: x[1],
             reverse=True,

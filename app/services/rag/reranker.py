@@ -1,11 +1,27 @@
 from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
 import numpy as np
 import re
 
 from app.services.rag.cross_encoder import cross_rerank
 from app.services.rag.embedding import embed
 from app.services.rag.retriever import retrieve_context
+@dataclass
+class RerankWeights:
+    SIMILARITY: float = 0.34
+    LEXICAL: float = 0.18
+    TRUST: float = 0.16
+    RATING: float = 0.08
+    PRICE_PENALTY: float = 0.05
+    
+    # Thresholds for explanations
+    STRONG_MATCH: float = 0.55
+    GOOD_MATCH: float = 0.35
+    STRONG_LEXICAL: float = 0.5
+    VERY_STRONG_TRUST: float = 0.85
+    GOOD_TRUST: float = 0.70
 
+WEIGHTS = RerankWeights()
 
 # ============================================================
 # COSINE SIMILARITY
@@ -365,11 +381,11 @@ def rerank_products(
         # ----------------------------------------
 
         score = (
-            0.34 * similarity +
-            0.18 * lex_score +
-            0.16 * trust_boost +
-            0.08 * rating -
-            0.05 * price_penalty -
+            WEIGHTS.SIMILARITY * similarity +
+            WEIGHTS.LEXICAL * lex_score +
+            WEIGHTS.TRUST * trust_boost +
+            WEIGHTS.RATING * rating -
+            WEIGHTS.PRICE_PENALTY * price_penalty -
             acc_penalty -
             length_penalty +
             personalization +
@@ -408,17 +424,17 @@ def rerank_products(
 
         explanations = list(item.get("explanations") or [])
 
-        if similarity > 0.55:
+        if similarity > WEIGHTS.STRONG_MATCH:
             explanations.append("semantic match with the query is strong")
-        elif similarity > 0.35:
+        elif similarity > WEIGHTS.GOOD_MATCH:
             explanations.append("semantic match with the query is good")
 
-        if lex_score > 0.5:
+        if lex_score > WEIGHTS.STRONG_LEXICAL:
             explanations.append("title has strong lexical overlap with the query")
 
-        if trust > 0.85:
+        if trust > WEIGHTS.VERY_STRONG_TRUST:
             explanations.append("seller has very strong trust score")
-        elif trust > 0.70:
+        elif trust > WEIGHTS.GOOD_TRUST:
             explanations.append("seller shows generally positive feedback")
 
         if acc_penalty > 0:

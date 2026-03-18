@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.agent.executor import ToolExecutor
 from app.agent.memory import AgentMemory, MemoryService
 from app.agent.planner import ReactPlanner
-from app.agent.prompts import build_final_answer_prompt
+from app.agent.prompts import build_final_answer_prompt, CONVERSATION_ANSWER_SYSTEM_PROMPT
 from app.agent.schemas import (
     AgentRequest,
     AgentResponse,
@@ -384,31 +384,22 @@ class EbayReactAgent:
                 memory.register_llm_call("final")
                 return
 
-        if intent == "comparison":
-            # Se c'è una gem, usa il LLM per arricchire la risposta con la personalità dell'utente
-            custom_instructions = getattr(self.user, "custom_instructions", None)
-            if custom_instructions and self._should_use_llm_for_final(memory, llm_engine):
-                prompt = build_final_answer_prompt(
-                    user_query=memory.user_query,
-                    scratchpad=memory.scratchpad(),
-                    final_data=memory.final_data(),
-                    custom_instructions=custom_instructions
-                )
-                got_any = False
-                async for chunk in self._call_final_llm_stream(prompt, llm_engine):
-                    got_any = True
-                    yield chunk
-                if got_any:
-                    memory.register_llm_call("final")
-                    return
-            yield self._build_comparison_answer(memory)
+        # 1. Caso Dettagli/Confronto
+        if intent in {"comparison", "item_details"}:
+            async for chunk in self._finalize_comparison_stream(memory, llm_engine):
+                yield chunk
             return
 
-        fallback = self._fallback_final_answer(memory)
+        # 2. Caso Conversazionale
+        if intent == "conversation" and self._should_use_llm_for_final(memory, llm_engine):
+            async for chunk in self._finalize_conversation_stream(memory, llm_engine):
+                yield chunk
+            return
 
-        # Se l'utente ha una gem, non usare mai il fallback pre-confezionato:
-        # il LLM deve sempre generare la risposta per applicare la personalità.
+        # 3. Fallback / Intent generico
+        fallback = self._fallback_final_answer(memory)
         custom_instructions = getattr(self.user, "custom_instructions", None)
+
         if custom_instructions and self._should_use_llm_for_final(memory, llm_engine):
             pass  # salta il fallback shortcut → va dritto al LLM sotto
         elif self._is_fallback_good_enough(memory, fallback):
@@ -419,6 +410,67 @@ class EbayReactAgent:
             yield fallback
             return
 
+        # 4. Prompt di default (Personal Shopper)
+        async for chunk in self._finalize_default_stream(memory, llm_engine, fallback):
+            yield chunk
+
+    async def _finalize_comparison_stream(self, memory: AgentMemory, llm_engine: str) -> AsyncGenerator[str, None]:
+        """Gestisce la finalizzazione per intent di confronto o dettagli."""
+        if self._should_use_llm_for_final(memory, llm_engine):
+            comparison_prompt = f"Basandoti su questi dati:\n{memory.scratchpad()}\n\nRispondi alla domanda utente: {memory.user_query}"
+            got_any = False
+            async for chunk in self._call_final_llm_stream(comparison_prompt, llm_engine):
+                got_any = True
+                yield chunk
+            if got_any:
+                memory.register_llm_call("final")
+                return
+        yield self._build_comparison_answer(memory)
+
+    async def _finalize_conversation_stream(self, memory: AgentMemory, llm_engine: str) -> AsyncGenerator[str, None]:
+        """Gestisce la finalizzazione per intent puramente conversazionali."""
+        conv_history = []
+        try:
+            conv_history = list(memory.session_memory.conversation_history[-6:])
+        except Exception:
+            pass
+
+        history_text = ""
+        if conv_history:
+            lines = []
+            for turn in conv_history:
+                role = turn.get("role", "")
+                content = str(turn.get("content", "")).strip()
+                if role == "user":
+                    lines.append(f"Utente: {content}")
+                elif role == "assistant":
+                    lines.append(f"Assistente: {content}")
+            history_text = "\n".join(lines)
+
+        conv_prompt = (
+            f"{CONVERSATION_ANSWER_SYSTEM_PROMPT}\n\n"
+            + (f"--- STORICO CONVERSAZIONE ---\n{history_text}\n--- FINE STORICO ---\n\n" if history_text else "")
+            + f"Utente: {memory.user_query}\nAssistente:"
+        )
+
+        custom_instructions = getattr(self.user, "custom_instructions", None)
+        if custom_instructions:
+            conv_prompt = (
+                f"{CONVERSATION_ANSWER_SYSTEM_PROMPT}\n"
+                f"REGOLA PRIORITÀ ASSOLUTA:\n{custom_instructions}\n\n"
+                + (f"--- STORICO ---\n{history_text}\n---\n\n" if history_text else "")
+                + f"Utente: {memory.user_query}\nAssistente:"
+            )
+
+        got_any = False
+        async for chunk in self._call_final_llm_stream(conv_prompt, llm_engine):
+            got_any = True
+            yield chunk
+        if got_any:
+            memory.register_llm_call("final")
+
+    async def _finalize_default_stream(self, memory: AgentMemory, llm_engine: str, fallback: str) -> AsyncGenerator[str, None]:
+        """Gestisce la finalizzazione standard se nessun altro intent ha consumato lo stream."""
         prompt = build_final_answer_prompt(
             user_query=memory.user_query,
             scratchpad=memory.scratchpad(),
@@ -473,29 +525,6 @@ class EbayReactAgent:
         # Preferiamo SEMPRE l'LLM synthesis per un output Premium da Personal Shopper.
         # Usa il fallback crudo solo in caso di errori critici o engine non adeguato.
         if memory.errors:
-            return True
-
-        return False
-
-    @staticmethod
-    def _should_use_llm_for_final(memory: AgentMemory, llm_engine: str) -> bool:
-        """Determina se invocare l'LLM per la sintesi finale."""
-        if llm_engine == "rule_based":
-            return False
-            
-        if memory.llm_call_count("final") >= 1:
-            return False
-
-        if (memory.detected_intent or "").lower() == "conversation":
-            return True
-
-        # Usa LLM synthesis anche solo con un singolo risultato valido!
-        useful_states = [
-            state
-            for state in memory.tool_states.values()
-            if state.get("quality") in {"partial", "good"}
-        ]
-        if len(useful_states) >= 1 and not memory.errors:
             return True
 
         return False

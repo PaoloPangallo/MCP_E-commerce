@@ -138,6 +138,8 @@ class SessionMemory:
     recent_sellers: List[str] = field(default_factory=list)
     recent_products: List[Dict[str, Any]] = field(default_factory=list)
     recent_tool_results: List[Dict[str, Any]] = field(default_factory=list)
+    # Storico turni conversazionali: [{"role": "user"|"assistant", "content": str}]
+    conversation_history: List[Dict[str, str]] = field(default_factory=list)
 
     def add_query(self, query: str, limit: int = 10) -> None:
         query = sanitize_user_query_for_memory(query)
@@ -170,12 +172,32 @@ class SessionMemory:
         self.recent_tool_results.insert(0, {"tool": tool, "summary": summary})
         self.recent_tool_results = self.recent_tool_results[:limit]
 
+    def add_turn(
+        self,
+        user_content: str,
+        assistant_content: str,
+        max_turns: int = 10,
+    ) -> None:
+        """Aggiunge un turno completo (user + assistant) alla conversation_history."""
+        user_content = str(user_content or "").strip()
+        assistant_content = str(assistant_content or "").strip()
+        if not user_content or not assistant_content:
+            return
+        self.conversation_history.append({"role": "user", "content": user_content})
+        self.conversation_history.append({"role": "assistant", "content": assistant_content})
+        # Mantieni solo gli ultimi max_turns turni (ogni turno = 2 messaggi)
+        max_messages = max_turns * 2
+        if len(self.conversation_history) > max_messages:
+            self.conversation_history = self.conversation_history[-max_messages:]
+
     def snapshot(self) -> Dict[str, Any]:
         return {
             "recent_queries": list(self.recent_queries[:5]),
             "recent_sellers": list(self.recent_sellers[:5]),
             "recent_products": list(self.recent_products[:5]),
             "recent_tool_results": list(self.recent_tool_results[:5]),
+            # Ultimi 6 messaggi (3 turni) per il contesto al LLM
+            "conversation_history": list(self.conversation_history[-6:]),
         }
 
 
@@ -234,8 +256,16 @@ class MemoryService:
         user_key = _safe_user_key(user)
         key = f"session_memory:{user_key}"
         data = redis_client.get_json(key)
-        if data:
-            return SessionMemory(**data)
+        if data and isinstance(data, dict):
+            # Retrocompatibilità: vecchi dati Redis non hanno conversation_history
+            return SessionMemory(
+                user_key=data.get("user_key", user_key),
+                recent_queries=data.get("recent_queries") or [],
+                recent_sellers=data.get("recent_sellers") or [],
+                recent_products=data.get("recent_products") or [],
+                recent_tool_results=data.get("recent_tool_results") or [],
+                conversation_history=data.get("conversation_history") or [],
+            )
         return SessionMemory(user_key=user_key)
 
     def load_long_term_memory(self, user: Optional[object]) -> LongTermMemory:
@@ -287,6 +317,14 @@ class MemoryService:
 
     def persist_request_outcome(self, state: "RequestState", final_answer: str) -> None:
         state.final_answer = str(final_answer or "").strip()
+
+        # Salva il turno completo (user + assistant) nella conversation_history
+        user_query = sanitize_user_query_for_memory(state.user_query)
+        if user_query and state.final_answer:
+            state.session_memory.add_turn(
+                user_content=user_query,
+                assistant_content=state.final_answer,
+            )
 
         if state.last_seller_name:
             state.session_memory.add_seller(state.last_seller_name)

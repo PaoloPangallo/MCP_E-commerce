@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Button, Chip, Typography } from "@mui/material"
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents"
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import { Box, Typography } from "@mui/material"
 
 import SearchResultCard from "./SearchResultCard"
 import FilterSidebar from "./FilterSidebar"
@@ -13,12 +11,16 @@ interface Props {
 }
 
 function getTopTrust(results: SearchItem[]) {
-  const values = results.map((item) => item.trust_score).filter((value): value is number => typeof value === "number")
-  if (values.length === 0) return null
-  return Math.max(...values)
+  const values = results
+    .map((item) => item.trust_score)
+    .filter((v): v is number => typeof v === "number")
+  return values.length ? Math.max(...values) : null
 }
 
-export default function SearchResultList({ results = [], aspect_distributions = [] }: Props) {
+export default function SearchResultList({
+  results = [],
+  aspect_distributions = []
+}: Props) {
   const [visibleCount, setVisibleCount] = useState(5)
   const safeResults = useMemo(() => results.filter(Boolean), [results])
 
@@ -31,54 +33,105 @@ export default function SearchResultList({ results = [], aspect_distributions = 
 
   if (safeResults.length === 0) {
     return (
-      <Box sx={{ textAlign: "center", border: "1px solid #e5e7eb", bgcolor: "#ffffff", borderRadius: 4, py: 6, px: 3 }}>
-        <Typography sx={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Nessun risultato trovato</Typography>
-        <Typography sx={{ mt: 1, fontSize: 13.5, color: "#6b7280", lineHeight: 1.65 }}>Prova a cambiare brand, fascia di prezzo o parole chiave.</Typography>
+      <Box sx={{ py: 5, px: 3, textAlign: "center" }}>
+        <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#374151", mb: 0.5 }}>
+          Nessun risultato trovato
+        </Typography>
+        <Typography sx={{ fontSize: 13, color: "#9ca3af" }}>
+          Prova a cambiare brand, fascia di prezzo o parole chiave.
+        </Typography>
       </Box>
     )
   }
 
   const handleFilterClick = (aspectName: string, value: string) => {
-    const detail = `Cerca ${aspectName} ${value} per i risultati correnti`
-    window.dispatchEvent(new CustomEvent("send-chat", { detail }))
+    window.dispatchEvent(
+      new CustomEvent("send-chat", {
+        detail: `Cerca ${aspectName} ${value} per i risultati correnti`
+      })
+    )
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <FilterSidebar distributions={aspect_distributions} onFilterClick={handleFilterClick} />
-
-      <Box sx={{ border: "1px solid #e5e7eb", bgcolor: "#ffffff", borderRadius: 4, px: 2.25, py: 1.75 }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
-          <Box>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Risultati ordinati per AI relevance</Typography>
-            <Typography sx={{ mt: 0.5, fontSize: 13, color: "#6b7280", lineHeight: 1.65 }}>{safeResults.length} {safeResults.length === 1 ? "risultato analizzato" : "risultati analizzati"}</Typography>
-          </Box>
-          <Box display="flex" gap={1} flexWrap="wrap">
-            {safeResults[0]?.ranking_score && safeResults[0].ranking_score > 0.7 ? <Chip icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />} label="best match in testa" size="small" sx={{ bgcolor: "#fff8e6", border: "1px solid #fde68a", color: "#92400e" }} /> : null}
-            {typeof topTrust === "number" ? <Chip icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} label={`top trust ${Math.round(topTrust * 100)}%`} size="small" sx={{ bgcolor: "#f9fafb", border: "1px solid #e5e7eb", color: "#374151" }} /> : null}
-          </Box>
+    <Box sx={{ display: "flex", flexDirection: "column" }}>
+      {/* Filters */}
+      {aspect_distributions.length > 0 && (
+        <Box sx={{ p: 2, borderBottom: "1px solid #f5f5f5" }}>
+          <FilterSidebar
+            distributions={aspect_distributions}
+            onFilterClick={handleFilterClick}
+          />
         </Box>
+      )}
+
+      {/* Summary row */}
+      <Box
+        sx={{
+          px: 2,
+          py: 1.25,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: "1px solid #f5f5f5"
+        }}
+      >
+        <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>
+          {safeResults.length} {safeResults.length === 1 ? "risultato" : "risultati"} · ordinati per AI relevance
+        </Typography>
+        {topTrust !== null && (
+          <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>
+            trust max {Math.round(topTrust * 100)}%
+          </Typography>
+        )}
       </Box>
 
-      {visibleResults.map((item, index) => {
-        const key = item.ebay_id ?? `${index}-${item.title}`
-        return (
-          <Box key={key}>
-            {index === 0 && (item.ranking_score ?? 0) > 0.7 ? <Box sx={{ mb: 1 }}><Chip icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />} label="AI Best Match" size="small" sx={{ bgcolor: "#fff8e6", border: "1px solid #fde68a", color: "#92400e", fontWeight: 700 }} /></Box> : null}
-            <SearchResultCard item={item} />
+      {/* Cards */}
+      <Box sx={{ px: 2 }}>
+        {visibleResults.map((item, index) => (
+          <SearchResultCard
+            key={item.ebay_id ?? `${index}-${item.title}`}
+            item={item}
+          />
+        ))}
+      </Box>
+
+      {/* Pagination */}
+      {visibleCount < safeResults.length && (
+        <Box
+          sx={{
+            px: 2,
+            py: 1.5,
+            borderTop: "1px solid #f5f5f5",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}
+        >
+          <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>
+            {Math.min(visibleCount, safeResults.length)} di {safeResults.length}
+          </Typography>
+          <Box
+            component="button"
+            onClick={() =>
+              setVisibleCount((prev) => Math.min(prev + 5, safeResults.length))
+            }
+            sx={{
+              background: "none",
+              border: "1px solid #e5e7eb",
+              borderRadius: "20px",
+              px: 1.5,
+              py: 0.5,
+              fontSize: 12,
+              color: "#6b7280",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              "&:hover": { bgcolor: "#f9fafb", borderColor: "#d1d5db" }
+            }}
+          >
+            Mostra altri
           </Box>
-        )
-      })}
-
-      {visibleCount < safeResults.length ? (
-        <Box sx={{ display: "flex", justifyContent: "center", pt: 0.5 }}>
-          <Button variant="outlined" onClick={() => setVisibleCount((prev) => Math.min(prev + 5, safeResults.length))} sx={{ textTransform: "none", borderRadius: 999, px: 2 }}>
-            Mostra altri risultati
-          </Button>
         </Box>
-      ) : null}
-
-      {safeResults.length > 5 ? <Typography sx={{ textAlign: "center", fontSize: 12.5, color: "#6b7280", pt: 0.25 }}>Mostrati {Math.min(visibleCount, safeResults.length)} di {safeResults.length} articoli</Typography> : null}
+      )}
     </Box>
   )
 }

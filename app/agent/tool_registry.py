@@ -213,18 +213,30 @@ def _normalize_conversation_action_input(action_input: Dict[str, Any], memory: A
     query = _clean_text(action_input.get("query") or getattr(memory, "user_query", ""))
     if not query:
         raise ValueError("conversation richiede una query non vuota.")
-        
+
     context_str = ""
+    conversation_history = []
     try:
         session_memory = getattr(memory, "session_memory", None)
         if session_memory:
-            recent_queries = session_memory.recent_queries
-            if recent_queries:
-                context_str = " | ".join(recent_queries[:3])
+            # Preferisci la history strutturata (multi-turn)
+            history = getattr(session_memory, "conversation_history", None) or []
+            if history:
+                # Passa gli ultimi 6 messaggi (3 turni) al tool
+                conversation_history = list(history[-6:])
+            else:
+                # Fallback: usa le ultime query come contesto piatto
+                recent_queries = session_memory.recent_queries
+                if recent_queries:
+                    context_str = " | ".join(recent_queries[:3])
     except Exception:
         pass
-        
-    return {"query": query, "context_info": context_str}
+
+    return {
+        "query": query,
+        "context_info": context_str,
+        "conversation_history": conversation_history,
+    }
 
 
 def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:

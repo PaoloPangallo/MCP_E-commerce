@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 
 # Approx 4 characters per token as a rough safety heuristic
 ROUGH_CHARS_PER_TOKEN = 4
@@ -12,28 +12,56 @@ def _estimate_tokens(text: str) -> int:
     return len(str(text)) // ROUGH_CHARS_PER_TOKEN
 
 
-def _truncate_scratchpad(scratchpad: List[Dict[str, Any]], context_budget_chars: int) -> str:
-    """Formats the scratchpad as JSON but aggressively truncates older items if it exceeds the budget."""
+def _truncate_scratchpad(
+    scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
+    context_budget_chars: int,
+) -> str:
+    """
+    Serializza lo scratchpad come JSON troncando se necessario.
+    Accetta sia un Dict singolo (da memory.scratchpad()) sia una List di Dict.
+    """
     if not scratchpad:
         return "Nessuna azione precedente."
 
+    # --- Normalizzazione: Dict -> stringa diretta, List -> iterazione ---
+    if isinstance(scratchpad, dict):
+        full_str = json.dumps(scratchpad, ensure_ascii=False, indent=2, default=str)
+        if len(full_str) <= context_budget_chars:
+            return full_str
+        # Tronca i campi più pesanti (results, feedbacks)
+        compact = dict(scratchpad)
+        for heavy_key in ("results", "feedbacks", "rag_context", "recent_tool_results"):
+            if heavy_key in compact:
+                val = compact[heavy_key]
+                if isinstance(val, list) and len(val) > 3:
+                    compact[heavy_key] = val[:3]
+                    compact[f"_{heavy_key}_truncated"] = True
+        return json.dumps(compact, ensure_ascii=False, indent=2, default=str)[:context_budget_chars]
+
+    # Lista di Dict
     formatted_items = []
-    # Add items starting from most recent backwards
     for item in reversed(scratchpad):
-        item_str = json.dumps(item, ensure_ascii=False, indent=2)
+        item_str = json.dumps(item, ensure_ascii=False, indent=2, default=str)
         formatted_items.insert(0, item_str)
 
-    full_str = json.dumps([json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2)
+    full_str = json.dumps(
+        [json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2
+    )
 
-    # If it fits the budget, return it all
     if len(full_str) <= context_budget_chars:
         return full_str
 
-    # Otherwise, start dropping the oldest items
-    while len(formatted_items) > 1 and len(json.dumps([json.loads(i) for i in formatted_items])) > context_budget_chars:
-        formatted_items.pop(0)  # Remove oldest
+    while (
+        len(formatted_items) > 1
+        and len(
+            json.dumps([json.loads(i) for i in formatted_items])
+        ) > context_budget_chars
+    ):
+        formatted_items.pop(0)
 
-    leftover = json.dumps([json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2)
+    leftover = json.dumps(
+        [json.loads(i) for i in formatted_items], ensure_ascii=False, indent=2
+    )
     return f"[... {len(scratchpad) - len(formatted_items)} older items omitted ...]\n" + leftover
 
 
@@ -66,6 +94,20 @@ SCHEMA DI USCITA:
   "action_input": {},
   "final_answer": null
 }
+""".strip()
+
+
+CONVERSATION_ANSWER_SYSTEM_PROMPT = """
+Sei ebayGPT, un assistente e-commerce amichevole e competente.
+Rispondi in modo naturale, colloquiale e conciso – come farebbe un esperto di shopping in carne e ossa con un amico.
+
+REGOLE:
+- Tono caldo, diretto e personale. Usa "tu" informale.
+- Rispondi in Italiano (o nella lingua dell'utente).
+- Per saluti o domande generali: 1-3 frasi, no elenchi, no titoli markdown.
+- Per domande su eBay/shopping: dai informazioni utili, offriti di cercare se serve.
+- MAI "Come posso aiutarti oggi?" come unica risposta – aggiungi sempre valore.
+- Se hai storico di conversazione, usalo per dare risposte contestualizzate.
 """.strip()
 
 
@@ -218,11 +260,11 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
 
 def build_planner_prompt(
     user_query: str,
-    scratchpad: List[Dict[str, Any]], # Changed type hint to List
+    scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
     step_index: int,
     max_steps: int,
     tool_catalog: Dict[str, Dict[str, Any]],
-    custom_instructions: Optional[str] = None
+    custom_instructions: Optional[str] = None,
 ) -> str:
     compact_tool_catalog = _compact_tool_catalog_for_prompt(tool_catalog)
     tools_json = json.dumps(compact_tool_catalog, ensure_ascii=False, indent=2)
@@ -249,9 +291,9 @@ def build_planner_prompt(
 
 def build_final_answer_prompt(
     user_query: str,
-    scratchpad: List[Dict[str, Any]],
+    scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
     final_data: Dict[str, Any],
-    custom_instructions: Optional[str] = None
+    custom_instructions: Optional[str] = None,
 ) -> str:
     compact_final_data = _compact_final_data_for_prompt(final_data)
     context_info = _compact_json(compact_final_data)

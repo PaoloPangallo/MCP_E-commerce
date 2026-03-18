@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from app.services.parser import call_gemini, call_ollama
 
@@ -11,17 +11,15 @@ class ToolContextLike(Protocol):
     llm_engine: str
 
 
-from typing import Any, Dict
-
 from app.utils.text import clean_text as _clean_text
-# Using shared _clean_text from app.utils.text
 
 
 def normalize_conversation_arguments(action_input: Dict[str, Any], fallback_query: str = "") -> Dict[str, Any]:
     query = _clean_text(action_input.get("query") or fallback_query)
     if not query:
         raise ValueError("conversation richiede una query non vuota.")
-    return {"query": query}
+    return {"query": query, "context_info": action_input.get("context_info", ""),
+            "conversation_history": action_input.get("conversation_history") or []}
 
 
 async def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
@@ -35,21 +33,66 @@ async def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
     return ""
 
 
+def _build_conversation_prompt(
+    query: str,
+    conversation_history: List[Dict[str, str]],
+    context_info: str,
+    custom_instructions: str,
+) -> str:
+    """Costruisce un prompt multi-turn usando la conversation_history strutturata."""
+
+    lines = [
+        "Sei ebayGPT, un assistente e-commerce amichevole e competente.",
+    ]
+
+    if custom_instructions:
+        lines.append(
+            f"REGOLA PRIORITÀ ASSOLUTA (rispetta sempre):\n{custom_instructions}\n"
+        )
+
+    lines += [
+        "Regola: rispondi in modo naturale, conciso, come un esperto di shopping con un amico.",
+        "Regola: usa 'tu' informale, tono caldo e diretto.",
+        "Regola: NON essere prolisso. 1-3 frasi per domande semplici.",
+        "Regola: NON offrire liste di azioni a meno che non ti venga esplicitamente richiesto.",
+    ]
+
+    # Se abbiamo una history strutturata, la usiamo
+    if conversation_history:
+        lines.append("\n--- STORICO CONVERSAZIONE ---")
+        for turn in conversation_history:
+            role = turn.get("role", "")
+            content = str(turn.get("content", "")).strip()
+            if role == "user":
+                lines.append(f"Utente: {content}")
+            elif role == "assistant":
+                lines.append(f"Assistente: {content}")
+        lines.append("--- FINE STORICO ---\n")
+    elif context_info:
+        # Fallback al vecchio context_info se non c'è history
+        lines.append(f"\nContesto delle ultime richieste: {context_info}\n")
+
+    lines.append(f"Utente: {query}")
+    lines.append("Assistente:")
+
+    return "\n".join(lines)
+
+
 async def execute_conversation_tool(action_input: Dict[str, Any], context: ToolContextLike) -> Dict[str, Any]:
     clean = normalize_conversation_arguments(action_input)
 
     custom_instructions = ""
     if context.user and getattr(context.user, "custom_instructions", None):
-        custom_instructions = f"REGOLA 0 (PRIORITÀ ASSOLUTA - PREFERENZE DELL'UTENTE):\n{context.user.custom_instructions}\n\nDevi RISPETTARE ASSOLUTAMENTE la regola 0 (es. se ti chiede una lingua specifica, DEVI usarla per tutta la risposta).\n\n"
+        custom_instructions = str(context.user.custom_instructions)
 
-    prompt = (
-        "Sei ebayGPT, un assistente e-commerce.\n"
-        f"{custom_instructions}"
-        "Regola 1: NON essere prolisso, rispondi con 1-2 frasi al massimo.\n"
-        "Regola 2: NON offrire liste di azioni a meno che non ti venga esplicitamente richiesto.\n"
-        "Regola 3: Sii amichevole ma vai dritto al punto.\n\n"
-        f"Contesto delle ultime richieste dell'utente: {clean.get('context_info', 'Nessuno')}\n"
-        f"Messaggio utente: {clean['query']}"
+    conversation_history: List[Dict[str, str]] = clean.get("conversation_history") or []
+    context_info: str = clean.get("context_info", "")
+
+    prompt = _build_conversation_prompt(
+        query=clean["query"],
+        conversation_history=conversation_history,
+        context_info=context_info,
+        custom_instructions=custom_instructions,
     )
 
     answer = await _call_conversation_llm(prompt, getattr(context, "llm_engine", "ollama"))
@@ -66,4 +109,4 @@ async def execute_conversation_tool(action_input: Dict[str, Any], context: ToolC
         "query": clean["query"],
         "error": "Non riesco a generare una risposta conversazionale in questo momento.",
         "answer": "",
-    }
+    }
