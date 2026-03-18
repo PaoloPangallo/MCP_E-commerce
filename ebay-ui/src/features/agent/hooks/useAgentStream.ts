@@ -55,7 +55,7 @@ function normalizeFinalTrace(trace: AgentStep[] | undefined, fallback: AgentStep
 export function useAgentStream(options?: {
   onDone?: (payload: FinalPayload, originalQuery: string) => void
 }) {
-  const sourceRef = useRef<EventSource | null>(null)
+  const sourceRef = useRef<{ close: () => void } | null>(null)
   const runIdRef = useRef(0)
 
   const [steps, setSteps] = useState<AgentStep[]>([])
@@ -170,19 +170,34 @@ export function useAgentStream(options?: {
 
       if (event.type === "answer_chunk" && typeof event.chunk === "string") {
         streamingAnswer += event.chunk
+        
+        // Mark all steps as completed to avoid "Sto elaborando" sticking around
+        const markStepsDone = (prev: AgentStep[]) => {
+          if (prev.length === 0) {
+            return [] // Nessuno step fittizio per messaggi conversazionali
+          }
+          return prev.map(s => 
+            (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const, thought: s.thought || "Pianificazione completata." } : s
+          )
+        }
+
+        setSteps(prev => markStepsDone(prev))
+
         setFinalPayload((prev) => {
           if (!prev) {
             return {
               finalAnswer: streamingAnswer,
               results: [],
               analysis: null,
-              trace: localTrace,
+              trace: markStepsDone(localTrace),
               plannedTasks: localPlannedTasks
             } as any
           }
+          const nextTrace = markStepsDone(prev.trace || [])
           return {
             ...prev,
-            finalAnswer: streamingAnswer
+            finalAnswer: streamingAnswer,
+            trace: nextTrace
           }
         })
         return
@@ -193,7 +208,14 @@ export function useAgentStream(options?: {
         const search = finalData.search || {}
         const seller = finalData.seller || null
         const finalResults = Array.isArray(search.results) ? search.results : []
-        const finalTrace = normalizeFinalTrace(event.agent_trace, localTrace)
+        
+        const fallbackTrace = localTrace.map(s => 
+          (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
+        )
+        const mappedAgentTrace = (event.agent_trace || []).map((s: any) => 
+          (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
+        )
+        const finalTrace = normalizeFinalTrace(mappedAgentTrace, fallbackTrace)
 
         const toolStates = finalData.tool_states || {}
         const toolCalls = finalData.tool_calls || {}
@@ -202,7 +224,7 @@ export function useAgentStream(options?: {
           : []
 
         const payload: FinalPayload = {
-          finalAnswer: event.final_answer || null,
+          finalAnswer: event.final_answer || streamingAnswer || null,
           results: finalResults,
           analysis: search.analysis || finalData.search_analysis || null,
           metrics: search.metrics || finalData.metrics,

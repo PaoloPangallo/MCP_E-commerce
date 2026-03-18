@@ -45,7 +45,7 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
     ),
     "comparison": (
         r"\b(compara|compari|comparami|confronta|confrontami|confronto|versus|vs|differenza|differenze)\b",
-        r"\b(meglio|peggio)\b",
+        r"\b(?:meglio di|peggio di|quale\s+.*meglio|quale\s+.*peggio)\b",
     ),
 }
 
@@ -550,7 +550,7 @@ def _bootstrap_tools() -> None:
             dependencies=(),
             produced_entities=("products", "search_analysis", "metrics", "seller"),
             can_run_in_parallel=False,
-            use_cache=True,
+            use_cache=False,
             input_normalizer=_normalize_search_action_input,
             status_resolver=_resolve_search_status,
             quality_resolver=_resolve_search_quality,
@@ -656,7 +656,7 @@ def _bootstrap_tools() -> None:
             dependencies=("search_products",),
             produced_entities=("winner", "comparison_matrix"),
             can_run_in_parallel=False,
-            use_cache=True,
+            use_cache=False,
             input_normalizer=_normalize_compare_action_input,
             status_resolver=_resolve_compare_status,
             terminal_resolver=lambda _: True,

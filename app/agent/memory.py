@@ -385,13 +385,30 @@ class RequestState:
             self.errors.append(str(observation.error))
 
         if observation.state_key:
+            # TRONCAMENTO AGGRESSIVO DEI DATI (Protezione LLM Context)
+            # Se i dati del tool sono troppo grandi, l'LLM andrà in errore o perderà contesto.
+            obs_data = observation.data
+            if isinstance(obs_data, dict):
+                obs_data = deepcopy(obs_data)
+                # Se c'è una lista enorme di risultati, teniamo solo i primi 5 per la memoria/scratchpad
+                for list_key in ("results", "items", "itemSummaries", "feedbacks"):
+                    if list_key in obs_data and isinstance(obs_data[list_key], list):
+                        obs_data[list_key] = obs_data[list_key][:5]
+                
+                # Rimuoviamo campi testuali giganti (es. descrizioni o raw html)
+                for huge_key in ("description", "raw", "raw_html", "full_text"):
+                    if huge_key in obs_data:
+                        val = str(obs_data[huge_key])
+                        if len(val) > 1000:
+                            obs_data[huge_key] = val[:1000] + "... [TRUNCATED]"
+
             self.tool_states[observation.state_key] = {
                 "status": observation.status,
                 "quality": observation.quality,
                 "terminal": observation.terminal,
                 "tool": observation.tool,
                 "summary": observation.summary,
-                "data": observation.data,
+                "data": obs_data,
             }
 
         if observation.tool == "search_products" and observation.ok:

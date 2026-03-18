@@ -39,7 +39,7 @@ GREETING_CUES = {
 
 SELLER_CUES = {
     "seller", "venditore", "negozio", "shop", "feedback", "affidabile",
-    "reputazione", "trust", "recensioni", "serio", "sicuro",
+    "reputazione", "trust", "recensioni", "serio", "sicuro", "affidabilità",
 }
 
 TRANSACTIONAL_CUES = {
@@ -50,7 +50,7 @@ TRANSACTIONAL_CUES = {
 
 COMPARISON_CUES = {
     "compara", "compari", "comparami", "confronta", "confrontami", "confronto", "differenza", "differenze",
-    "meglio", "peggio", "versus", "vs", "comparazione",
+    "meglio", "peggio", "versus", "vs", "comparazione", "analizza",
 }
 
 ATTRIBUTE_CUES = {
@@ -227,11 +227,11 @@ class ReactPlanner:
         # evitiamo di mandare una banalità a Ollama solo per decidere.
         if (
                 evidence.conversation >= 0.40
-                and evidence.product < 0.30
-                and evidence.seller < 0.30
+                and evidence.product < 0.20
+                and evidence.seller < 0.20
         ):
             return PlannerOutput(
-                thought="La richiesta sembra conversazionale.",
+                thought="La richiesta sembra puramente conversazionale.",
                 should_stop=True,
                 intent="conversation",
             )

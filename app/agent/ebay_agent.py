@@ -357,7 +357,17 @@ class EbayReactAgent:
     async def _finalize_stream(self, memory: AgentMemory, llm_engine: str) -> AsyncGenerator[str, None]:
         intent = (memory.detected_intent or "").lower()
 
+        # PRIORITÀ: Se abbiamo già una risposta generata dal tool conversation, usiamola direttamente.
+        # Questo evita doppie chiamate LLM e incoerenze tra trace e risposta finale.
+        conv_state = memory.tool_states.get("conversation")
+        if conv_state:
+            ans = (conv_state.get("data") or {}).get("answer")
+            if ans:
+                yield ans
+                return
+
         if intent == "conversation":
+            # Per l'intento conversazionale, usiamo sempre l'LLM per mantenere il tono da personal shopper.
             prompt = build_final_answer_prompt(
                 user_query=memory.user_query,
                 scratchpad=memory.scratchpad(),
@@ -373,9 +383,6 @@ class EbayReactAgent:
             if got_any:
                 memory.register_llm_call("final")
                 return
-
-            yield "Non riesco a generare una risposta conversazionale in questo momento."
-            return
 
         if intent == "comparison":
             # Se c'è una gem, usa il LLM per arricchire la risposta con la personalità dell'utente
@@ -439,6 +446,11 @@ class EbayReactAgent:
                 gen = await call_ollama(prompt, stream=True)
                 async for chunk in gen:
                     yield chunk
+            elif llm_engine == "ollama_cloud":
+                from app.services.parser import call_ollama_cloud
+                gen = await call_ollama_cloud(prompt, stream=True)
+                async for chunk in gen:
+                    yield chunk
         except Exception as exc:
             logger.warning("Final answer streaming LLM failed: %s", exc)
             yield ""
@@ -458,9 +470,8 @@ class EbayReactAgent:
         if (memory.detected_intent or "").lower() == "conversation":
             return False
 
-        if memory.search_payload or memory.seller_payload:
-            return True
-
+        # Preferiamo SEMPRE l'LLM synthesis per un output Premium da Personal Shopper.
+        # Usa il fallback crudo solo in caso di errori critici o engine non adeguato.
         if memory.errors:
             return True
 
@@ -468,21 +479,23 @@ class EbayReactAgent:
 
     @staticmethod
     def _should_use_llm_for_final(memory: AgentMemory, llm_engine: str) -> bool:
+        """Determina se invocare l'LLM per la sintesi finale."""
         if llm_engine == "rule_based":
             return False
-
+            
         if memory.llm_call_count("final") >= 1:
             return False
 
         if (memory.detected_intent or "").lower() == "conversation":
             return True
 
+        # Usa LLM synthesis anche solo con un singolo risultato valido!
         useful_states = [
             state
             for state in memory.tool_states.values()
             if state.get("quality") in {"partial", "good"}
         ]
-        if len(useful_states) >= 2 and not memory.errors:
+        if len(useful_states) >= 1 and not memory.errors:
             return True
 
         return False
@@ -551,24 +564,27 @@ class EbayReactAgent:
         )
         trust_score = top.get("trust_score")
 
-        text = f"Il risultato migliore che ho trovato è '{title}'"
-        if price is not None:
-            text += f", al prezzo di {price} {currency}"
-        if seller_name:
-            text += f", venduto da {seller_name}"
-        if trust_score is not None:
-            try:
-                text += f" con trust score {round(float(trust_score) * 100)}%"
-            except Exception:
-                logger.debug("Unable to format trust_score=%s", trust_score)
-        text += "."
-
-        if analysis:
-            text += f" {analysis}"
-        elif search_payload.get("results_count"):
-            text += f" Ho trovato in totale {search_payload.get('results_count')} risultati."
+        text = f"Non sono riuscito a finalizzare l'output per i risultati trovati."
+        if search_payload.get("results_count"):
+            text = f"Ho trovato {search_payload.get('results_count')} risultati pertinenti per te! I dettagli sono elencati nella tabella tecnica qui in basso."
 
         return text.strip()
+
+    @staticmethod
+    def _should_use_llm_for_final(memory: AgentMemory, llm_engine: str) -> bool:
+        """Determina se invocare l'LLM per la sintesi finale."""
+        if llm_engine == "rule_based":
+            return False
+
+        # Se abbiamo dati strutturati (search, seller, etc), usiamo SEMPRE l'LLM per la sintesi "premium".
+        if memory.has_any_terminal_state():
+            return True
+        
+        # Per conversazioni, preferiamo l'LLM (ma evitiamo loop se ha già fallito)
+        if memory.llm_call_count("final") >= 1:
+            return False
+
+        return True
 
     def _build_seller_answer(self, memory: AgentMemory) -> str:
         seller_payload = memory.seller_payload or {}

@@ -86,12 +86,18 @@ export function useChatSession() {
 
       useChatStore.getState().setCachedSearch(cacheKey, newSearch)
 
-      useChatStore.getState().appendAssistantMessage(
-        newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
-      )
-
+      // ONLY append the final message if it's useful, otherwise just append search block
       if (hasStructuredBlock) {
         useChatStore.getState().appendSearchBlock(newSearch)
+        // If we want a separate assistant message above the search, we can append it too, 
+        // but now it will be synthesized text not duplicated with analysis.
+        if (newSearch.final_answer && newSearch.final_answer !== "Ho completato l’analisi della richiesta.") {
+            useChatStore.getState().appendAssistantMessage(newSearch.final_answer)
+        }
+      } else {
+        useChatStore.getState().appendAssistantMessage(
+          newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
+        )
       }
 
       useChatStore.getState().setLoadingQuery(null)

@@ -71,10 +71,20 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
         ctype = c.get("type")
         val = c.get("value")
         if ctype not in ("price", "condition", "aspect") and val:
-            if isinstance(val, list):
-                parts.extend(str(v) for v in val)
-            else:
-                parts.append(str(val))
+            # Gestione negazioni per query eBay
+            vals = val if isinstance(val, list) else [val]
+            for v in vals:
+                v_str = str(v).strip()
+                # Se la query originale contiene "no", "senza", "nè" riferiti a questo valore
+                # cerchiamo di usare l'operatore NOT di eBay (-)
+                neg_patterns = [r"\bno\b", r"\bsenza\b", r"\bn[èe]\b"]
+                orig_low = fallback_query.lower()
+                is_negated = any(re.search(pf + r"\s+" + re.escape(v_str.lower()), orig_low) for pf in neg_patterns)
+                
+                if is_negated:
+                    parts.append(f"-{v_str}")
+                else:
+                    parts.append(v_str)
                 
     if not parts:
         return fallback_query
@@ -84,6 +94,10 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     seen_tokens_low = set()
     
     raw_query = " ".join(parts)
+    # LOG PER ANALISI PARSER (Richiesta Utente)
+    print(f"\n[PARSER ANALYSIS] EBAY QUERY: {raw_query}\n")
+    logger.info("EBAY QUERY: %s", raw_query)
+    
     for word in raw_query.split():
         w_low = word.lower()
         if w_low not in seen_tokens_low:

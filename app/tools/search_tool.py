@@ -53,6 +53,7 @@ async def execute_search_tool(action_input: Dict[str, Any], context: ToolContext
         db=context.db,
         user=getattr(context, "user", None),
         llm_engine=getattr(context, "llm_engine", "ollama"),
+        session_id=getattr(context, "session_id", None) or (str(context.user.id) if context.user and hasattr(context.user, "id") else None)
     )
 
     if not isinstance(payload, dict):

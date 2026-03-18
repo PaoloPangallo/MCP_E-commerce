@@ -15,7 +15,8 @@ export default function WelcomePanel() {
     return (
         <Box
             sx={{
-                maxWidth: 760,
+                maxWidth: 900,
+                width: "100%",
                 mx: "auto",
                 px: { xs: 2, md: 3 },
                 pt: { xs: 8, md: 12 },

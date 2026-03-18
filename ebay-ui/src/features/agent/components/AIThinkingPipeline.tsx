@@ -149,11 +149,11 @@ export default function AIThinkingPipeline({
           >
             <PsychologyIcon sx={{ color: "#fff", fontSize: 20 }} />
           </Box>
-          <Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 1 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <Typography sx={{ fontSize: 15, fontWeight: 900, color: "#0f172a", lineHeight: 1.2 }}>
               {loading ? "Intelligenza Artificiale al lavoro..." : "Analisi Completata"}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>
+            <Typography sx={{ fontSize: 12, color: "#64748b", fontWeight: 500, mt: 0.2 }}>
               {normalizedSteps.length} passaggi logici intrapresi
             </Typography>
           </Box>

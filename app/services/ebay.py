@@ -2,6 +2,7 @@ import asyncio
 import base64
 import logging
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -301,16 +302,22 @@ def _build_query(parsed: Dict[str, Any]) -> str:
     if not parts:
         fallback = parsed.get("semantic_query") or parsed.get("original_query")
         if fallback:
-            parts.append(str(fallback).strip())
+            # Pulizia manuale di keywords tecniche che a volte finiscono nel semantic_query
+            f = str(fallback).strip()
+            f = re.sub(r'\b(query|cerca|per|favore|mi)\b', '', f, flags=re.IGNORECASE)
+            parts.append(f.strip())
             
-    # 4) DEDUPLICAZIONE PAROLE MANTENENDO ORDINE
-    # Esempio: "iPhone iPhone 13 128gb" -> "iPhone 13 128gb"
+    # 4) DEDUPLICAZIONE E PULIZIA TOKEN
+    raw_query = " ".join(parts)
+    # Rimuoviamo punteggiatura che disturba eBay
+    raw_query = re.sub(r'[,.;:!?]', ' ', raw_query)
+    
     final_tokens: List[str] = []
     seen_tokens_low = set()
     
-    raw_query = " ".join(parts)
     for word in raw_query.split():
         w_low = word.lower()
+        if len(w_low) < 2 and not w_low.isdigit(): continue # skip singole lettere inutili
         if w_low not in seen_tokens_low:
             final_tokens.append(word)
             seen_tokens_low.add(w_low)

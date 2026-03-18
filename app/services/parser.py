@@ -90,8 +90,22 @@ BRAND_WHITELIST = {
     "dyson": "Dyson",
     "bose": "Bose",
     "jbl": "JBL",
+    "levis": "Levi's",
+    "levi": "Levi's",
     "nike": "Nike",
     "adidas": "Adidas",
+    "puma": "Puma",
+    "reebok": "Reebok",
+    "zara": "Zara",
+    "bimby": "Bimby",
+    "folletto": "Folletto",
+}
+
+STOP_WORDS = {
+    "ciao", "buon", "buongiorno", "buonasera", "ehi", "hey",
+    "stavo", "cercando", "cerco", "trovami", "mostrami", "fammi", "vedere",
+    "per", "favore", "piacere", "grazie", "grazie mille",
+    "un", "una", "uno", "dei", "degli", "delle", "il", "lo", "la", "i", "gli", "le",
 }
 
 CONDITION_SYNONYMS = {
@@ -504,7 +518,7 @@ async def call_ollama(
         "options": {
             "temperature": 0.1,
             "top_p": 0.9,
-            "num_predict": 768,
+            "num_predict": 4096,
             "num_ctx": 8192,
         },
     }
@@ -658,6 +672,7 @@ async def call_ollama_cloud(
             response = await client.chat(
                 model=OLLAMA_CLOUD_MODEL,
                 messages=messages,
+                options={"num_predict": 4096},
             )
             content = (response.message.content or "").strip()
             return content if content else None
@@ -671,6 +686,7 @@ async def call_ollama_cloud(
                     model=OLLAMA_CLOUD_MODEL,
                     messages=messages,
                     stream=True,
+                    options={"num_predict": 4096},
                 ):
                     content = part.message.content
                     if content:
@@ -950,7 +966,9 @@ Rules:
 - Put optional wishes in preferences.
 - Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
 - Do NOT invent brands or products.
-- IMPORTANT: If the user uses pronouns (e.g., "li", "le", "quelli", "them", "it") or says "find THEM", use the CONVERSATION CONTEXT to resolve what product/brand they are referring to.
+- IMPORTANT: Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
+- If the user says "cercalo", "trovali", "show me more", etc., the 'product' and 'brands' fields must be populated based on the previous topic found in the context.
+- If the query is "cercalo da 128gb" and the context mentions "iPad M1", you MUST output product="iPad M1" and an aspect constraint for Storage="128GB".
 - Output JSON only.
 - If you see a size like "taglia 43" or "size 43", categorize it as an aspect with name "Size" and value "43".
 - If you see a color like "blue" or "rosa", categorize it as an aspect with name "Color" and value the color name.
