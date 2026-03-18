@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Box, Collapse, Paper, Typography } from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import type { SearchBlock } from "../../types/searchTypes.ts"
-import { AIThinkingPipeline } from "../agent/components/AIThinkingPipeline.tsx"
+import { ThinkingPill } from "../agent/components/ThinkingPill.tsx"
 import ItemDetailsCard from "./ItemDetailsCard.tsx"
 import ShippingCostsCard from "./ShippingCostsCard.tsx"
 import SearchResultList from "../search/components/SearchResultList.tsx"
@@ -100,11 +100,7 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
     <Box sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 1.5 }}>
 
       {hasTrace && (
-        <CollapsibleSection label="Traccia agente" count={agentTrace.length}>
-          <Box sx={{ p: 2 }}>
-            <AIThinkingPipeline agentTrace={agentTrace} query={search.query} />
-          </Box>
-        </CollapsibleSection>
+        <ThinkingPill steps={agentTrace} loading={false} query={search.query} />
       )}
 
       {search.mode !== "seller" && hasResults && (

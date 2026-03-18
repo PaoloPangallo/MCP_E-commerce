@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react"
-import { Box, Collapse, Paper } from "@mui/material"
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import { useEffect, useRef } from "react"
+import { Box } from "@mui/material"
 
 import { useChatSession } from "../../hooks/useChatSession.ts"
-import { AIThinkingPipeline } from "../agent/components/AIThinkingPipeline.tsx"
+import { ThinkingPill } from "../agent/components/ThinkingPill.tsx"
 import ChatLayout from "./ChatLayout.tsx"
 import ChatInput from "./ChatInput.tsx"
 import MessageBubble from "./MessageBubble.tsx"
@@ -12,82 +11,6 @@ import WelcomePanel from "./WelcomePanel.tsx"
 import ErrorBoundary from "./ErrorBoundary.tsx"
 import type { AgentStep, PlannedTask } from "../agent/types"
 
-interface ThinkingPillProps {
-  steps: AgentStep[]
-  loading: boolean
-  query?: string
-  plannedTasks?: PlannedTask[]
-}
-
-function ThinkingPill({ steps, loading, query, plannedTasks }: ThinkingPillProps) {
-  const [open, setOpen] = useState(false)
-
-  const label = loading
-    ? "L'agente sta ragionando…"
-    : `Ragionamento completato${steps.length > 0 ? ` · ${steps.length} passi` : ""}`
-
-  return (
-    <Box sx={{ mb: 1.5 }}>
-      <Box
-        onClick={() => setOpen((v) => !v)}
-        sx={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 0.75,
-          px: 1.5,
-          py: 0.6,
-          mb: open ? 1 : 0,
-          border: "1px solid #e5e7eb",
-          borderRadius: "20px",
-          cursor: "pointer",
-          bgcolor: "#fafafa",
-          transition: "background 0.15s",
-          "&:hover": { bgcolor: "#f3f4f6" },
-          userSelect: "none"
-        }}
-      >
-        <Box
-          sx={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            bgcolor: loading ? "#f59e0b" : "#10a37f",
-            animation: loading ? "dotPulse 1.2s infinite ease-in-out" : "none",
-            "@keyframes dotPulse": {
-              "0%, 100%": { opacity: 1 },
-              "50%": { opacity: 0.35 }
-            }
-          }}
-        />
-        <Box component="span" sx={{ fontSize: 12, color: "#6b7280", lineHeight: 1 }}>
-          {label}
-        </Box>
-        <KeyboardArrowDownIcon
-          sx={{
-            fontSize: 14,
-            color: "#9ca3af",
-            transform: open ? "rotate(180deg)" : "none",
-            transition: "transform 0.2s"
-          }}
-        />
-      </Box>
-
-      <Collapse in={open} timeout={200}>
-        <Paper
-          elevation={0}
-          sx={{ p: 2, borderRadius: 3, border: "1px solid #e5e7eb", bgcolor: "#f8fafc" }}
-        >
-          <AIThinkingPipeline
-            agentTrace={steps}
-            loading={loading}
-            query={query}
-            plannedTasks={plannedTasks}
-          />
-        </Paper>
-      </Collapse>
-    </Box>
-  )
-}
 
 export default function ChatPage() {
   const {
@@ -104,6 +27,7 @@ export default function ChatPage() {
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const isAtBottomRef = useRef(true)
+  const isAutoScrollingRef = useRef(false)
 
   // Aggiorna se siamo vicini al fondo durante lo scroll dell'utente
   useEffect(() => {
@@ -111,10 +35,13 @@ export default function ChatPage() {
     if (!container) return
 
     const handleScroll = () => {
-      const threshold = 100 // pixel di tolleranza
-      const isAtBottom = 
-        container.scrollHeight - container.scrollTop <= container.clientHeight + threshold
+      // Ignora l'evento di scroll se l'abbiamo scatenato noi programmaticamente
+      if (isAutoScrollingRef.current) return
       
+      const threshold = 150 // pixel di tolleranza
+      const isAtBottom =
+        container.scrollHeight - container.scrollTop <= container.clientHeight + threshold
+
       isAtBottomRef.current = isAtBottom
     }
 
@@ -123,11 +50,23 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
-    // Se non siamo al fondo e siamo in fase di caricamento, non forzare lo scroll (Sticky logic)
+    const container = document.getElementById("chat-scroll-container")
+    if (!container) return
+
+    // Se l'utente ha scrollato in su, non forziamo l'aggancio in basso per non disturbarlo
     if (running && !isAtBottomRef.current) return
 
-    const behavior = running ? "auto" : "smooth"
-    bottomRef.current?.scrollIntoView({ behavior, block: "end" })
+    isAutoScrollingRef.current = true
+    
+    // Lo scroll "smooth" in questa fase causa sfasamenti visivi (jittering) e trigger involontari
+    // degli eventi di scroll che rovinano la logica sticky. Usare "auto" per pinning perfetto stile ChatGPT.
+    container.scrollTo({ top: container.scrollHeight, behavior: "auto" })
+    
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        isAutoScrollingRef.current = false
+      }, 50)
+    })
   }, [chat, steps, running, loadingQuery, finalPayload?.finalAnswer])
 
   useEffect(() => {

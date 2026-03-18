@@ -278,7 +278,7 @@ export default function ChatLayout({
   )
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
       {isMobile ? (
         <Drawer
           open={mobileOpen}
@@ -311,6 +311,7 @@ export default function ChatLayout({
         sx={{
           flex: 1,
           minWidth: 0,
+          minHeight: 0,
           display: "flex",
           flexDirection: "column",
           bgcolor: "#ffffff"
@@ -364,6 +365,7 @@ export default function ChatLayout({
           id="chat-scroll-container"
           sx={{
             flex: 1,
+            minHeight: 0,
             overflowY: "auto",
             display: "flex",
             flexDirection: "column"
