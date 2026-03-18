@@ -361,6 +361,7 @@ export default function ChatLayout({
 
         {/* CHAT AREA */}
         <Box
+          id="chat-scroll-container"
           sx={{
             flex: 1,
             overflowY: "auto",

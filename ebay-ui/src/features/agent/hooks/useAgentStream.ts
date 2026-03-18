@@ -52,17 +52,45 @@ function normalizeFinalTrace(trace: AgentStep[] | undefined, fallback: AgentStep
   return fallback
 }
 
+function markStepsAsDone(prev: AgentStep[]): AgentStep[] {
+  if (prev.length === 0) return []
+  let changed = false
+  const next = prev.map(s => {
+    if (s.status === "thinking" || s.status === "running") {
+      changed = true
+      return { ...s, status: "ok" as const, thought: s.thought || "Pianificazione completata." }
+    }
+    return s
+  })
+  return changed ? next : prev
+}
+
 export function useAgentStream(options?: {
+  sessionId?: string | null
   onDone?: (payload: FinalPayload, originalQuery: string) => void
 }) {
   const sourceRef = useRef<{ close: () => void } | null>(null)
   const runIdRef = useRef(0)
+  const sessionIdRef = useRef<string | null>(options?.sessionId || null)
 
   const [steps, setSteps] = useState<AgentStep[]>([])
   const [results, setResults] = useState<import("../../search/types").SearchItem[]>([])
   const [running, setRunning] = useState(false)
   const [finalPayload, setFinalPayload] = useState<FinalPayload | null>(null)
   const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>([])
+
+  // Tracking di disconnessioni se l'ID sessione cambia
+  useEffect(() => {
+    if (options?.sessionId !== sessionIdRef.current) {
+      if (sourceRef.current) {
+        sourceRef.current.close()
+        sourceRef.current = null
+      }
+      setRunning(false)
+      sessionIdRef.current = options?.sessionId || null
+    }
+  }, [options?.sessionId])
+
 
   const reset = useCallback(() => {
     runIdRef.current += 1
@@ -88,10 +116,12 @@ export function useAgentStream(options?: {
     const currentRunId = runIdRef.current
     let localTrace: AgentStep[] = []
     let localPlannedTasks: PlannedTask[] = []
-    let streamingAnswer = ""
+    let streamingAnswer: string = ""
 
     const nextSource = streamAgent(query, (event: AgentEvent) => {
+      // Abort se il run è superato o la sessione è cambiata
       if (currentRunId !== runIdRef.current) return
+      if (options?.sessionId && options.sessionId !== sessionIdRef.current) return
 
       if (event.type === "heartbeat") return
 
@@ -120,7 +150,10 @@ export function useAgentStream(options?: {
           finalData: null
         }
         setFinalPayload(errorPayload)
-        options?.onDone?.(errorPayload, query)
+
+        if (options?.sessionId === sessionIdRef.current) {
+          options?.onDone?.(errorPayload, query)
+        }
 
         if (sourceRef.current) {
           sourceRef.current.close()
@@ -168,20 +201,10 @@ export function useAgentStream(options?: {
         return
       }
 
-      if (event.type === "answer_chunk" && typeof event.chunk === "string") {
-        streamingAnswer += event.chunk
-        
-        // Mark all steps as completed to avoid "Sto elaborando" sticking around
-        const markStepsDone = (prev: AgentStep[]) => {
-          if (prev.length === 0) {
-            return [] // Nessuno step fittizio per messaggi conversazionali
-          }
-          return prev.map(s => 
-            (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const, thought: s.thought || "Pianificazione completata." } : s
-          )
-        }
+      if (event.type === "answer_chunk") {
+        streamingAnswer += (typeof event.chunk === "string" ? event.chunk : "")
 
-        setSteps(prev => markStepsDone(prev))
+        setSteps(prev => markStepsAsDone(prev))
 
         setFinalPayload((prev) => {
           if (!prev) {
@@ -189,11 +212,14 @@ export function useAgentStream(options?: {
               finalAnswer: streamingAnswer,
               results: [],
               analysis: null,
-              trace: markStepsDone(localTrace),
+              trace: markStepsAsDone(localTrace),
               plannedTasks: localPlannedTasks
             } as any
           }
-          const nextTrace = markStepsDone(prev.trace || [])
+          const nextTrace = markStepsAsDone(prev.trace || [])
+          
+          if (prev.finalAnswer === streamingAnswer && prev.trace === nextTrace) return prev
+
           return {
             ...prev,
             finalAnswer: streamingAnswer,
@@ -208,11 +234,11 @@ export function useAgentStream(options?: {
         const search = finalData.search || {}
         const seller = finalData.seller || null
         const finalResults = Array.isArray(search.results) ? search.results : []
-        
-        const fallbackTrace = localTrace.map(s => 
+
+        const fallbackTrace = localTrace.map(s =>
           (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
         )
-        const mappedAgentTrace = (event.agent_trace || []).map((s: any) => 
+        const mappedAgentTrace = (event.agent_trace || []).map((s: any) =>
           (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
         )
         const finalTrace = normalizeFinalTrace(mappedAgentTrace, fallbackTrace)
@@ -245,7 +271,10 @@ export function useAgentStream(options?: {
 
         setResults(finalResults)
         setFinalPayload(payload)
-        options?.onDone?.(payload, query)
+
+        if (options?.sessionId === sessionIdRef.current) {
+          options?.onDone?.(payload, query)
+        }
 
         setSteps(finalTrace)
         setRunning(false)
@@ -267,7 +296,7 @@ export function useAgentStream(options?: {
     })
 
     sourceRef.current = nextSource
-  }, [reset])
+  }, [reset, options?.sessionId])
 
   useEffect(() => {
     return () => {

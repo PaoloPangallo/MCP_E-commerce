@@ -1,143 +1,82 @@
-Markdown
-# MCP E-Commerce · NLP Agent + MCP
+# MCP E-Commerce · AI Shopping Assistant 🛍️
 
-Sistema di monitoraggio intelligente prezzi e inserzioni online con parsing NLP, retrieval semantico e orchestrazione agentica.
-
----
-
-## 🎯 Obiettivo del progetto
-
-Costruire un backend scalabile che:
-
-- **Interpreta** richieste testuali utente.
-- **Estrae** vincoli strutturati (prezzo, condizione, prodotto).
-- **Recupera** inserzioni da e-commerce (es. eBay).
-- **Memorizza** lo storico prezzi.
-- **Calcola** trust score venditore/inserzione.
-- **Genera** notifiche intelligenti.
+Un assistente intelligente sofisticato (AI Agent) che aiuta gli utenti a trovare le migliori offerte su eBay attraverso l'interpretazione del linguaggio naturale (NLP), il Retrieval Augmented Generation (RAG) e un sistema di classificazione avanzato.
 
 ---
 
-# ✅ Stato Attuale del Progetto
+## 🚀 Caratteristiche Principali
 
-## 1️⃣ Ambiente Backend
+- **AI Agent (ReAct Framework)**: Un agente autonomo che decide quali strumenti utilizzare (Ricerca, Dettagli, Feedback) per rispondere al meglio alle richieste dell'utente.
+- **Parsing NLP Avanzato**: Utilizza **spaCy** e modelli **LLM (Gemini)** per estrarre vincoli strutturati (marca, modello, budget, condizione) da query colloquiali.
+- **RAG con Qdrant**: Sistema di recupero semantico basato su **Qdrant** (Vector Database) per analizzare feedback dei venditori e descrizioni prodotti storiche.
+- **Scoring & Reranking**: Sistema di pesatura multi-fattore che considera:
+  - Rilevanza semantica (Embedding Similarity).
+  - Sentiment dei feedback venditore.
+  - Seller Trust Score calcolato in tempo reale.
+  - Corrispondenza delle preferenze utente (brand preferiti, soglie prezzo).
+- **Streaming Response**: Feedback immediato all'utente tramite streaming dei pensieri dell'agente e dei risultati.
 
-- **Linguaggio:** Python 3.11+
-- **Framework:** FastAPI + Uvicorn
-- **Struttura:** Architettura modulare (`app/`)
-- **Setup:** Virtual environment configurato
+---
 
-**Struttura delle cartelle:**
-```text
-MCP_ECOM/
-├── app/
-│   ├── main.py
-│   ├── api/
-│   │   └── routes.py
-│   ├── services/
-│   │   └── parser.py
-│   ├── db/
-│   │   └── database.py
-│   ├── models/
-│   └── core/
-├── .env
-├── requirements.txt
-└── README.md
-2️⃣ FastAPI Operativo
-Endpoint disponibili:
+## 🏗️ Architettura Tecnica
 
-GET /health
-Health check del backend.
+- **Backend**: FastAPI (Python 3.11+)
+- **Agent Orchestrator**: Implementazione custom del pattern ReAct con memoria a breve termine.
+- **Database Primario**: PostgreSQL (Persistenza inserzioni e profili utente).
+- **Vector Database**: Qdrant (Hybrid search: Dense + Sparse BM25).
+- **Cache**: Redis (Memorizzazione feedback, sessioni e latenze).
+- **NLP**: spaCy (`it_core_news_sm`) + Google Gemini API.
 
-POST /parse
-Parsing NLP della query utente.
+---
 
-Esempio di input:
+## 🛠️ Setup & Installazione
 
-JSON
-{
-  "query": "iphone 14 usato sotto 600 euro"
-}
-Output attuale:
+### Requisiti
+- Docker Desktop
+- Python 3.11+
 
-JSON
-{
-  "original_query": "iphone 14 usato sotto 600 euro",
-  "product": "iphone 14",
-  "max_price": 600,
-  "condition": "usato"
-}
-3️⃣ NLP Parsing (spaCy)
-Modello: it_core_news_sm
+### Avvio Rapido
+1. **Clona il repository**:
+   ```bash
+   git clone https://github.com/paolo/MCP_ECOM.git
+   cd MCP_ECOM
+   ```
 
-Estrazione: Prodotto (NOUN + PROPN), prezzo massimo ("sotto X"), condizione.
+2. **Configura le variabili d'ambiente**:
+   Crea un file `.env` partendo da `.env.example` e inserisci le tue chiavi API (eBay, Gemini, etc.).
 
-Tecnica: Regex + POS tagging.
+3. **Avvia l'ambiente con lo script PowerShell**:
+   ```powershell
+   ./start_dev.ps1
+   ```
+   *Questo script avvierà automaticamente i container Docker (Postgres, Redis, Qdrant) e il server FastAPI.*
 
-File: app/services/parser.py
+---
 
-4️⃣ Database & Persistence
-PostgreSQL: Database mcp_ecom configurato.
+## 📡 API Endpoints (Principali)
 
-Connessione: Verificata tramite SELECT 1.
+| Metodo | Endpoint | Descrizione |
+| :--- | :--- | :--- |
+| `POST` | `/api/agent/stream` | Endpoint principale per interagire con l'assistente (Streaming). |
+| `POST` | `/api/search` | Pipeline di ricerca classica con parsing e persistenza. |
+| `GET` | `/api/seller/{name}` | Analisi dettagliata e trust score di un venditore. |
+| `GET` | `/health` | Check dello stato dei servizi. |
 
-Configurazione via .env:
+---
 
-Snippet di codice
-DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/mcp_ecom
-SQLAlchemy: Integrazione completa (Engine, SessionLocal, Base). Creazione automatica delle tabelle inclusa.
+## 🧠 Approccio al Codice & Qualità
 
-File: app/db/database.py
+Il progetto segue standard elevati di qualità del software:
+- **Centralizzazione Config**: TTL della cache e pesi del reranker gestiti in moduli dedicati (`app/config/`).
+- **Resilienza**: Fallback automatici e gestione robusta delle eccezioni (es. fallback su database locale se Qdrant è offline).
+- **Performance**: Ottimizzazioni sui lookup spaCy e caching intelligente delle query eBay.
 
-🧠 Architettura Corrente
-Snippet di codice
-graph TD
-    User(User) -->|Text Query| API(FastAPI)
-    API -->|Raw Text| NLP(Parser NLP - spaCy)
-    NLP -->|Structured Data| API
-    API -->|Future| EBAY(eBay Service)
-    API -->|Save Data| DB[(PostgreSQL)]
-🔜 Roadmap Tecnica (Prossimi Step)
-🔵 Fase 1 — Modello Listing
-Creare modello SQLAlchemy Listing.
+---
 
-Creazione automatica della tabella.
+## 🔜 Sviluppi Futuri
+- [ ] Integrazione completa con frontend React (Shopping Dashboard).
+- [ ] Supporto multi-marketplace (Amazon, Subito.it).
+- [ ] Notifiche push per variazioni prezzo su prodotti salvati.
 
-Endpoint di test per inserimento dati reali.
-
-🔵 Fase 2 — Integrazione eBay API
-Registrazione eBay Developer & App ID.
-
-Creazione services/ebay.py.
-
-Endpoint /search con salvataggio su DB.
-
-🔵 Fase 3 — Price History
-Tabella price_history.
-
-Tracking variazioni prezzo e trigger notifiche sotto soglia.
-
-🔵 Fase 4 — Retrieval Semantico
-Integrazione sentence-transformers.
-
-Generazione embeddings per listing e hybrid search (FAISS).
-
-🔵 Fase 5 — Trust Scoring
-Analisi rating venditore e pattern linguistici sospetti.
-
-Generazione score combinato con spiegazione.
-
-🔵 Fase 6 — Agent Orchestrator (MCP)
-Implementazione Tool layer e Memory layer.
-
-Ragionamento multi-step ed Explainability.
-
-📦 Stack Tecnologico
-Core: FastAPI, SQLAlchemy, PostgreSQL, psycopg3.
-
-NLP: spaCy (it_core_news_sm).
-
-In arrivo: sentence-transformers, FAISS, eBay API, React (frontend), Celery.
-
-
-Ti serve una mano per scrivere il codice del modello **SQLAlchemy Listing** per la Fase 1?
+---
+*Creato con ❤️ per semplificare lo shopping online.*

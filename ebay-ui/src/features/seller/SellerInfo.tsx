@@ -1,37 +1,50 @@
-import { Box, Rating, Typography } from "@mui/material"
+import { Box, Typography } from "@mui/material"
 
 interface Props {
   seller_name?: string
   seller_rating?: number
 }
 
-function normalizeRating(sellerRating?: number) {
-  if (typeof sellerRating !== "number") {
-    return null
-  }
-
-  const value = Math.max(0, Math.min(5, sellerRating / 20))
-  return value
-}
-
 export default function SellerInfo({ seller_name, seller_rating }: Props) {
-  const ratingStars = normalizeRating(seller_rating)
+  if (!seller_name) return null
+
+  // eBay seller_rating is 0–100 (percentage of positive feedback)
+  const hasRating = typeof seller_rating === "number"
+  const pct = hasRating ? Math.round(seller_rating) : null
+  const good = pct !== null && pct >= 99
+  const mid  = pct !== null && pct >= 95
 
   return (
-    <Box display="flex" alignItems="center" gap={1} mb={1} flexWrap="wrap">
-      <Typography sx={{ color: "#666", fontSize: 14 }}>Venditore:</Typography>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+      <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>Venditore:</Typography>
 
-      <Typography sx={{ fontWeight: 600, fontSize: 14, color: "#202123" }}>
-        {seller_name || "N/A"}
+      <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#374151" }}>
+        {seller_name}
       </Typography>
 
-      {ratingStars !== null && (
-        <>
-          <Rating value={ratingStars} precision={0.1} size="small" readOnly />
-          <Typography variant="caption" sx={{ color: "#666" }}>
-            ({seller_rating?.toFixed?.(1) ?? seller_rating}%)
+      {pct !== null && (
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            px: 0.75,
+            py: 0.15,
+            borderRadius: "6px",
+            bgcolor: good ? "#f0fdf4" : mid ? "#fefce8" : "#f9fafb",
+            border: "1px solid",
+            borderColor: good ? "#bbf7d0" : mid ? "#fef08a" : "#e5e7eb"
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: good ? "#15803d" : mid ? "#854d0e" : "#6b7280"
+            }}
+          >
+            {pct}%
           </Typography>
-        </>
+        </Box>
       )}
     </Box>
   )

@@ -18,6 +18,11 @@ interface ApiResponse {
 
 interface Props {
   seller?: string
+  sellerName?: string
+  trustScore?: number
+  sentimentScore?: number
+  count?: number
+  feedbacks?: Feedback[]
 }
 
 async function fetchSellerFeedback(seller: string): Promise<ApiResponse> {
@@ -39,20 +44,34 @@ async function fetchSellerFeedback(seller: string): Promise<ApiResponse> {
   throw lastError ?? new Error("Unable to load seller feedback")
 }
 
-export default function SellerFeedbackPanel({ seller }: Props) {
-  const [open, setOpen]               = useState(false)
+export default function SellerSummaryCard(props: Props) {
+  const { seller: sellerProp, sellerName, trustScore: trustProp, sentimentScore: sentimentProp, feedbacks: feedbacksProp } = props
+  const seller = sellerProp || sellerName
+
+  const [open, setOpen]               = useState(!!feedbacksProp?.length)
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
-  const [feedbacks, setFeedbacks]     = useState<Feedback[]>([])
-  const [trustScore, setTrustScore]   = useState<number | null>(null)
-  const [sentiment, setSentiment]     = useState<number | null>(null)
+  const [feedbacks, setFeedbacks]     = useState<Feedback[]>(feedbacksProp || [])
+  const [trustScore, setTrustScore]   = useState<number | null>(trustProp ?? null)
+  const [sentiment, setSentiment]     = useState<number | null>(sentimentProp ?? null)
 
   useEffect(() => {
-    setOpen(false)
-    setFeedbacks([])
-    setTrustScore(null)
-    setSentiment(null)
-    setError(null)
+    if (feedbacksProp) {
+        setFeedbacks(feedbacksProp)
+        setOpen(feedbacksProp.length > 0)
+    }
+    if (trustProp !== undefined) setTrustScore(trustProp)
+    if (sentimentProp !== undefined) setSentiment(sentimentProp)
+  }, [feedbacksProp, trustProp, sentimentProp])
+
+  useEffect(() => {
+    if (!feedbacksProp) {
+        setOpen(false)
+        setFeedbacks([])
+        setTrustScore(trustProp??null)
+        setSentiment(sentimentProp??null)
+        setError(null)
+    }
   }, [seller])
 
   const positive = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) >= 4), [feedbacks])

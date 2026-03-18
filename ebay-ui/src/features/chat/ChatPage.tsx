@@ -3,7 +3,7 @@ import { Box, Collapse, Paper } from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 
 import { useChatSession } from "../../hooks/useChatSession.ts"
-import AIThinkingPipeline from "../agent/components/AIThinkingPipeline.tsx"
+import { AIThinkingPipeline } from "../agent/components/AIThinkingPipeline.tsx"
 import ChatLayout from "./ChatLayout.tsx"
 import ChatInput from "./ChatInput.tsx"
 import MessageBubble from "./MessageBubble.tsx"
@@ -103,9 +103,31 @@ export default function ChatPage() {
   } = useChatSession()
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const isAtBottomRef = useRef(true)
+
+  // Aggiorna se siamo vicini al fondo durante lo scroll dell'utente
+  useEffect(() => {
+    const container = document.getElementById("chat-scroll-container")
+    if (!container) return
+
+    const handleScroll = () => {
+      const threshold = 100 // pixel di tolleranza
+      const isAtBottom = 
+        container.scrollHeight - container.scrollTop <= container.clientHeight + threshold
+      
+      isAtBottomRef.current = isAtBottom
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    return () => container.removeEventListener("scroll", handleScroll)
+  }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+    // Se non siamo al fondo e siamo in fase di caricamento, non forzare lo scroll (Sticky logic)
+    if (running && !isAtBottomRef.current) return
+
+    const behavior = running ? "auto" : "smooth"
+    bottomRef.current?.scrollIntoView({ behavior, block: "end" })
   }, [chat, steps, running, loadingQuery, finalPayload?.finalAnswer])
 
   useEffect(() => {

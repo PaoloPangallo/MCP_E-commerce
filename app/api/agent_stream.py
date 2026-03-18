@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.agent.ebay_agent import EbayReactAgent
 from app.agent.schemas import AgentRequest
@@ -269,19 +270,15 @@ async def agent_event_generator(
                 logger.warning("Failed closing DB session in agent stream")
 
 
-@router.get("/agent/stream")
-async def agent_stream(
-    request: Request,
-    query: str = Query(..., min_length=1),
-    llm_engine: str = Query("gemini"),
-    user=Depends(get_optional_user),
-):
-    clean_query = _sanitize_query(query)
+from pydantic import BaseModel
 
-    if not clean_query:
-        raise HTTPException(status_code=400, detail="Query non valida o vuota.")
+class StreamRequest(BaseModel):
+    query: str
+    llm_engine: str = "gemini"
 
-    if _looks_like_event_stream_payload(query):
+async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: str, user: Any):
+
+    if _looks_like_event_stream_payload(clean_query):
         raise HTTPException(
             status_code=400,
             detail="La query sembra un payload SSE/event stream, non un testo utente.",
@@ -310,3 +307,29 @@ async def agent_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+@router.post("/stream")
+async def agent_stream_post(
+    body: StreamRequest,
+    request: Request,
+    user=Depends(get_optional_user)
+):
+    clean_query = _sanitize_query(body.query)
+    if not clean_query:
+        raise HTTPException(status_code=400, detail="Query non valida o vuota.")
+    
+    return await _handle_agent_stream(request, clean_query, body.llm_engine, user)
+
+@router.get("/stream")
+async def agent_stream(
+    request: Request,
+    query: str = Query(..., min_length=1),
+    llm_engine: str = Query("gemini"),
+    user=Depends(get_optional_user),
+):
+    clean_query = _sanitize_query(query)
+
+    if not clean_query:
+        raise HTTPException(status_code=400, detail="Query non valida o vuota.")
+
+    return await _handle_agent_stream(request, clean_query, llm_engine, user)

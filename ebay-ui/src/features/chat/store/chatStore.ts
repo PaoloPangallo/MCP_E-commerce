@@ -8,7 +8,7 @@ import type {
   SearchBlock
 } from "../../../types/searchTypes.ts"
 import {getToken} from "../../../auth/authStore.ts";
-import { clearAgentMemory } from "../../search/api/searchApi.ts"
+import { API_BASE } from "../../../api/apiClient.ts"
 
 export type ChatSession = {
   id: string
@@ -105,7 +105,11 @@ export const useChatStore = create<ChatStore>()(
 
       clearMemory: async () => {
         try {
-          await clearAgentMemory()
+          const token = getToken()
+          await fetch(`${API_BASE}/agent/memory`, {
+            method: "DELETE",
+            headers: token ? { "Authorization": `Bearer ${token}` } : {}
+          })
         } catch (e) {
           console.error("Failed to clear memory on server", e)
         }

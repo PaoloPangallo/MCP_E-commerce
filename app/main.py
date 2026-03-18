@@ -85,10 +85,10 @@ app.add_middleware(
 logger.info("Mounting MCP Server at /mcp")
 app.mount("/mcp", mcp_app)
 
+app.include_router(agent_stream_router, prefix="/agent", tags=["Agent Stream"])
 app.include_router(search_router)
 app.include_router(seller_router)
 app.include_router(auth_router)
-app.include_router(agent_stream_router)
 
 
 @app.get("/health")

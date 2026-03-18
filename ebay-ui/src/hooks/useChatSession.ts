@@ -33,76 +33,80 @@ export function useChatSession() {
 
   const chat = activeSession?.chat || []
 
+  // Extract all needed actions from store to avoid getState() calls
   const resetConversation = useChatStore((state) => state.resetConversation)
   const setLoadingQuery = useChatStore((state) => state.setLoadingQuery)
   const appendMessage = useChatStore((state) => state.appendMessage)
-  const appendAssistantMessage = useChatStore(
-    (state) => state.appendAssistantMessage
-  )
+  const appendAssistantMessage = useChatStore((state) => state.appendAssistantMessage)
   const appendSearchBlock = useChatStore((state) => state.appendSearchBlock)
   const switchSession = useChatStore((state) => state.switchSession)
+  const setCachedSearch = useChatStore((state) => state.setCachedSearch)
 
   const { steps, running, finalPayload, plannedTasks, run, reset } = useAgentStream({
-    onDone: (payload, query) => {
-      const cacheKey = query.toLowerCase()
-
-      const sellerSummary = payload.sellerSummary || null
-      const results = payload.results || []
-      const hasComparison = !!payload.comparison
-
-      const mode = detectMode(results.length, !!sellerSummary?.seller_name, hasComparison)
-
-      const newSearch: SearchBlock = {
-        query,
-        results,
-        analysis: payload.analysis,
-        metrics: payload.metrics,
-        rag_context: payload.ragContext,
-        timings: undefined,
-        agent_trace: payload.trace?.length ? payload.trace : [], // Fixed to use the reliable payload trace directly
-        seller_summary: sellerSummary,
-        comparison: payload.comparison || null,
-        item_details: payload.itemDetails || null,
-        shipping_costs: payload.shippingCosts || null,
-        metadata: payload.metadata || null,
-        final_answer:
-          payload.finalAnswer ||
-          "Ho completato l’analisi della richiesta.",
-        mode,
-        errors: payload.errors
-      }
-
-      const hasStructuredBlock =
-        results.length > 0 ||
-        !!sellerSummary?.seller_name ||
-        !!newSearch.analysis ||
-        !!newSearch.agent_trace?.length ||
-        !!newSearch.errors?.length ||
-        !!newSearch.comparison ||
-        !!newSearch.item_details ||
-        !!newSearch.shipping_costs ||
-        !!payload.plannedTasks?.length ||
-        (!!payload.toolStates && Object.keys(payload.toolStates).length > 0)
-
-      useChatStore.getState().setCachedSearch(cacheKey, newSearch)
-
-      // ONLY append the final message if it's useful, otherwise just append search block
-      if (hasStructuredBlock) {
-        useChatStore.getState().appendSearchBlock(newSearch)
-        // If we want a separate assistant message above the search, we can append it too, 
-        // but now it will be synthesized text not duplicated with analysis.
-        if (newSearch.final_answer && newSearch.final_answer !== "Ho completato l’analisi della richiesta.") {
-            useChatStore.getState().appendAssistantMessage(newSearch.final_answer)
-        }
-      } else {
-        useChatStore.getState().appendAssistantMessage(
-          newSearch.final_answer ?? "Ho completato l’analisi della richiesta."
-        )
-      }
-
-      useChatStore.getState().setLoadingQuery(null)
-    }
+    sessionId: activeSessionId
   })
+
+  // Watch for payload completion
+  useEffect(() => {
+    if (!finalPayload || running || !loadingQuery) return
+
+    const cacheKey = loadingQuery.toLowerCase()
+    
+    // Safety check against processing the same payload multiple times
+    if (chat.some(entry => entry.type === "search" && entry.search?.query === loadingQuery && entry.search?.analysis === finalPayload.analysis)) {
+       return 
+    }
+
+    const sellerSummary = finalPayload.sellerSummary || null
+    const results = finalPayload.results || []
+    const hasComparison = !!finalPayload.comparison
+
+    const mode = detectMode(results.length, !!sellerSummary?.seller_name, hasComparison)
+
+    const newSearch: SearchBlock = {
+      query: loadingQuery,
+      results,
+      analysis: finalPayload.analysis,
+      metrics: finalPayload.metrics,
+      rag_context: finalPayload.ragContext,
+      timings: undefined,
+      agent_trace: finalPayload.trace?.length ? finalPayload.trace : [],
+      seller_summary: sellerSummary,
+      comparison: finalPayload.comparison || null,
+      item_details: finalPayload.itemDetails || null,
+      shipping_costs: finalPayload.shippingCosts || null,
+      metadata: finalPayload.metadata || null,
+      final_answer: finalPayload.finalAnswer || "Ho completato l’analisi della richiesta.",
+      mode,
+      errors: finalPayload.errors
+    }
+
+    const hasStructuredBlock =
+      results.length > 0 ||
+      !!sellerSummary?.seller_name ||
+      !!newSearch.analysis ||
+      !!newSearch.agent_trace?.length ||
+      !!newSearch.errors?.length ||
+      !!newSearch.comparison ||
+      !!newSearch.item_details ||
+      !!newSearch.shipping_costs ||
+      !!finalPayload.plannedTasks?.length ||
+      (!!finalPayload.toolStates && Object.keys(finalPayload.toolStates).length > 0)
+
+    setCachedSearch(cacheKey, newSearch)
+
+    if (hasStructuredBlock) {
+      appendSearchBlock(newSearch)
+      if (newSearch.final_answer && newSearch.final_answer !== "Ho completato l’analisi della richiesta.") {
+        appendAssistantMessage(newSearch.final_answer)
+      }
+    } else {
+      appendAssistantMessage(newSearch.final_answer ?? "Ho completato l’analisi della richiesta.")
+    }
+
+    setLoadingQuery(null)
+
+  }, [finalPayload, running])
 
   // Ensure an active session is set on mount if missing
   useEffect(() => {

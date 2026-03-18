@@ -177,12 +177,7 @@ class EbayReactAgent:
                             step=step_index,
                             message="Sto preparando la risposta.",
                         ).model_dump()
-                        
-                        full_text = ""
-                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                            full_text += chunk
-                            yield AnswerChunkEvent(chunk=chunk).model_dump()
-                        final_answer = full_text
+                        # The actual streaming will happen at the end of the loop
                     break
 
                 planned_actions = decision.planned_actions()
@@ -219,7 +214,6 @@ class EbayReactAgent:
                         final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                     break
 
-                has_terminal = False
                 for action, observation in zip(planned_actions, observations):
                     memory.apply_observation(observation)
                     executed_actions += 1
@@ -273,30 +267,11 @@ class EbayReactAgent:
                             step=step_index,
                             message="Sto terminando l'analisi...",
                         ).model_dump()
-                        
-                        full_text = ""
-                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                            full_text += chunk
-                            yield AnswerChunkEvent(chunk=chunk).model_dump()
-                        final_answer = full_text
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
+                        break # Break from inner loop, then outer loop will break too
 
-                        self._persist_outcome_safely(memory, final_answer)
-
-                        yield FinalEvent(
-                            final_answer=final_answer,
-                            agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
-                            final_data=memory.final_data(),
-                            steps_used=executed_actions,
-                        ).model_dump()
-                        return
-
-                    if not observation.ok:
-                        logger.warning(
-                            "Tool execution failed | step=%s | tool=%s | error=%s",
-                            step_index,
-                            action.tool,
-                            observation.error,
-                        )
+                if final_answer: # If final_answer was set due to observation.terminal
+                    break # Break from outer loop
 
                 if any(not obs.ok for obs in observations):
                     failed_tools = [obs.tool for obs in observations if not obs.ok]
@@ -311,32 +286,32 @@ class EbayReactAgent:
                         should_abort = step_index >= max_steps
 
                     if should_abort:
-                        full_text = ""
-                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                            full_text += chunk
-                            yield AnswerChunkEvent(chunk=chunk).model_dump()
-                        final_answer = full_text
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                         break
 
                     continue
 
                 try:
                     if planner.can_stop_early(memory):
-                        full_text = ""
-                        async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                            full_text += chunk
-                            yield AnswerChunkEvent(chunk=chunk).model_dump()
-                        final_answer = full_text
+                        final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                         break
                 except Exception as exc:
                     logger.warning("Planner early-stop check failed: %s", exc)
 
+            # --- FINALIZZAZIONE STREAMING ---
+            # Se siamo arrivati qui, il loop è finito (o per break o per esaurimento step)
             if not final_answer:
                 full_text = ""
                 async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
                     full_text += chunk
                     yield AnswerChunkEvent(chunk=chunk).model_dump()
                 final_answer = full_text
+            else:
+                # If final_answer was already set (e.g., by decision.final_answer or _finalize calls inside the loop),
+                # we still need to stream it out as AnswerChunkEvents.
+                # This ensures consistency in how the final answer is delivered.
+                async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
+                    yield AnswerChunkEvent(chunk=chunk).model_dump()
 
 
             await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)

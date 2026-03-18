@@ -59,7 +59,15 @@ function getActionIcon(action?: string) {
   }
 }
 
-function StepRow({ step, isLast, loading }: { step: AgentStep; isLast: boolean; loading: boolean }) {
+function StepRow({
+  step,
+  isLast,
+  loading
+}: {
+  step: AgentStep
+  isLast: boolean
+  loading: boolean
+}) {
   const isRunning = (step.status === "thinking" || step.status === "running") && loading
   const isError   = step.status === "error"
   return (
@@ -126,7 +134,7 @@ function StepRow({ step, isLast, loading }: { step: AgentStep; isLast: boolean; 
   )
 }
 
-export default function AIThinkingPipeline({
+export function AIThinkingPipeline({
   agentTrace = [],
   loading = false,
   plannedTasks = []
