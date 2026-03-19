@@ -247,22 +247,12 @@ def _apply_final_ranking(
     user: Optional[object] = None,
 ) -> None:
     for item in items:
-        relevance = float(item.get("_rerank_score", 0) or 0)
+        # Use the highly calibrated _final_score from the RAG reranker and Cross-Encoder
+        base_relevance = float(item.get("_final_score", item.get("_rerank_score", 0)) or 0)
         trust = float(item.get("trust_score") or 0)
         price = item.get("price") or 0
 
-        price_score = 0.0
-        try:
-            if price:
-                price_score = max(0.0, 1.0 - float(price) / 1000.0)
-        except Exception:
-            price_score = 0.0
-
-        ranking_score = (
-            0.55 * relevance
-            + 0.25 * trust
-            + 0.10 * price_score
-        )
+        ranking_score = base_relevance
 
         explanations = []
 
@@ -302,6 +292,9 @@ def _apply_final_ranking(
         item["ranking_score"] = round(ranking_score, 3)
         if explanations:
             item["explanations"] = explanations
+
+    # Sort one final time to respect user preferences (like brand match bonuses) injected above
+    items.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
 
 
 async def run_search_pipeline(

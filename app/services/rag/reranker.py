@@ -339,8 +339,13 @@ def rerank_products(
         if not isinstance(price, (int, float)):
             price = avg_price
 
-        price_z = abs(float(price) - avg_price) / std_price if std_price else 0.0
-        price_penalty = min(price_z / 5.0, 0.2)
+        price_z = (float(price) - avg_price) / std_price if std_price else 0.0
+        
+        price_penalty = 0.0
+        if price_z < -1.5:
+            price_penalty = 0.40  # Massive penalty for suspiciously cheap items (likely accessories/boxes)
+        elif price_z > 2.0:
+            price_penalty = 0.15  # Small penalty for overly expensive items
 
         # ----------------------------------------
         # ACCESSORY PENALTY
@@ -471,18 +476,18 @@ def rerank_products(
     # CROSS-ENCODER ON TOP-K
     # --------------------------------------------------------
 
-    top_k = ranked[:5]
+    top_k = ranked[:10]
     top_k = cross_rerank(query, top_k)
 
-    # fuse cross score with previous score, not replace it
     for item in top_k:
         cross_score = float(item.get("_cross_score", 0.0))
         base_score = float(item.get("_rerank_score", 0.0))
 
-        # squash cross score into a bounded bonus
-        cross_bonus = max(min(cross_score / 20.0, 0.15), -0.05)
+        # Normalize cross-encoder logit into a probability (0-1) via sigmoid
+        prob_score = 1.0 / (1.0 + np.exp(-cross_score))
 
-        item["_final_score"] = round(base_score + cross_bonus, 4)
+        # Blend: give cross-encoder majority weight (70%) over the heuristical base (30%)
+        item["_final_score"] = round((0.70 * prob_score) + (0.30 * base_score), 4)
 
     top_k.sort(
         key=lambda x: x.get("_final_score", x.get("_rerank_score", 0)),

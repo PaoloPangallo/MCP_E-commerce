@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 def normalize_item_details_arguments(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
     item_id = _clean_text(action_input.get("item_id"))
+    
+    # Auto-extract from user query if missing
+    if not item_id and getattr(memory, "user_query", None):
+        import re
+        from app.agent.planner import EBAY_ID_RE
+        match = EBAY_ID_RE.search(memory.user_query)
+        if match:
+            item_id = match.group(0)
+
     if not item_id and getattr(memory, "search_payload", None):
         results = memory.search_payload.get("results")
         if results and len(results) > 0:

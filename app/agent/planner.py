@@ -43,14 +43,14 @@ SELLER_CUES = {
 }
 
 TRANSACTIONAL_CUES = {
-    "cerca", "cerco", "trova", "trovami", "mostra", "vorrei", "voglio", "mi serve",
+    "cerca", "cerco", "trova", "trovami", "cercami", "mostra", "mostrami", "ricerca", "vorrei", "voglio", "mi serve",
     "compra", "acquistare", "prezzo", "prezzi", "costo", "budget", "massimo",
     "minimo", "sotto", "meno", "entro", "offerta", "offerte",
 }
 
 COMPARISON_CUES = {
     "compara", "compari", "comparami", "confronta", "confrontami", "confronto", "differenza", "differenze",
-    "meglio", "peggio", "versus", "vs", "comparazione", "analizza",
+    "meglio", "peggio", "versus", "vs", "comparazione",
 }
 
 ATTRIBUTE_CUES = {
@@ -96,6 +96,8 @@ SIZE_RE = re.compile(
 ALT_SIZE_RE = re.compile(r"\b\d{1,3}\s*(?:o|oppure|/|-)\s*\d{1,3}\b", re.IGNORECASE)
 PRICE_BOUND_RE = re.compile(r"\b(?:max|massimo|minimo|budget|entro|sotto|meno di|al massimo)\b", re.IGNORECASE)
 TOKEN_RE = re.compile(r"[\wÀ-ÿ]+", re.UNICODE)
+EBAY_ID_RE = re.compile(r"\b(?:v1\|)?\d{12,13}(?:\|\d)?\b|\b\d{12,13}\b", re.IGNORECASE)
+
 
 
 @dataclass
@@ -264,7 +266,7 @@ class ReactPlanner:
             )
 
         # Usiamo l'approccio generico basato sull'ordine dei tool previsti per l'intento
-        for tool_name in self._ordered_tools_for_intent(intent):
+        for tool_name in self._ordered_tools_for_intent(intent, memory):
             # Se il tool è già stato eseguito e ha raggiunto uno stato terminale (es. ha prodotto risultati finali o eccezioni bloccanti)
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
@@ -311,7 +313,7 @@ class ReactPlanner:
                 intent=intent,
             )
 
-        for tool_name in self._ordered_tools_for_intent(intent):
+        for tool_name in self._ordered_tools_for_intent(intent, memory):
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
             if self._exceeds_tool_budget(memory, tool_name):
@@ -407,8 +409,8 @@ class ReactPlanner:
             if json_str:
                 data = json.loads(json_str)
                 
-                action = data.get("action")
-                action_input = data.get("action_input")
+                action = data.get("action") or data.get("tool")
+                action_input = data.get("action_input") or data.get("parameters")
                 
                 # Validate that the requested tool actually exists in the registry
                 if action and action != "finish" and action != "stop": # "final_answer" is not an action, "finish" or "stop" are
@@ -431,8 +433,8 @@ class ReactPlanner:
 
         thought = str(payload.get("thought") or "").strip()
         intent = str(payload.get("intent") or "").strip().lower()
-        action = str(payload.get("action") or "").strip().lower()
-        action_input = payload.get("action_input") or {}
+        action = str(payload.get("action") or payload.get("tool") or "").strip().lower()
+        action_input = payload.get("action_input") or payload.get("parameters") or {}
 
         if intent not in VALID_INTENTS:
             intent = self._infer_intent(memory)
@@ -489,7 +491,7 @@ class ReactPlanner:
                 intent="conversation",
             )
 
-        for tool_name in self._ordered_tools_for_intent(intent):
+        for tool_name in self._ordered_tools_for_intent(intent, memory):
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
             if self._exceeds_tool_budget(memory, tool_name):
@@ -560,7 +562,7 @@ class ReactPlanner:
         if intent == "conversation":
             return True
 
-        tools = self._ordered_tools_for_intent(intent)
+        tools = self._ordered_tools_for_intent(intent, memory)
         if not tools:
             return memory.has_any_terminal_state()
 
@@ -578,10 +580,15 @@ class ReactPlanner:
     def _compare_tool_name(self) -> Optional[str]:
         return find_first_tool_by_tags("compare", "product", match_all=True)
 
-    def _ordered_tools_for_intent(self, intent: str) -> list[str]:
+    def _ordered_tools_for_intent(self, intent: str, memory: Optional[AgentMemory] = None) -> list[str]:
         seller_tool = self._seller_tool_name()
         search_tool = self._search_tool_name()
         compare_tool = self._compare_tool_name()
+        
+        explicit_id = False
+        if memory and memory.user_query:
+            if EBAY_ID_RE.search(memory.user_query):
+                explicit_id = True
 
         if intent == "comparison":
             return [tool for tool in [compare_tool] if tool]
@@ -593,9 +600,13 @@ class ReactPlanner:
             return [tool for tool in [search_tool] if tool]
 
         if intent == "item_details":
+            if explicit_id:
+                return ["get_item_details"]
             return [tool for tool in [search_tool, "get_item_details"] if tool]
 
         if intent == "shipping":
+            if explicit_id:
+                return ["get_shipping_costs"]
             return [tool for tool in [search_tool, "get_shipping_costs"] if tool]
 
         if intent == "metadata":
@@ -744,6 +755,11 @@ class ReactPlanner:
             if len(MODEL_CODE_RE.findall(q)) >= 2:
                 ev.add("comparison", 0.45, "multiple_model_codes")
 
+        if EBAY_ID_RE.search(q):
+            ev.add("item_details", 0.95, "explicit_ebay_id")
+            # If there's an explicit ID, we usually don't want a generic product search
+            ev.product = max(0.0, ev.product - 0.5)
+
         if re.search(r"\b(?:con|senza)\b", q) and attribute_hits:
             ev.add("product", 0.12, "attribute_composition")
 
@@ -768,6 +784,10 @@ class ReactPlanner:
 
         if explicit_seller and has_product_constraints:
             ev.add("product", 0.18, "seller_plus_product_constraints")
+            
+        if seller_hits > 0 and (transactional_hits > 0 or has_product_constraints):
+            ev.add("product", 0.45, "hybrid_implication_product")
+            ev.add("seller", 0.45, "hybrid_implication_seller")
 
         return ev
 
