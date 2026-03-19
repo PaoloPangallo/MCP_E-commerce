@@ -93,10 +93,10 @@ class EbayReactAgent:
 
         return AgentResponse(
             user_query=request.query,
-            final_answer=final_payload.get("final_answer", "Analisi non disponibile."),
-            agent_trace=final_payload.get("agent_trace", []) if request.return_trace else [],
-            final_data=final_payload.get("final_data", {}),
-            steps_used=final_payload.get("steps_used", 0),
+            final_answer=final_payload.get("final_answer", "Analisi non disponibile.") if final_payload else "Analisi non disponibile.",
+            agent_trace=(final_payload.get("agent_trace", []) if final_payload else []) if request.return_trace else [],
+            final_data=final_payload.get("final_data", {}) if final_payload else {},
+            steps_used=final_payload.get("steps_used", 0) if final_payload else 0,
         )
 
     async def run_stream(self, request: AgentRequest) -> AsyncGenerator[Dict[str, Any], None]:
@@ -299,19 +299,20 @@ class EbayReactAgent:
                     logger.warning("Planner early-stop check failed: %s", exc)
 
             # --- FINALIZZAZIONE STREAMING ---
-            # Se siamo arrivati qui, il loop è finito (o per break o per esaurimento step)
             if not final_answer:
                 full_text = ""
                 async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                    full_text += chunk
-                    yield AnswerChunkEvent(chunk=chunk).model_dump()
-                final_answer = full_text
+                    if chunk:
+                        full_text += chunk
+                        yield AnswerChunkEvent(chunk=chunk).model_dump()
+                
+                final_answer = full_text or self._fallback_final_answer(memory)
             else:
-                # If final_answer was already set (e.g., by decision.final_answer or _finalize calls inside the loop),
-                # we still need to stream it out as AnswerChunkEvents.
-                # This ensures consistency in how the final answer is delivered.
+                # Se abbiamo già una risposta (es. tool conversation o early stop), assicuriamoci
+                # che venga comunque emessa come AnswerChunk per coerenza UI.
                 async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                    yield AnswerChunkEvent(chunk=chunk).model_dump()
+                    if chunk:
+                        yield AnswerChunkEvent(chunk=chunk).model_dump()
 
 
             await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)

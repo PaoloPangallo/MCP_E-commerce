@@ -13,7 +13,7 @@ import {fetchEventSource} from "@microsoft/fetch-event-source";
 export function streamAgent(
   query: string,
   onEvent: (event: AgentEvent) => void,
-  llmEngine = "gemini"
+  llmEngine = "ollama_cloud"
 ) {
   const token = getToken()
   const url = `${API_BASE}/agent/stream`
@@ -37,9 +37,11 @@ export function streamAgent(
       llm_engine: llmEngine
     }),
     signal: controller.signal,
+    openWhenHidden: true, // Keep connection alive even when tab is in background
     
     async onopen(response) {
       if (response.ok && response.headers.get("content-type")?.includes("text/event-stream")) {
+        console.log("SSE connection opened successfully")
         return // everything's good
       }
       
