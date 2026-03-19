@@ -76,6 +76,7 @@ export function useChatSession() {
       item_details: finalPayload.itemDetails || null,
       shipping_costs: finalPayload.shippingCosts || null,
       metadata: finalPayload.metadata || null,
+      market_trends: finalPayload.marketTrends || null,
       final_answer: finalPayload.finalAnswer || "Ho completato l’analisi della richiesta.",
       mode,
       errors: finalPayload.errors
@@ -90,6 +91,8 @@ export function useChatSession() {
       !!newSearch.comparison ||
       !!newSearch.item_details ||
       !!newSearch.shipping_costs ||
+      !!newSearch.vision_analysis ||
+      !!newSearch.market_trends ||
       !!finalPayload.plannedTasks?.length ||
       (!!finalPayload.toolStates && Object.keys(finalPayload.toolStates).length > 0)
 

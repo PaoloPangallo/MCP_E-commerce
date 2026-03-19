@@ -3,7 +3,7 @@ import json
 import time
 import sys
 
-URL = "http://localhost:8040/agent/stream"
+URL = "http://localhost:8050/agent/stream"
 
 QUERY = "iphone massimo 100 euro"
 

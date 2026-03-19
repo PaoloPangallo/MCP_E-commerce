@@ -114,14 +114,12 @@ export default function ChatInput({
           py: 1,
           borderRadius: "24px",
           bgcolor: "#ffffff",
-          border: "1px solid",
-          borderColor: "transparent",
-          outline: "1px solid #e5e7eb",
-          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.06)",
-          transition: "outline-color 0.15s ease, box-shadow 0.15s ease",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
+          transition: "all 0.2s ease",
           "&:focus-within": {
-            outlineColor: "#d1d5db",
-            boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)"
+            borderColor: "#111827",
+            boxShadow: "0 8px 30px rgba(0, 0, 0, 0.08)"
           }
         }}
       >

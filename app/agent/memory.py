@@ -368,6 +368,7 @@ class RequestState:
     metadata_payload: Optional[Dict[str, Any]] = None
     item_details_payload: Optional[Dict[str, Any]] = None
     shipping_costs_payload: Optional[Dict[str, Any]] = None
+    market_trends_payload: Optional[Dict[str, Any]] = None
     vision_description: Optional[str] = None
     final_answer: Optional[str] = None
 
@@ -475,6 +476,10 @@ class RequestState:
         if observation.tool == "get_shipping_costs" and observation.ok:
             if isinstance(observation.data, dict):
                 self.shipping_costs_payload = observation.data.get("data") or observation.data
+
+        if observation.tool == "market_trends" and observation.ok:
+            if isinstance(observation.data, dict):
+                self.market_trends_payload = observation.data
 
     def _apply_compare_payload(self, payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
@@ -643,6 +648,7 @@ class RequestState:
             "metadata": self.metadata_payload,
             "item_details": self.item_details_payload,
             "shipping_costs": self.shipping_costs_payload,
+            "market_trends": self.market_trends_payload,
             "top_result": compact_top,
             "last_seller_name": self.last_seller_name,
             "search_analysis": self.search_analysis,

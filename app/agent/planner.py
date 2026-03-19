@@ -21,7 +21,7 @@ from app.services.parser import call_gemini, call_ollama, extract_first_json_obj
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -77,6 +77,11 @@ METADATA_CUES = {
     "varianti", "variante", "metadata", "categorie", "categoria",
     "listino", "struttura", "marketplace", "ebay", "regolamento"
 }
+MARKET_CUES = {
+    "trend", "trends", "mercato", "analisi", "statistica", "andamento", "storico",
+    "serpapi", "google", "prezzo medio", "prezzi medi", "interesse", "popolarità", "popolarita",
+    "statistiche", "andamento prezzi", "prezzi online"
+}
 
 PERSONAL_PRONOUNS = {
     "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
@@ -112,9 +117,10 @@ class IntentEvidence:
     reasons: Dict[str, list[str]] = field(
         default_factory=lambda: {
             "product": [], "seller": [], "conversation": [], "comparison": [],
-            "shipping": [], "item_details": [], "metadata": []
+            "shipping": [], "item_details": [], "metadata": [], "market_trends": []
         }
     )
+    market: float = 0.0
 
     # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
     _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
@@ -127,6 +133,7 @@ class IntentEvidence:
         "shipping": "shipping",
         "item_details": "item_details",
         "metadata": "metadata",
+        "market_trends": "market",
     })
 
     def add(self, label: str, value: float, reason: str) -> None:
@@ -146,6 +153,7 @@ class IntentEvidence:
                 ("shipping", self.shipping),
                 ("item_details", self.item_details),
                 ("metadata", self.metadata),
+                ("market_trends", self.market),
             ],
             key=lambda x: x[1],
             reverse=True,
@@ -622,6 +630,9 @@ class ReactPlanner:
                     unique.append(tool)
             return unique
 
+        if intent == "market_trends":
+            return ["market_trends"]
+
         return []
 
     def _tool_state_is_terminal(self, memory: AgentMemory, tool_name: str) -> bool:
@@ -673,6 +684,8 @@ class ReactPlanner:
             return label, evidence.item_details, evidence
         if label == "metadata" and getattr(evidence, "metadata", 0.0) >= self.intent_threshold:
             return label, getattr(evidence, "metadata", 0.0), evidence
+        if label == "market_trends" and evidence.market >= self.intent_threshold:
+            return label, evidence.market, evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
         if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
@@ -720,6 +733,13 @@ class ReactPlanner:
         metadata_hits = len(token_set & METADATA_CUES)
         if metadata_hits:
             ev.add("metadata", min(0.40 + 0.20 * metadata_hits, 0.9), "metadata_lexicon")
+
+        market_hits = len(token_set & MARKET_CUES)
+        if market_hits:
+            # Punteggio molto alto per segnali di mercato
+            ev.add("market_trends", min(0.60 + 0.20 * market_hits, 0.95), "market_lexicon")
+            # Riduciamo l'implicazione di prodotto per evitare che search vinca per errore
+            ev.add("product", 0.1, "market_implies_product_low")
 
         attribute_hits = len(token_set & ATTRIBUTE_CUES)
         if attribute_hits:

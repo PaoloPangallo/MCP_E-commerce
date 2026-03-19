@@ -97,7 +97,11 @@ export default function ChatPage() {
             mx: "auto",
             px: { xs: 2, md: 0 },
             pt: { xs: 3, md: 4 },
-            pb: 4
+            pb: 4,
+            minHeight: showWelcome ? '70vh' : 'auto',
+            display: showWelcome ? 'flex' : 'block',
+            flexDirection: showWelcome ? 'column' : 'initial',
+            justifyContent: showWelcome ? 'center' : 'initial'
           }}
         >
           {showWelcome && <WelcomePanel />}

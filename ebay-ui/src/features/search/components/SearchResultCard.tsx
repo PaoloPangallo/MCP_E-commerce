@@ -220,7 +220,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             onClick={() =>
               window.dispatchEvent(
                 new CustomEvent("send-chat", {
-                  detail: `Analizza nel dettaglio il prodotto con ID ${item.ebay_id}`
+                  detail: `Dettagli per ${item.title} (ID: ${item.ebay_id})`
                 })
               )
             }
@@ -239,6 +239,32 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             }}
           >
             Dettagli prodotto
+          </Box>
+
+          <Box
+            component="button"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("send-chat", {
+                  detail: `Trend di mercato, statistiche e andamento prezzi medi online per: ${item.title}`
+                })
+              )
+            }
+            sx={{
+              background: "none",
+              border: "none",
+              p: 0,
+              fontSize: 12,
+              color: "#6b7280",
+              cursor: "pointer",
+              textDecoration: "underline",
+              textDecorationColor: "#e5e7eb",
+              textUnderlineOffset: "3px",
+              fontFamily: "inherit",
+              "&:hover": { color: "#374151" }
+            }}
+          >
+            Analisi di mercato
           </Box>
 
           {item.seller_name && (

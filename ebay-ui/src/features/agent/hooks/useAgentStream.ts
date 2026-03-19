@@ -275,6 +275,7 @@ export function useAgentStream(options?: {
           itemDetails: finalData.item_details || null,
           shippingCosts: finalData.shipping_costs || null,
           metadata: finalData.metadata || null,
+          marketTrends: finalData.market_trends || null,
           trace: finalTrace,
           errors: Array.isArray(finalData.errors) ? finalData.errors : [],
           plannedTasks: localPlannedTasks,

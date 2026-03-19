@@ -104,6 +104,25 @@ export interface SearchBlock {
     tags: string[]
     confidence: number
   } | null
+  market_trends?: {
+    status: string
+    query: string
+    shopping_data: {
+      status: string
+      min_price?: number
+      max_price?: number
+      average_price?: number
+      samples?: number
+      top_result?: any
+    }
+    trends_data: {
+      status: string
+      current_interest?: number
+      trend_direction?: string
+      interest_graph?: { date: string, value: number }[]
+    }
+    verdetto?: string
+  } | null
   aspect_distributions?: any[]
   mode?: AppMode
   errors?: string[]

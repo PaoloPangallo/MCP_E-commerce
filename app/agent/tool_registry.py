@@ -16,6 +16,7 @@ from app.tools import (
     execute_item_details_tool,
     execute_shipping_costs_tool,
     execute_metadata_tool,
+    execute_market_trends_tool,
 )
 from app.tools.search_tool import clean_search_query, normalize_search_arguments
 from app.tools.seller_tool import extract_explicit_seller, normalize_seller_arguments
@@ -46,6 +47,10 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
     "comparison": (
         r"\b(compara|compari|comparami|confronta|confrontami|confronto|versus|vs|differenza|differenze)\b",
         r"\b(?:meglio di|peggio di|quale\s+.*meglio|quale\s+.*peggio)\b",
+    ),
+    "market": (
+        r"\b(trend|mercato|trends|analisi|statistica|andamento|storico)\b",
+        r"\b(serpapi|google trends|prezzo medio|interesse)\b",
     ),
 }
 
@@ -172,6 +177,10 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
         re.search(pattern, lowered, re.IGNORECASE)
         for pattern in _QUERY_PATTERNS["comparison"]
     )
+    market_signal = any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["market"]
+    )
 
     cleaned_search_query = clean_search_query(text)
     has_budget_signal = bool(re.search(r"\b\d+[\.,]?\d*\s*(euro|eur|€)\b", lowered))
@@ -184,6 +193,7 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
         "seller_signal": seller_signal,
         "search_signal": search_signal,
         "comparison_signal": comparison_signal,
+        "market_signal": market_signal,
         "multi_signal": multi_signal,
         "has_budget_signal": has_budget_signal,
     }
@@ -237,6 +247,23 @@ def _normalize_conversation_action_input(action_input: Dict[str, Any], memory: A
         "context_info": context_str,
         "conversation_history": conversation_history,
     }
+
+
+def _normalize_youtube_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+    query = action_input.get("query")
+    if not query:
+        # Tenta di recuperare l'ultimo prodotto cercato o la query utente
+        query = getattr(memory, "user_query", "")
+    
+
+
+def _normalize_market_trends_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+    query = action_input.get("query")
+    if not query:
+        query = getattr(memory, "user_query", "")
+        
+    from app.tools.market_trends_tool import normalize_market_trends_arguments
+    return normalize_market_trends_arguments({"query": query})
 
 
 def _normalize_compare_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
@@ -320,6 +347,15 @@ def _normalize_compare_result(result: Dict[str, Any], action_input: Dict[str, An
     payload = dict(result or {})
     payload.setdefault("winner", {})
     payload.setdefault("comparison_matrix", [])
+    payload.setdefault("status", payload.get("status", "ok"))
+    return payload
+
+
+
+
+def _normalize_market_trends_result(result: Dict[str, Any], action_input: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(result or {})
+    payload.setdefault("query", action_input.get("query"))
     payload.setdefault("status", payload.get("status", "ok"))
     return payload
 
@@ -531,6 +567,19 @@ def _summarize_metadata(payload: Dict[str, Any]) -> str:
         return f"Errore nel recupero metadata: {payload.get('error', 'sconosciuto')}"
     policy_type = payload.get("policy_type", "metadata")
     return f"Recuperati con successo i metadata eBay ({policy_type})."
+
+
+
+
+def _summarize_market_trends(payload: Dict[str, Any]) -> str:
+    shop = payload.get("shopping_data", {})
+    trends = payload.get("trends_data", {})
+    if shop.get("status") != "ok" and trends.get("status") != "ok":
+        return "Nessun dato di mercato disponibile."
+        
+    avg = shop.get("average_price")
+    direction = trends.get("trend_direction")
+    return f"Trend di mercato analizzati: prezzo medio online = {avg}€, interesse = {direction}."
 
 
 def _bootstrap_tools() -> None:
@@ -774,6 +823,39 @@ def _bootstrap_tools() -> None:
             status_resolver=_resolve_search_status,
             terminal_resolver=lambda _: True,
             summarizer=_summarize_metadata,
+        )
+    )
+
+    register_tool(
+        ToolSpec(
+            name="market_trends",
+            description="Analizza i trend di mercato (prezzi e interesse) per un prodotto tramite SerpApi (Shopping e Google Trends).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Nome del prodotto da analizzare"},
+                },
+                "required": ["query"],
+            },
+            executor=execute_market_trends_tool,
+            tags=("market", "trends", "price", "serpapi"),
+            examples=(
+                "quali sono i trend per iphone 15",
+                "analisi mercato playstation 5",
+            ),
+            required_fields=("query",),
+            state_key="market_trends",
+            max_retries=0,
+            cost=2,
+            latency_class="high",
+            dependencies=(),
+            produced_entities=("shopping_data", "trends_data"),
+            can_run_in_parallel=True,
+            use_cache=True,
+            input_normalizer=_normalize_market_trends_action_input,
+            result_normalizer=_normalize_market_trends_result,
+            terminal_resolver=lambda _: True,
+            summarizer=_summarize_market_trends,
         )
     )
 

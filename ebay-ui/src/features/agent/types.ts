@@ -83,4 +83,10 @@ export type FinalPayload = {
     tags: string[]
     confidence: number
   } | null
+  marketTrends?: {
+    status: string
+    query: string
+    shopping_data: any
+    trends_data: any
+  } | null
 }

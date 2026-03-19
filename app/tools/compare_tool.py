@@ -32,7 +32,7 @@ async def execute_compare_tool(action_input: Dict[str, Any], context: Any) -> Di
     if len(sep_queries) < 2:
         return {
             "status": "error",
-            "error": "Fornisci almeno 2 query separate da virgola per confrontare i prodotti.",
+            "error": "Per confrontare i prodotti, inserisci almeno due nomi separati da una virgola (es: 'iPhone 15, Samsung S24').",
         }
 
     logger.info("Executing compare_tool | queries=%s", sep_queries)

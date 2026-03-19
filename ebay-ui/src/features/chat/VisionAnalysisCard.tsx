@@ -11,8 +11,7 @@ interface VisionAnalysisCardProps {
 
 const VisionAnalysisCard: React.FC<VisionAnalysisCardProps> = ({
   description,
-  tags,
-  confidence = 1.0
+  tags
 }) => {
   return (
     <Fade in timeout={600}>

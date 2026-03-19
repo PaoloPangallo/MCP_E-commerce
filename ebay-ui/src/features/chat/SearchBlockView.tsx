@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { Box, Collapse, Paper, Typography } from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
-import type { SearchBlock } from "../../types/searchTypes.ts"
+import type { SearchBlock } from "../search/types.ts"
 import { ThinkingPill } from "../agent/components/ThinkingPill.tsx"
 import ItemDetailsCard from "./ItemDetailsCard.tsx"
 import ShippingCostsCard from "./ShippingCostsCard.tsx"
+import MarketTrendsCard from "./MarketTrendsCard.tsx"
 import SearchResultList from "../search/components/SearchResultList.tsx"
 import ComparisonDisplay from "../search/components/ComparisonDisplay.tsx"
 import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
@@ -148,6 +149,9 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
       {search.item_details && <ItemDetailsCard data={search.item_details} />}
 
       {search.shipping_costs && <ShippingCostsCard data={search.shipping_costs} />}
+
+      {search.market_trends && <MarketTrendsCard data={search.market_trends} />}
+
 
       {search.errors && search.errors.length > 0 && (
         <Paper
