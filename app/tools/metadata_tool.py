@@ -33,8 +33,21 @@ async def execute_metadata_tool(
             k for k in result if k not in ("error", "detail", "policy_type", "marketplace_id", "category_id")
         )
 
+        # AGGRESSIVE TRUNCATION AT SOURCE
+        # If no category_id is provided, eBay returns a huge list of policies.
+        # We truncate to 10 items and add a warning for the LLM.
+        message = ""
+        if not has_error:
+            for list_key in ("itemConditionPolicies", "returnPolicies", "listingStructurePolicies"):
+                if list_key in result and isinstance(result[list_key], list):
+                    total = len(result[list_key])
+                    if total > 10:
+                        result[list_key] = result[list_key][:10]
+                        message = f"Warning: data truncated (showing 10 of {total} items). Specifying a category_id is recommended for full results."
+
         return {
             "status": "error" if has_error else "ok",
+            "message": message,
             "policy_type": policy_type,
             "marketplace_id": result.get("marketplace_id", ""),
             "category_id": category_id,

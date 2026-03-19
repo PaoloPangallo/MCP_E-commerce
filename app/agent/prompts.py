@@ -77,6 +77,7 @@ REGOLE DI PIANIFICAZIONE:
 6. **Pensiero in Italiano**: Tutti i tuoi ragionamenti nel campo `thought` devono essere in ITALIANO.
 7. **JSON Rigido**: Rispondi SOLO con un JSON valido che segua lo schema richiesto.
 8. **Confronto Efficiente (CRITICO)**: Se l'utente chiede un confronto tra prodotti che sono GIÀ stati cercati o sono presenti nei `top_results` del scratchpad, NON chiamare `search_products`. Usa direttamente `comparison` passando i nomi dei modelli specifici. Evita di ripetere ricerche se hai già i dati.
+9. **Analisi Vision (CRITICO)**: Se vedi una `vision_description` nel contesto, usala come fonte primaria per i dettagli dell'oggetto. Se la query utente è generica ma hai una descrizione dettagliata dall'immagine, dai priorità ai dettagli dell'immagine per la ricerca.
 
 POLICY STRUMENTI:
 - `search_products`: Discovery, shopping, prezzi.
@@ -138,7 +139,7 @@ STRUTTURA DELLA RISPOSTA (SEGUI QUESTO TEMPLATE):
 
 REGOLE DI FORMATTAZIONE E STILE (CRITICO):
 - **STILE SUPER-LOQUACE E UMANO**: Parla SEMPRE a ruota libera, come un simpatico, logorroico, ma espertissimo personal shopper in carne e ossa. Usa espressioni ricche, entusiaste e colloquiali (es. "Ho spulciato tutto il catalogo per te e non immagini cosa ho scovato!", "Mettiti comodo perché ho analizzato i dettagli e abbiamo delle opzioni pazzesche", ecc.).
-- **NASCONDI I DETTAGLI TECNICI**: NON dire MAI frasi robotiche come "Ho effettuato una ricerca", "Il motore ha restituito", "Il sistema mi dice", "I parametri della tua query". Fai finta di essere tu ad aver guardato le vetrine con i tuoi occhi.
+- **NASCONDI I DETTAGLI TECNICI**: NON dire MAI frasi robotiche come "Ho effettuato una ricerca", "Il motore ha restituito", "Il sistema mi dice", "I parametri della tua query". Fai finta di essere tu ad aver guardato le vetrine con i tuoi occhi. Tuttavia, se l'utente ha inviato una FOTO, è naturale e consigliato farvi riferimento (es. "Dalla foto che hai caricato...", "Ho dato un'occhiata all'immagine e...").
 - **DOPPIO INVIO**: Dopo ogni titolo (## Titolo) DEVI inserire DUE INVIO (riga vuota). Se non lasci la riga vuota, il sistema non leggerà correttamente la formattazione.
 - **NO ATTACCATO**: Non scrivere mai il testo subito dopo il titolo sulla stessa riga.
 - **MARGINE**: Lascia molto spazio tra le sezioni ## Analisi, ## Affidabilità e ## Verdetto.
@@ -279,10 +280,14 @@ def build_planner_prompt(
 
     scratchpad_str = _truncate_scratchpad(scratchpad, budget_chars)
 
+    vision_desc = scratchpad.get("vision_description") if isinstance(scratchpad, dict) else None
+    vision_context = f"Vision description: {vision_desc}\n" if vision_desc else ""
+
     return (
         f"{system_prompt}\n\n"
         f"Step:{step_index}/{max_steps}\n"
         f"Available tools:{tools_json}\n"
+        f"{vision_context}"
         f"User query:{user_query}\n"
         f"Scratchpad:{scratchpad_str}\n"
         f"Return JSON only."

@@ -55,6 +55,7 @@ OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "45"))
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
 OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com").rstrip("/")
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:235b-cloud")
 
 # If API KEY is present, we might want to use the cloud host
 if OLLAMA_API_KEY:
@@ -635,12 +636,12 @@ async def call_ollama_cloud(
     *,
     system_prompt: Optional[str] = None,
     stream: bool = False,
+    images: Optional[List[bytes]] = None,
+    model: Optional[str] = None,
 ) -> Any:
     """
     Chiama Ollama Cloud (ollama.com) via SDK Python ufficiale.
-    Richiede OLLAMA_API_KEY nel .env.
-    Se stream=True restituisce un AsyncGenerator[str, None].
-    Altrimenti restituisce Optional[str].
+    Supporta Multi-modalità (immagini).
     """
     if not OLLAMA_API_KEY:
         logger.warning("OLLAMA_API_KEY non impostata — Ollama Cloud non disponibile")
@@ -657,8 +658,13 @@ async def call_ollama_cloud(
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})
+    message = {"role": "user", "content": prompt}
+    if images:
+        message["images"] = images
 
+    messages.append(message)
+
+    selected_model = model or OLLAMA_CLOUD_MODEL
     client = AsyncClient(
         host=OLLAMA_CLOUD_HOST,
         headers={"Authorization": f"Bearer {OLLAMA_API_KEY}"},
@@ -667,7 +673,7 @@ async def call_ollama_cloud(
     if not stream:
         try:
             response = await client.chat(
-                model=OLLAMA_CLOUD_MODEL,
+                model=selected_model,
                 messages=messages,
                 options={"num_predict": 4096},
             )
@@ -680,7 +686,7 @@ async def call_ollama_cloud(
         async def _ollama_cloud_generator():
             try:
                 async for part in await client.chat(
-                    model=OLLAMA_CLOUD_MODEL,
+                    model=selected_model,
                     messages=messages,
                     stream=True,
                     options={"num_predict": 4096},
@@ -724,6 +730,34 @@ async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
             return out2, fallback
 
     return None, primary
+
+
+async def describe_image_with_vision(image_b64: str) -> Optional[str]:
+    """Interroga il modello Vision per ottenere una descrizione testuale dell'immagine."""
+    import base64
+    try:
+        # Pulisci header base64 se presente (es. data:image/png;base64,...)
+        if "," in image_b64:
+            image_b64 = image_b64.split(",")[1]
+        
+        image_bytes = base64.b64decode(image_b64)
+        
+        prompt = "Descrivi questo oggetto in modo estremamente dettagliato per una ricerca e-commerce. Indica marca, modello, colore, materiali e ogni dettaglio identificativo visibile. Rispondi solo con la descrizione."
+        
+        description = await call_ollama_cloud(
+            prompt,
+            model=OLLAMA_VISION_MODEL,
+            images=[image_bytes]
+        )
+        
+        if description:
+            logger.info("VISION: Image described as: %s", description[:100] + "...")
+            return description.strip()
+            
+    except Exception as e:
+        logger.error("VISION error: %s", e)
+    
+    return None
 
 
 def extract_first_json_object(text: str) -> Optional[str]:

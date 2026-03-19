@@ -107,8 +107,8 @@ export function useAgentStream(options?: {
     setRunning(false)
   }, [])
 
-  const run = useCallback((query: string) => {
-    if (!query.trim()) return
+  const run = useCallback((query: string, image?: string) => {
+    if (!query.trim() && !image) return
 
     reset()
     setRunning(true)
@@ -118,7 +118,7 @@ export function useAgentStream(options?: {
     let localPlannedTasks: PlannedTask[] = []
     let streamingAnswer: string = ""
 
-    const nextSource = streamAgent(query, (event: AgentEvent) => {
+    const nextSource = streamAgent(query, image, (event: AgentEvent) => {
       // Abort se il run è superato o la sessione è cambiata
       if (currentRunId !== runIdRef.current) return
       if (options?.sessionId && options.sessionId !== sessionIdRef.current) return
@@ -224,6 +224,21 @@ export function useAgentStream(options?: {
             ...prev,
             finalAnswer: streamingAnswer,
             trace: nextTrace
+          }
+        })
+        return
+      }
+
+      if (event.type === "vision_analysis") {
+        setFinalPayload((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            visionAnalysis: {
+              description: event.description ?? "",
+              tags: event.tags ?? [],
+              confidence: event.confidence ?? 1.0
+            }
           }
         })
         return

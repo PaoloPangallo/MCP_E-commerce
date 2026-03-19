@@ -8,6 +8,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from app.db.redis import redis_client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -54,6 +55,16 @@ async def _fetch_metadata(
     if category_id:
         params["filter"] = f"categoryId:{{{category_id}}}"
 
+    # CACHE CHECK
+    mkt_key = marketplace_id.lower()
+    cat_key = category_id if category_id else "global"
+    cache_key = f"ebay_metadata:{mkt_key}:{endpoint_suffix}:{cat_key}"
+    
+    cached = redis_client.get_json(cache_key)
+    if cached:
+        logger.info("METADATA CACHE HIT | %s", cache_key)
+        return cached
+
     try:
         response = await client.get(
             url, headers=headers, params=params, timeout=REQUEST_TIMEOUT
@@ -78,7 +89,15 @@ async def _fetch_metadata(
                 "detail": response.text[:300],
             }
 
-        return response.json()
+        data = response.json()
+        # Cache the successful result
+        if not category_id:
+            # For global marketplace metadata, we cache it
+            redis_client.set_json(cache_key, data, ttl_seconds=86400 * 7) # 1 week
+        else:
+            redis_client.set_json(cache_key, data, ttl_seconds=86400) # 1 day
+
+        return data
 
     except Exception as exc:
         logger.exception("METADATA API EXCEPTION | endpoint=%s", endpoint_suffix)

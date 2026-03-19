@@ -77,6 +77,7 @@ export function useChatSession() {
       shipping_costs: finalPayload.shippingCosts || null,
       metadata: finalPayload.metadata || null,
       final_answer: finalPayload.finalAnswer || "Ho completato l’analisi della richiesta.",
+      vision_analysis: finalPayload.visionAnalysis || null,
       mode,
       errors: finalPayload.errors
     }
@@ -90,6 +91,7 @@ export function useChatSession() {
       !!newSearch.comparison ||
       !!newSearch.item_details ||
       !!newSearch.shipping_costs ||
+      !!newSearch.vision_analysis ||
       !!finalPayload.plannedTasks?.length ||
       (!!finalPayload.toolStates && Object.keys(finalPayload.toolStates).length > 0)
 
@@ -125,15 +127,16 @@ export function useChatSession() {
     resetConversation()
   }
 
-  const handleSend = async (text: string) => {
-    if (!text.trim()) return
+  const handleSend = async (text: string, image?: string) => {
+    if (!text.trim() && !image) return
 
     const query = text.trim()
-    const cacheKey = query.toLowerCase()
+    const cacheKey = (query + (image ? "_img" : "")).toLowerCase()
 
     const userMessage: Message = {
       role: "user",
-      content: query
+      content: query || "Analizza questa immagine",
+      image: image // Assicurati che il tipo Message supporti image
     }
 
     appendMessage(userMessage)
@@ -148,8 +151,8 @@ export function useChatSession() {
       return
     }
 
-    setLoadingQuery(query)
-    run(query)
+    setLoadingQuery(query || "Analisi immagine")
+    run(query, image)
   }
 
   return {

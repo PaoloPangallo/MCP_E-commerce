@@ -4,6 +4,7 @@ import type { TimedEntity } from "./common"
 export interface Message extends TimedEntity {
   role: "user" | "assistant"
   content: string
+  image?: string
 }
 
 export type ChatEntry =

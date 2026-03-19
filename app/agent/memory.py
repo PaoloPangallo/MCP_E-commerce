@@ -140,6 +140,7 @@ class SessionMemory:
     recent_tool_results: List[Dict[str, Any]] = field(default_factory=list)
     # Storico turni conversazionali: [{"role": "user"|"assistant", "content": str}]
     conversation_history: List[Dict[str, str]] = field(default_factory=list)
+    vision_description: Optional[str] = None
 
     def add_query(self, query: str, limit: int = 10) -> None:
         query = sanitize_user_query_for_memory(query)
@@ -198,6 +199,7 @@ class SessionMemory:
             "recent_tool_results": list(self.recent_tool_results[:5]),
             # Ultimi 6 messaggi (3 turni) per il contesto al LLM
             "conversation_history": list(self.conversation_history[-6:]),
+            "vision_description": self.vision_description,
         }
 
 
@@ -265,6 +267,7 @@ class MemoryService:
                 recent_products=data.get("recent_products") or [],
                 recent_tool_results=data.get("recent_tool_results") or [],
                 conversation_history=data.get("conversation_history") or [],
+                vision_description=data.get("vision_description"),
             )
         return SessionMemory(user_key=user_key)
 
@@ -313,6 +316,7 @@ class MemoryService:
             user_query=str(user_query or "").strip(),
             session_memory=session_memory,
             long_term_memory=long_term_memory,
+            vision_description=session_memory.vision_description,
         )
 
     def persist_request_outcome(self, state: "RequestState", final_answer: str) -> None:
@@ -338,6 +342,7 @@ class MemoryService:
         for observation in state.observations[-5:]:
             state.session_memory.add_tool_result(observation.tool, observation.summary)
             
+        state.session_memory.vision_description = state.vision_description
         self.save_session_memory(state.session_memory)
         self.save_long_term_memory(state.long_term_memory)
 
@@ -363,6 +368,7 @@ class RequestState:
     metadata_payload: Optional[Dict[str, Any]] = None
     item_details_payload: Optional[Dict[str, Any]] = None
     shipping_costs_payload: Optional[Dict[str, Any]] = None
+    vision_description: Optional[str] = None
     final_answer: Optional[str] = None
 
     def load_tasks(self, tasks: List[Dict[str, Any]]) -> None:
@@ -429,7 +435,7 @@ class RequestState:
             if isinstance(obs_data, dict):
                 obs_data = deepcopy(obs_data)
                 # Se c'è una lista enorme di risultati, teniamo solo i primi 5 per la memoria/scratchpad
-                for list_key in ("results", "items", "itemSummaries", "feedbacks"):
+                for list_key in ("results", "items", "itemSummaries", "feedbacks", "itemConditionPolicies", "returnPolicies", "listingStructurePolicies"):
                     if list_key in obs_data and isinstance(obs_data[list_key], list):
                         obs_data[list_key] = obs_data[list_key][:5]
                 
@@ -622,6 +628,7 @@ class RequestState:
             "tool_states": self.tool_state_summaries(),
             "recent_observations": self.recent_observations(limit=4),
             "recent_errors": self.errors[-3:],
+            "vision_description": self.vision_description,
             "session_memory": self.session_snapshot(),
             "long_term_memory": self.long_term_snapshot(),
         }

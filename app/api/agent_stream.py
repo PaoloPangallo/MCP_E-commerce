@@ -45,6 +45,7 @@ _ALLOWED_EVENT_TYPES = {
     "heartbeat",
     "done",
     "answer_chunk",
+    "vision_analysis",
 }
 
 _SSE_PREFIX_RE = re.compile(r"^\s*data\s*:\s*\{", re.IGNORECASE)
@@ -164,11 +165,12 @@ async def agent_event_generator(
     query: str,
     llm_engine: str,
     user: Any,
+    image: Optional[str] = None,
 ):
     llm_engine = _normalize_llm_engine(llm_engine)
     query = _sanitize_query(query)
 
-    if not query:
+    if not query and not image:
         yield _sse(
             {
                 "type": "error",
@@ -200,6 +202,7 @@ async def agent_event_generator(
                 llm_engine=llm_engine,
                 max_steps=6,
                 return_trace=True,
+                image=image,
             )
 
             async with _stream_semaphore:
@@ -273,8 +276,9 @@ async def agent_event_generator(
 class StreamRequest(BaseModel):
     query: str
     llm_engine: str = "ollama_cloud"
+    image: Optional[str] = None
 
-async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: str, user: Any):
+async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: str, user: Any, image: Optional[str] = None):
 
     if _looks_like_event_stream_payload(clean_query):
         raise HTTPException(
@@ -297,7 +301,7 @@ async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: s
         logger.info("ANONYMOUS REQUEST (no GEMS).")
 
     return StreamingResponse(
-        agent_event_generator(request, clean_query, llm_engine, user),
+        agent_event_generator(request, clean_query, llm_engine, user, image),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -313,10 +317,10 @@ async def agent_stream_post(
     user=Depends(get_optional_user)
 ):
     clean_query = _sanitize_query(body.query)
-    if not clean_query:
-        raise HTTPException(status_code=400, detail="Query non valida o vuota.")
+    if not clean_query and not body.image:
+        raise HTTPException(status_code=400, detail="Query o immagine necessaria.")
     
-    return await _handle_agent_stream(request, clean_query, body.llm_engine, user)
+    return await _handle_agent_stream(request, clean_query, body.llm_engine, user, body.image)
 
 @router.get("/stream")
 async def agent_stream(

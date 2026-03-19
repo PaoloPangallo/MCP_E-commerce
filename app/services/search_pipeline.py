@@ -22,6 +22,7 @@ from app.services.rag.reranker import rerank_products
 from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
 from app.services.user_profiling import update_user_profile
+from app.services.ebay_metadata import get_return_policies
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +375,22 @@ async def run_search_pipeline(
     timings["parallel_io_s"] = round(time.time() - t, 3)
     items = _dedupe_items(items) if items else []
 
+    # ============================================================
+    # 2.5 PROACTIVE METADATA ENRICHMENT
+    # ============================================================
+    dominant_category = None
+    if items:
+        # Trova la categoria più frequente tra i risultati
+        cats = [it.get("categoryId") for it in items if it.get("categoryId")]
+        if cats:
+            dominant_category = max(set(cats), key=cats.count)
+            logger.info("PIPELINE: Detected dominant category %s", dominant_category)
+
+    # Inizia il fetch delle policy in background
+    meta_task = None
+    if dominant_category:
+        meta_task = asyncio.create_task(get_return_policies(category_id=dominant_category))
+
     # Separate RAG docs for reranker
     product_docs = [d for d in rag_docs if d.get("type") == "product"]
     seller_docs = [d for d in rag_docs if d.get("type") == "seller_feedback"]
@@ -440,7 +457,25 @@ async def run_search_pipeline(
         seller_name = item.get("seller_name")
         item["rag_feedback"] = [d for d in rag_docs if d.get("seller") == seller_name][:3] if seller_name else []
 
+    # Recupera i risultati del fetch meta se completato
+    meta_policies = None
+    if meta_task:
+        try:
+            meta_policies = await meta_task
+        except Exception:
+            pass
+
     rag_context_text = build_context(query, results_out, rag_docs)
+    
+    if meta_policies and "returnPolicies" in meta_policies:
+        # Aggiungi info sulle policy ai primi risultati
+        policy = meta_policies["returnPolicies"][0] if meta_policies["returnPolicies"] else {}
+        if policy:
+          accepted = "accettato" if policy.get("returnsAccepted") else "non accettato"
+          period = f"entro {policy.get('returnPeriod', {}).get('value')} {policy.get('returnPeriod', {}).get('unit')}" if policy.get("returnPeriod") else ""
+          extra_info = f"\n[INFO EBAY] In questa categoria ({dominant_category}), il reso è generalmente {accepted} {period}."
+          rag_context_text += extra_info
+          logger.info("PIPELINE: Enriched RAG context with return policies")
 
     # ============================================================
     # 8) EXPLAIN (if results exist)

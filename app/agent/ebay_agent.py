@@ -21,6 +21,7 @@ from app.agent.schemas import (
     ThinkingEvent,
     ToolResultEvent,
     ToolStartEvent,
+    VisionAnalysisEvent,
 )
 from app.agent.task_decomposer import decompose_query
 from app.agent.tool_registry import ToolContext, analyze_user_query
@@ -111,10 +112,43 @@ class EbayReactAgent:
             self.strict_mcp,
         )
 
+        # 1. Vision Pre-processing (IMMEDIATELY, to enrich query before planning)
+        vision_desc_temp = None
+        if getattr(request, "image", None):
+            from app.services.parser import describe_image_with_vision
+            yield ThinkingEvent(
+                step=0,
+                message="Sto analizzando la tua immagine con Qwen-VL...",
+            ).model_dump()
+            
+            description = await describe_image_with_vision(request.image)
+            if description:
+                # Arricchiamo la query originale con la descrizione dell'immagine
+                original_query = request.query.strip()
+                if not original_query:
+                    # Forza l'intento di ricerca se l'utente ha mandato solo l'immagine
+                    request.query = f"Trova prodotti simili a: {description}"
+                else:
+                    request.query = f"{original_query} ({description})".strip()
+                
+                vision_desc_temp = description
+                logger.info("AGENT: Query enriched with vision description: %s", request.query)
+                
+                # EMETTIAMO EVENTO VISIONE PER LA CARD DEDICATA
+                yield VisionAnalysisEvent(
+                    description=description,
+                    tags=[]  # Si potrebbe raffinare per estrarre tag
+                ).model_dump()
+            else:
+                logger.warning("AGENT: Vision analysis failed")
+
+        # 2. Initialization
         memory = self.memory_service.hydrate_request_state(
             user_query=request.query,
             user=self.user,
         )
+        if vision_desc_temp:
+            memory.vision_description = vision_desc_temp
 
         try:
             tasks = decompose_query(request.query, request.llm_engine)

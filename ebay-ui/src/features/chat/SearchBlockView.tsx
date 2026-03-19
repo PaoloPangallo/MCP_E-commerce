@@ -8,6 +8,8 @@ import ShippingCostsCard from "./ShippingCostsCard.tsx"
 import SearchResultList from "../search/components/SearchResultList.tsx"
 import ComparisonDisplay from "../search/components/ComparisonDisplay.tsx"
 import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
+import MetadataCard from "./MetadataCard.tsx"
+import VisionAnalysisCard from "./VisionAnalysisCard.tsx"
 
 function CollapsibleSection({
   label,
@@ -103,6 +105,13 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
         <ThinkingPill steps={agentTrace} loading={false} query={search.query} />
       )}
 
+      {search.vision_analysis && (
+        <VisionAnalysisCard
+          description={search.vision_analysis.description}
+          tags={search.vision_analysis.tags}
+        />
+      )}
+
       {search.mode !== "seller" && hasResults && (
         <CollapsibleSection
           label="Annunci trovati"
@@ -117,18 +126,9 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
       )}
 
       {hasMetadata && (
-        <CollapsibleSection label="Metadata marketplace">
-          <Box sx={{ p: 2, maxHeight: 320, overflowY: "auto" }}>
-            <Typography
-              sx={{
-                fontSize: 12,
-                color: "#374151",
-                whiteSpace: "pre-wrap",
-                fontFamily: "monospace"
-              }}
-            >
-              {JSON.stringify(search.metadata.results, null, 2)}
-            </Typography>
+        <CollapsibleSection label="Metadata marketplace" defaultOpen={true}>
+          <Box sx={{ p: 1.5 }}>
+            <MetadataCard data={search.metadata} />
           </Box>
         </CollapsibleSection>
       )}

@@ -9,6 +9,7 @@ import MessageBubble from "./MessageBubble.tsx"
 import SearchBlockView from "./SearchBlockView.tsx"
 import WelcomePanel from "./WelcomePanel.tsx"
 import ErrorBoundary from "./ErrorBoundary.tsx"
+import VisionAnalysisCard from "./VisionAnalysisCard.tsx"
 import type { AgentStep, PlannedTask } from "../agent/types"
 
 
@@ -103,7 +104,11 @@ export default function ChatPage() {
 
           {chat.map((entry, index) =>
             entry.type === "message" ? (
-              <MessageBubble key={`msg-${index}`} role={entry.msg.role}>
+              <MessageBubble 
+                key={`msg-${index}`} 
+                role={entry.msg.role}
+                image={entry.msg.image}
+              >
                 {entry.msg.content}
               </MessageBubble>
             ) : (
@@ -115,6 +120,12 @@ export default function ChatPage() {
 
           {running && (
             <Box sx={{ ml: { md: "44px" } }}>
+              {finalPayload?.visionAnalysis && (
+                <VisionAnalysisCard
+                  description={finalPayload.visionAnalysis.description}
+                  tags={finalPayload.visionAnalysis.tags}
+                />
+              )}
               <ThinkingPill
                 steps={typedSteps}
                 loading={!finalPayload?.finalAnswer}

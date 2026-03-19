@@ -32,6 +32,7 @@ export interface AgentEvent {
   | "heartbeat"
   | "done"
   | "answer_chunk"
+  | "vision_analysis"
 
   step?: number
   message?: string
@@ -42,6 +43,10 @@ export interface AgentEvent {
   ok?: boolean
   summary?: string
   chunk?: string
+  
+  description?: string
+  tags?: string[]
+  confidence?: number
 
   query?: string
   llm_engine?: string
@@ -73,4 +78,9 @@ export type FinalPayload = {
   toolStates?: Record<string, ToolStatePayload>
   toolCalls?: Record<string, number>
   finalData?: Record<string, any> | null
+  visionAnalysis?: {
+    description: string
+    tags: string[]
+    confidence: number
+  } | null
 }

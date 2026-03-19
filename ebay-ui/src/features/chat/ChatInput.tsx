@@ -1,9 +1,11 @@
-import { useState } from "react"
-import { Box, IconButton, InputBase, Typography } from "@mui/material"
+import { useState, useRef } from "react"
+import { Box, IconButton, InputBase, Typography, CircularProgress } from "@mui/material"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
+import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate"
+import CloseIcon from "@mui/icons-material/Close"
 
 interface Props {
-  onSend: (value: string) => void
+  onSend: (value: string, image?: string) => void
   disabled?: boolean
   placeholder?: string
 }
@@ -14,12 +16,16 @@ export default function ChatInput({
   placeholder = "Chiedi qualcosa…"
 }: Props) {
   const [value, setValue] = useState("")
+  const [image, setImage] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSend = () => {
     const trimmed = value.trim()
-    if (!trimmed || disabled) return
-    onSend(trimmed)
+    if ((!trimmed && !image) || disabled || isProcessing) return
+    onSend(trimmed, image || undefined)
     setValue("")
+    setImage(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -30,10 +36,75 @@ export default function ChatInput({
     }
   }
 
-  const canSend = !!value.trim() && !disabled
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsProcessing(true)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setImage(event.target?.result as string)
+      setIsProcessing(false)
+    }
+    reader.onerror = () => {
+      setIsProcessing(false)
+    }
+    reader.readAsDataURL(file)
+    // Reset input so the same file can be selected again
+    e.target.value = ""
+  }
+
+  const canSend = (!!value.trim() || !!image) && !disabled && !isProcessing
 
   return (
     <Box>
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        style={{ display: "none" }}
+      />
+
+      {/* Image Preview */}
+      {image && (
+        <Box sx={{ px: 2, mb: 1, display: "flex" }}>
+          <Box
+            sx={{
+              position: "relative",
+              width: 56,
+              height: 56,
+              borderRadius: "12px",
+              overflow: "hidden",
+              border: "1px solid #e5e7eb",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+            }}
+          >
+            <img
+              src={image}
+              alt="Preview"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+            <IconButton
+              size="small"
+              onClick={() => setImage(null)}
+              sx={{
+                position: "absolute",
+                top: 2,
+                right: 2,
+                p: 0.25,
+                bgcolor: "rgba(0,0,0,0.5)",
+                color: "#fff",
+                "&:hover": { bgcolor: "rgba(0,0,0,0.7)" }
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 12 }} />
+            </IconButton>
+          </Box>
+        </Box>
+      )}
+
       <Box
         sx={{
           display: "flex",
@@ -54,6 +125,18 @@ export default function ChatInput({
           }
         }}
       >
+        <IconButton
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || isProcessing}
+          sx={{
+            mb: 0.25,
+            color: "#9ca3af",
+            "&:hover": { color: "#111827" }
+          }}
+        >
+          {isProcessing ? <CircularProgress size={16} color="inherit" /> : <AddPhotoAlternateIcon sx={{ fontSize: 20 }} />}
+        </IconButton>
+
         <InputBase
           fullWidth
           multiline

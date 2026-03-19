@@ -99,6 +99,11 @@ export interface SearchBlock {
   shipping_costs?: ShippingCostsData | null
   metadata?: any | null
   final_answer?: string | null
+  vision_analysis?: {
+    description: string
+    tags: string[]
+    confidence: number
+  } | null
   aspect_distributions?: any[]
   mode?: AppMode
   errors?: string[]

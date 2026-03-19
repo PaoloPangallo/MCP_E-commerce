@@ -17,6 +17,7 @@ class AgentRequest(BaseModel):
     llm_engine: Literal["gemini", "ollama", "ollama_cloud", "rule_based"] = "ollama_cloud"
     max_steps: int = 4
     return_trace: bool = True
+    image: Optional[str] = None # Base64 image data
 
 
 class ToolCall(BaseModel):
@@ -138,7 +139,14 @@ class FinalEvent(BaseModel):
 
 class AnswerChunkEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
-
     type: Literal["answer_chunk"] = "answer_chunk"
     chunk: str
+
+
+class VisionAnalysisEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    type: Literal["vision_analysis"] = "vision_analysis"
+    description: str
+    tags: List[str] = Field(default_factory=list)
+    confidence: float = 1.0
     is_last: bool = False
