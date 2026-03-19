@@ -43,7 +43,7 @@ export interface AgentEvent {
   ok?: boolean
   summary?: string
   chunk?: string
-  
+
   description?: string
   tags?: string[]
   confidence?: number

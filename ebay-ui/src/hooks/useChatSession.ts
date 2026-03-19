@@ -51,10 +51,10 @@ export function useChatSession() {
     if (!finalPayload || running || !loadingQuery) return
 
     const cacheKey = loadingQuery.toLowerCase()
-    
+
     // Safety check against processing the same payload multiple times
     if (chat.some(entry => entry.type === "search" && entry.search?.query === loadingQuery && entry.search?.analysis === finalPayload.analysis)) {
-       return 
+      return
     }
 
     const sellerSummary = finalPayload.sellerSummary || null
@@ -77,7 +77,6 @@ export function useChatSession() {
       shipping_costs: finalPayload.shippingCosts || null,
       metadata: finalPayload.metadata || null,
       final_answer: finalPayload.finalAnswer || "Ho completato l’analisi della richiesta.",
-      vision_analysis: finalPayload.visionAnalysis || null,
       mode,
       errors: finalPayload.errors
     }
@@ -91,7 +90,6 @@ export function useChatSession() {
       !!newSearch.comparison ||
       !!newSearch.item_details ||
       !!newSearch.shipping_costs ||
-      !!newSearch.vision_analysis ||
       !!finalPayload.plannedTasks?.length ||
       (!!finalPayload.toolStates && Object.keys(finalPayload.toolStates).length > 0)
 

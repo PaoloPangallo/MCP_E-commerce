@@ -217,7 +217,7 @@ export function useAgentStream(options?: {
             } as any
           }
           const nextTrace = markStepsAsDone(prev.trace || [])
-          
+
           if (prev.finalAnswer === streamingAnswer && prev.trace === nextTrace) return prev
 
           return {

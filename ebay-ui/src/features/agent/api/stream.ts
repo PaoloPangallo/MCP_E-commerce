@@ -12,6 +12,7 @@ import {fetchEventSource} from "@microsoft/fetch-event-source";
  */
 export function streamAgent(
   query: string,
+  image: string | undefined,
   onEvent: (event: AgentEvent) => void,
   llmEngine = "ollama_cloud"
 ) {
@@ -34,6 +35,7 @@ export function streamAgent(
     headers,
     body: JSON.stringify({
       query,
+      image,
       llm_engine: llmEngine
     }),
     signal: controller.signal,
