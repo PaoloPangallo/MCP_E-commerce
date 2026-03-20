@@ -93,7 +93,7 @@ export default function ChatPage() {
         <Box
           sx={{
             width: "100%",
-            maxWidth: 720,
+            maxWidth: 1000,
             mx: "auto",
             px: { xs: 2, md: 0 },
             pt: { xs: 3, md: 4 },

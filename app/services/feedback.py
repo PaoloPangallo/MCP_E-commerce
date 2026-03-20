@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import httpx
 
@@ -23,9 +23,9 @@ def _clean_username(username: str) -> str:
     return (username or "").strip()
 
 
-def _build_headers() -> Dict[str, str]:
+def _build_headers(call_name: str) -> Dict[str, str]:
     return {
-        "X-EBAY-API-CALL-NAME": "GetFeedback",
+        "X-EBAY-API-CALL-NAME": call_name,
         "X-EBAY-API-COMPATIBILITY-LEVEL": COMPATIBILITY_LEVEL,
         "X-EBAY-API-SITEID": SITE_ID,
         "Content-Type": "text/xml",
@@ -114,7 +114,7 @@ async def fetch_feedback_page(
     if not username or not EBAY_USER_TOKEN:
         return []
 
-    headers = _build_headers()
+    headers = _build_headers("GetFeedback")
     body = _build_body(username, page, per_page)
 
     for attempt in range(2):
@@ -165,4 +165,88 @@ async def get_seller_feedback(username: str, limit: int = 200) -> List[Dict]:
                 break
 
     return all_feedback[:limit]
-
+
+
+async def get_user_details(username: str) -> Dict[str, Any]:
+    """
+    Fetch basic user details using GetUser.
+    """
+    username = _clean_username(username)
+    if not username or not EBAY_USER_TOKEN:
+        return {}
+
+    headers = _build_headers("GetUser")
+    body = f"""<?xml version="1.0" encoding="utf-8"?>
+<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>{EBAY_USER_TOKEN}</eBayAuthToken>
+  </RequesterCredentials>
+  <UserID>{username}</UserID>
+  <DetailLevel>ReturnAll</DetailLevel>
+</GetUserRequest>"""
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(TRADING_URL, headers=headers, content=body.encode("utf-8"), timeout=REQUEST_TIMEOUT)
+            if response.status_code != 200:
+                return {}
+            
+            root = ET.fromstring(response.text)
+            user_node = root.find(".//e:User", _NS)
+            if user_node is None:
+                return {}
+
+            reg_date = _safe_find_text(user_node, "e:RegistrationDate", "")
+            feedback_score = _safe_find_text(user_node, "e:FeedbackScore", "0")
+            reg_addr = user_node.find("e:RegistrationAddress", _NS)
+            country = _safe_find_text(reg_addr, "e:Country", "") if reg_addr is not None else ""
+
+            return {
+                "registration_date": reg_date,
+                "feedback_score": int(feedback_score),
+                "location": country,
+                "user_id": _safe_find_text(user_node, "e:UserID", ""),
+                "status": _safe_find_text(user_node, "e:Status", ""),
+            }
+        except Exception as e:
+            logger.warning("GetUser failed for %s: %s", username, e)
+            return {}
+
+
+async def get_store_details(username: str) -> Dict[str, Any]:
+    """
+    Fetch store details using GetStore.
+    """
+    username = _clean_username(username)
+    if not username or not EBAY_USER_TOKEN:
+        return {}
+
+    headers = _build_headers("GetStore")
+    body = f"""<?xml version="1.0" encoding="utf-8"?>
+<GetStoreRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>{EBAY_USER_TOKEN}</eBayAuthToken>
+  </RequesterCredentials>
+  <UserID>{username}</UserID>
+</GetStoreRequest>"""
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(TRADING_URL, headers=headers, content=body.encode("utf-8"), timeout=REQUEST_TIMEOUT)
+            if response.status_code != 200:
+                return {}
+            
+            root = ET.fromstring(response.text)
+            store_node = root.find(".//e:Store", _NS)
+            if store_node is None:
+                return {}
+
+            return {
+                "store_name": _safe_find_text(store_node, "e:Name", ""),
+                "logo_url": _safe_find_text(store_node, "e:LogoURL", ""),
+                "description": _safe_find_text(store_node, "e:Description", ""),
+            }
+        except Exception as e:
+            logger.warning("GetStore failed for %s: %s", username, e)
+            return {}
+

@@ -47,10 +47,11 @@ def _dedupe_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     for item in items:
         ebay_id = item.get("ebay_id")
-        if not ebay_id or ebay_id in seen_ids:
-            continue
-
-        seen_ids.add(ebay_id)
+        if ebay_id:
+            if ebay_id in seen_ids:
+                continue
+            seen_ids.add(ebay_id)
+        
         deduped.append(item)
 
     return deduped

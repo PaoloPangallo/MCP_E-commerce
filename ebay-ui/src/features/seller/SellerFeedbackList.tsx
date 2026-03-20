@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, CircularProgress, Typography } from "@mui/material"
+import { Box, Button, CircularProgress, Typography } from "@mui/material"
 
 import FeedbackCard from "./component/FeedbackCard.tsx"
 import type { Feedback } from "../../types"
@@ -85,27 +85,26 @@ export default function SellerFeedbackList({
 
       {/* Load more */}
       {visibleCount < sorted.length && (
-        <Box
-          component="button"
-          onClick={() =>
-            setVisibleCount((prev) => Math.min(prev + initialLimit, sorted.length))
-          }
-          sx={{
-            background: "none",
-            border: "none",
-            p: 0,
-            mt: 0.75,
-            fontSize: 12,
-            color: "#9ca3af",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            textDecoration: "underline",
-            textDecorationColor: "#e5e7eb",
-            textUnderlineOffset: "3px",
-            "&:hover": { color: "#6b7280" }
-          }}
-        >
-          Mostra altri ({sorted.length - visibleCount} rimasti)
+        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() =>
+              setVisibleCount((prev) => Math.min(prev + initialLimit, sorted.length))
+            }
+            sx={{
+              textTransform: "none",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#374151",
+              borderColor: "#e5e7eb",
+              borderRadius: "8px",
+              py: 0.5,
+              "&:hover": { bgcolor: "#f9fafb", borderColor: "#d1d5db" }
+            }}
+          >
+            Mostra altri ({sorted.length - visibleCount} rimasti)
+          </Button>
         </Box>
       )}
     </Box>

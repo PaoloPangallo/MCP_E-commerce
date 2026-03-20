@@ -374,7 +374,7 @@ export default function ChatLayout({
           <Box
             sx={{
               width: "100%",
-              maxWidth: 760,
+              maxWidth: 1000,
               mx: "auto",
               flex: 1,
               px: { xs: 2, md: 4 }
@@ -395,7 +395,7 @@ export default function ChatLayout({
               bgcolor: "#fff"
             }}
           >
-            <Box sx={{ maxWidth: 720, mx: "auto" }}>
+            <Box sx={{ maxWidth: 1000, mx: "auto" }}>
               {composer}
             </Box>
           </Box>

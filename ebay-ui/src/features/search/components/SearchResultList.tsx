@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Typography } from "@mui/material"
+import { Box, Button, Typography } from "@mui/material"
+import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import GppGoodIcon from "@mui/icons-material/GppGood"
+import ListIcon from "@mui/icons-material/List"
 
 import SearchResultCard from "./SearchResultCard"
 import FilterSidebar from "./FilterSidebar"
@@ -19,10 +22,19 @@ function getTopTrust(results: SearchItem[]) {
 
 export default function SearchResultList({
   results = [],
-  aspect_distributions = []
+  aspect_distributions = [],
 }: Props) {
   const [visibleCount, setVisibleCount] = useState(5)
-  const safeResults = useMemo(() => results.filter(Boolean), [results])
+  const safeResults = useMemo(() => {
+    const seen = new Set<string>()
+    return (results || []).filter((item) => {
+      if (!item) return false
+      if (!item.ebay_id) return true // Keep if no ID (prevent loss of generic results)
+      if (seen.has(item.ebay_id)) return false
+      seen.add(item.ebay_id)
+      return true
+    })
+  }, [results])
 
   useEffect(() => {
     setVisibleCount(5)
@@ -30,14 +42,15 @@ export default function SearchResultList({
 
   const visibleResults = safeResults.slice(0, visibleCount)
   const topTrust = getTopTrust(safeResults)
+  const remaining = safeResults.length - visibleCount
 
   if (safeResults.length === 0) {
     return (
-      <Box sx={{ py: 5, px: 3, textAlign: "center" }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#374151", mb: 0.5 }}>
+      <Box sx={{ py: 4, px: 2.5, textAlign: "center" }}>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "#6b7280", mb: 0.4 }}>
           Nessun risultato trovato
         </Typography>
-        <Typography sx={{ fontSize: 13, color: "#9ca3af" }}>
+        <Typography sx={{ fontSize: 12.5, color: "#b0b0b0" }}>
           Prova a cambiare brand, fascia di prezzo o parole chiave.
         </Typography>
       </Box>
@@ -47,16 +60,17 @@ export default function SearchResultList({
   const handleFilterClick = (aspectName: string, value: string) => {
     window.dispatchEvent(
       new CustomEvent("send-chat", {
-        detail: `Cerca ${aspectName} ${value} per i risultati correnti`
+        detail: `Cerca ${aspectName} ${value} per i risultati correnti`,
       })
     )
   }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column" }}>
-      {/* Filters */}
+
+      {/* ── Filters ─────────────────────────────────────────────────────── */}
       {aspect_distributions.length > 0 && (
-        <Box sx={{ p: 2, borderBottom: "1px solid #f5f5f5" }}>
+        <Box sx={{ px: 2, pt: 1.5, pb: 1.25, borderBottom: "1px solid #f5f5f5" }}>
           <FilterSidebar
             distributions={aspect_distributions}
             onFilterClick={handleFilterClick}
@@ -64,7 +78,7 @@ export default function SearchResultList({
         </Box>
       )}
 
-      {/* Summary row */}
+      {/* ── Summary line — one quiet row, no heavy chrome ─────────────── */}
       <Box
         sx={{
           px: 2,
@@ -72,20 +86,37 @@ export default function SearchResultList({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          borderBottom: "1px solid #f5f5f5"
+          bgcolor: "#fafafa",
+          borderBottom: "1px solid #f0f0f0",
         }}
       >
-        <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>
-          {safeResults.length} {safeResults.length === 1 ? "risultato" : "risultati"} · ordinati per AI relevance
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <ListIcon sx={{ fontSize: 14, color: "#9ca3af" }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#4b5563" }}>
+              {safeResults.length} {safeResults.length === 1 ? "risultato" : "risultati"}
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TrendingUpIcon sx={{ fontSize: 14, color: "#8b5cf6" }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
+              AI Sorted
+            </Typography>
+          </Box>
+        </Box>
+
         {topTrust !== null && (
-          <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>
-            trust max {Math.round(topTrust * 100)}%
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <GppGoodIcon sx={{ fontSize: 14, color: "#10b981" }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#10b981" }}>
+              Trust {Math.round(topTrust * 100)}% max
+            </Typography>
+          </Box>
         )}
       </Box>
 
-      {/* Cards */}
+      {/* ── Cards ─────────────────────────────────────────────────────── */}
       <Box sx={{ px: 2 }}>
         {visibleResults.map((item, index) => (
           <SearchResultCard
@@ -95,41 +126,38 @@ export default function SearchResultList({
         ))}
       </Box>
 
-      {/* Pagination */}
-      {visibleCount < safeResults.length && (
+      {/* ── Load more — plain text link, no button ────────────────────── */}
+      {remaining > 0 && (
         <Box
           sx={{
-            px: 2,
-            py: 1.5,
-            borderTop: "1px solid #f5f5f5",
+            p: 2,
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between"
+            justifyContent: "center",
+            borderTop: "1px solid #f0f0f0",
+            bgcolor: "#fff"
           }}
         >
-          <Typography sx={{ fontSize: 12, color: "#9ca3af" }}>
-            {Math.min(visibleCount, safeResults.length)} di {safeResults.length}
-          </Typography>
-          <Box
-            component="button"
-            onClick={() =>
-              setVisibleCount((prev) => Math.min(prev + 5, safeResults.length))
-            }
+          <Button
+            variant="outlined"
+            onClick={() => setVisibleCount((prev) => Math.min(prev + 5, safeResults.length))}
+            fullWidth
             sx={{
-              background: "none",
-              border: "1px solid #e5e7eb",
-              borderRadius: "20px",
-              px: 1.5,
-              py: 0.5,
-              fontSize: 12,
-              color: "#6b7280",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              "&:hover": { bgcolor: "#f9fafb", borderColor: "#d1d5db" }
+              textTransform: "none",
+              borderRadius: "10px",
+              borderColor: "#e5e7eb",
+              color: "#374151",
+              fontSize: 13,
+              fontWeight: 600,
+              py: 1,
+              "&:hover": {
+                bgcolor: "#f9fafb",
+                borderColor: "#d1d5db"
+              }
             }}
           >
-            Mostra altri
-          </Box>
+            Mostra altri {Math.min(remaining, 5)} prodotti ({remaining} rimanenti)
+          </Button>
         </Box>
       )}
     </Box>

@@ -29,9 +29,11 @@ function CollapsibleSection({
     <Box
       sx={{
         border: "1px solid #f0f0f0",
-        borderRadius: 3,
+        borderRadius: "12px",
         overflow: "hidden",
-        bgcolor: "#fff"
+        bgcolor: "#fff",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+        transition: "all 0.2s ease"
       }}
     >
       <Box
@@ -40,45 +42,47 @@ function CollapsibleSection({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          px: 2,
-          py: 1.25,
+          px: 2.5,
+          py: 1.5,
           cursor: "pointer",
+          userSelect: "none",
+          bgcolor: open ? "#fafafa" : "#fff",
           "&:hover": { bgcolor: "#fafafa" },
-          transition: "background 0.15s"
+          transition: "background 0.2s"
         }}
       >
-        <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
-          {label}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+           <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#374151", letterSpacing: '-0.01em' }}>
+            {label}
+          </Typography>
           {count !== undefined && (
             <Box
-              component="span"
               sx={{
-                ml: 1,
-                px: 0.75,
-                py: 0.15,
+                px: 1,
+                py: 0.25,
                 bgcolor: "#f3f4f6",
-                borderRadius: 1,
+                borderRadius: "6px",
                 fontSize: 11,
-                color: "#9ca3af",
-                fontWeight: 500
+                color: "#6b7280",
+                fontWeight: 700
               }}
             >
               {count}
             </Box>
           )}
-        </Typography>
+        </Box>
         <KeyboardArrowDownIcon
           sx={{
-            fontSize: 16,
+            fontSize: 18,
             color: "#9ca3af",
             transform: open ? "rotate(180deg)" : "none",
-            transition: "transform 0.2s"
+            transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
           }}
         />
       </Box>
 
-      <Collapse in={open} timeout={200}>
-        <Box sx={{ borderTop: "1px solid #f5f5f5" }}>{children}</Box>
+      <Collapse in={open} timeout={300}>
+        <Box sx={{ borderTop: "1px solid #f0f0f0" }}>{children}</Box>
       </Collapse>
     </Box>
   )

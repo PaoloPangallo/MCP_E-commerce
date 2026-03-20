@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Box, Collapse, Link, Typography } from "@mui/material"
+import { Box, Button, Collapse, Link, Typography } from "@mui/material"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
@@ -10,99 +10,131 @@ import SellerInfo from "../../seller/SellerInfo.tsx"
 import ExplanationChips from "./ExplanationChips.tsx"
 import type { SearchItem } from "../types"
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatPrice(price?: number, currency?: string) {
   if (typeof price !== "number") return "—"
   return `${price} ${currency ?? ""}`.trim()
 }
 
-function TrustBadge({ score }: { score: number }) {
+// Small inline trust pill — no card, no color fill
+function TrustPill({ score }: { score: number }) {
   const pct = Math.round(score * 100)
   const good = pct >= 90
   return (
     <Box
+      component="span"
       sx={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 0.4,
-        px: 0.875,
-        py: 0.25,
+        gap: "4px",
+        px: 1,
+        py: "2px",
         borderRadius: "6px",
-        bgcolor: good ? "#f0fdf4" : "#fafafa",
         border: "1px solid",
-        borderColor: good ? "#bbf7d0" : "#e5e7eb"
+        borderColor: good ? "#bbf7d0" : "#e5e7eb",
+        bgcolor: good ? "#f0fdf4" : "#fafafa",
+        boxShadow: good ? "0 1px 2px rgba(22, 163, 74, 0.05)" : "none",
       }}
     >
-      <VerifiedUserIcon sx={{ fontSize: 11, color: good ? "#16a34a" : "#9ca3af" }} />
-      <Typography sx={{ fontSize: 11, fontWeight: 500, color: good ? "#15803d" : "#6b7280" }}>
-        {pct}%
+      <VerifiedUserIcon sx={{ fontSize: 12, color: good ? "#16a34a" : "#9ca3af" }} />
+      <Typography
+        component="span"
+        sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: good ? "#15803d" : "#6b7280",
+          letterSpacing: "0.01em"
+        }}
+      >
+        {pct}% Trust
       </Typography>
     </Box>
   )
 }
 
-function AiMatchBadge({ score }: { score: number }) {
-  const pct = Math.round(score * 100)
+// AI match pill — same minimal style
+function AiPill({ score }: { score: number }) {
   return (
     <Box
+      component="span"
       sx={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 0.4,
-        px: 0.875,
-        py: 0.25,
+        px: 1,
+        py: "2px",
         borderRadius: "6px",
+        border: "1px solid #ddd6fe",
         bgcolor: "#f5f3ff",
-        border: "1px solid #e0d9ff"
+        boxShadow: "0 1px 2px rgba(124, 58, 237, 0.05)",
       }}
     >
-      <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#6d28d9" }}>
-        AI {pct}%
+      <Typography
+        component="span"
+        sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: "#7c3aed",
+          letterSpacing: "0.01em"
+        }}
+      >
+        {Math.round(score * 100)}% Match
       </Typography>
     </Box>
   )
 }
 
+// ─── Main card ────────────────────────────────────────────────────────────────
+
 export default function SearchResultCard({ item }: { item: SearchItem }) {
-  const [imageError, setImageError] = useState(false)
-  const [sellerOpen, setSellerOpen] = useState(false)
+  const [imageError,  setImageError]  = useState(false)
+  const [sellerOpen,  setSellerOpen]  = useState(false)
 
-  const trustPercent = typeof item.trust_score === "number" ? item.trust_score : null
-  const rankingPercent = typeof item.ranking_score === "number" ? item.ranking_score : null
+  const trustPct   = typeof item.trust_score   === "number" ? item.trust_score   : null
+  const rankingPct = typeof item.ranking_score === "number" ? item.ranking_score : null
 
-  const ragFeedbackPreview = Array.isArray(item.rag_feedback)
+  const ragPreviews = Array.isArray(item.rag_feedback)
     ? item.rag_feedback.map((fb) => fb?.comment || "").filter(Boolean).slice(0, 2)
     : []
 
   return (
     <Box
       sx={{
-        display: "grid",
-        gridTemplateColumns: "80px 1fr",
-        gap: 1.75,
-        py: 2,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 1.5,
+        py: 1.75,
         borderBottom: "1px solid #f5f5f5",
-        "&:last-child": { borderBottom: "none" },
-        "&:first-of-type": { pt: 0 }
+        "&:last-child":    { borderBottom: "none" },
+        "&:first-of-type": { pt: 0.5 },
       }}
     >
-      {/* Thumbnail */}
+      {/* ── Thumbnail — small, quiet ──────────────────────────────────────── */}
       <Box
         component={item.url ? "a" : "div"}
         href={item.url}
         target="_blank"
         rel="noreferrer"
         sx={{
-          width: 80,
-          height: 80,
-          borderRadius: 2,
+          width: 88,
+          height: 88,
+          borderRadius: "12px",
           overflow: "hidden",
-          bgcolor: "#f9fafb",
+          bgcolor: "#fff",
           border: "1px solid #f0f0f0",
+          flexShrink: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          flexShrink: 0,
-          textDecoration: "none"
+          mt: 0.5,
+          textDecoration: "none",
+          transition: "all 0.2s ease-in-out",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          "&:hover": { 
+            transform: "scale(1.02)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+            borderColor: "#e0e0e0"
+          },
         }}
       >
         {!imageError && item.image_url ? (
@@ -112,18 +144,19 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             alt={item.title || ""}
             loading="lazy"
             onError={() => setImageError(true)}
-            sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+            sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
           />
         ) : (
-          <Typography sx={{ fontSize: 10, color: "#d1d5db", textAlign: "center", px: 0.5 }}>
-            no img
-          </Typography>
+          <Box sx={{ width: 32, height: 32, bgcolor: "#f3f4f6", borderRadius: "8px", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <Typography variant="caption" color="text.disabled">No img</Typography>
+          </Box>
         )}
       </Box>
 
-      {/* Content */}
-      <Box sx={{ minWidth: 0 }}>
-        {/* Title row */}
+      {/* ── Content ───────────────────────────────────────────────────────── */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+
+        {/* Title + external icon */}
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, mb: 0.25 }}>
           {item.url ? (
             <Link
@@ -132,15 +165,15 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
               rel="noreferrer"
               underline="none"
               sx={{
-                fontSize: 13,
-                fontWeight: 500,
+                fontSize: 15,
+                fontWeight: 600,
                 color: "#111827",
-                lineHeight: 1.4,
+                lineHeight: 1.3,
                 display: "-webkit-box",
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
-                "&:hover": { color: "#374151" }
+                "&:hover": { color: "#2563eb" },
               }}
             >
               {item.title || "Titolo non disponibile"}
@@ -148,159 +181,161 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           ) : (
             <Typography
               sx={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: "#111827",
-                lineHeight: 1.4,
+                fontSize: 15, fontWeight: 600, color: "#111827",
+                lineHeight: 1.3,
                 display: "-webkit-box",
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: "vertical",
-                overflow: "hidden"
+                overflow: "hidden",
               }}
             >
               {item.title || "Titolo non disponibile"}
             </Typography>
           )}
           {item.url && (
-            <OpenInNewIcon sx={{ fontSize: 12, color: "#d1d5db", flexShrink: 0, mt: 0.2 }} />
+            <OpenInNewIcon sx={{ fontSize: 13, color: "#9ca3af", flexShrink: 0, mt: 0.4 }} />
           )}
         </Box>
 
-        {/* Price + badges */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75 }}>
-          <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#111827" }}>
+        {/* ── Meta row: price · condition · pills ───────────────────────── */}
+        <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 0.75 }}>
+          <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#111827", letterSpacing: "-0.02em" }}>
             {formatPrice(item.price, item.currency)}
           </Typography>
-          {item.condition && (
-            <Typography sx={{ fontSize: 11, color: "#9ca3af" }}>
-              · {item.condition}
-            </Typography>
-          )}
-          {trustPercent !== null && <TrustBadge score={trustPercent} />}
-          {rankingPercent !== null && <AiMatchBadge score={rankingPercent} />}
+          
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {item.condition && (
+              <Box
+                sx={{
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: "4px",
+                  bgcolor: "#f3f4f6",
+                  color: "#4b5563",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.02em"
+                }}
+              >
+                {item.condition}
+              </Box>
+            )}
+
+            {trustPct !== null && <TrustPill score={trustPct} />}
+            {rankingPct !== null && <AiPill score={rankingPct} />}
+          </Box>
         </Box>
 
-        {/* Seller */}
+        {/* ── Seller ────────────────────────────────────────────────────── */}
         <Box sx={{ mb: 0.5 }}>
           <SellerInfo seller_name={item.seller_name} seller_rating={item.seller_rating} />
         </Box>
 
-        {/* Trust gauge */}
+        {/* ── Trust gauge ───────────────────────────────────────────────── */}
         {typeof item.trust_score === "number" && (
-          <Box sx={{ mb: 0.75 }}>
+          <Box sx={{ mb: 0.6 }}>
             <SellerTrustGauge score={item.trust_score} />
           </Box>
         )}
 
-        {/* Why this result */}
+        {/* ── Why chips ─────────────────────────────────────────────────── */}
         {item.explanations?.length ? (
-          <Box sx={{ mb: 0.75 }}>
+          <Box sx={{ mb: 0.6 }}>
             <ExplanationChips explanations={item.explanations} />
           </Box>
         ) : null}
 
-        {/* Market signals */}
-        {ragFeedbackPreview.length > 0 && (
+        {/* ── RAG feedback quotes ───────────────────────────────────────── */}
+        {ragPreviews.length > 0 && (
           <Box sx={{ mb: 0.75 }}>
-            {ragFeedbackPreview.map((text, i) => (
-              <Typography
-                key={i}
-                sx={{ fontSize: 11, color: "#9ca3af", fontStyle: "italic", lineHeight: 1.5 }}
-              >
+            {ragPreviews.map((text, i) => (
+              <Typography key={i} sx={{ fontSize: 11.5, color: "#b0b0b0", fontStyle: "italic", lineHeight: 1.55 }}>
                 "{text}"
               </Typography>
             ))}
           </Box>
         )}
 
-        {/* Actions */}
-        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-          <Box
-            component="button"
+        {/* ── Actions — inline text links, no buttons ───────────────────── */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1 }}>
+          <Button
+            size="small"
+            variant="contained"
+            disableElevation
             onClick={() =>
               window.dispatchEvent(
                 new CustomEvent("send-chat", {
-                  detail: `Dettagli per ${item.title} (ID: ${item.ebay_id})`
+                  detail: `Dettagli per ${item.title} (ID: ${item.ebay_id})`,
                 })
               )
             }
             sx={{
-              background: "none",
-              border: "none",
-              p: 0,
+              textTransform: "none",
+              borderRadius: "8px",
               fontSize: 12,
-              color: "#6b7280",
-              cursor: "pointer",
-              textDecoration: "underline",
-              textDecorationColor: "#e5e7eb",
-              textUnderlineOffset: "3px",
-              fontFamily: "inherit",
-              "&:hover": { color: "#374151" }
+              fontWeight: 600,
+              bgcolor: "#111827",
+              color: "#fff",
+              px: 2,
+              "&:hover": { bgcolor: "#374151" }
             }}
           >
-            Dettagli prodotto
-          </Box>
+            Dettagli
+          </Button>
 
-          <Box
-            component="button"
+          <Button
+            size="small"
+            variant="outlined"
             onClick={() =>
               window.dispatchEvent(
                 new CustomEvent("send-chat", {
-                  detail: `Trend di mercato, statistiche e andamento prezzi medi online per: ${item.title}`
+                  detail: `Trend di mercato, statistiche e andamento prezzi medi online per: ${item.title}`,
                 })
               )
             }
             sx={{
-              background: "none",
-              border: "none",
-              p: 0,
+              textTransform: "none",
+              borderRadius: "8px",
               fontSize: 12,
-              color: "#6b7280",
-              cursor: "pointer",
-              textDecoration: "underline",
-              textDecorationColor: "#e5e7eb",
-              textUnderlineOffset: "3px",
-              fontFamily: "inherit",
-              "&:hover": { color: "#374151" }
+              fontWeight: 600,
+              borderColor: "#e5e7eb",
+              color: "#374151",
+              px: 2,
+              "&:hover": { borderColor: "#d1d5db", bgcolor: "#f9fafb" }
             }}
           >
-            Analisi di mercato
-          </Box>
+            Analisi mercato
+          </Button>
 
           {item.seller_name && (
-            <Box
-              component="button"
+            <Button
+              size="small"
+              variant="text"
               onClick={() => setSellerOpen((v) => !v)}
+              endIcon={
+                <KeyboardArrowDownIcon
+                  sx={{
+                    fontSize: 14,
+                    transform: sellerOpen ? "rotate(180deg)" : "none",
+                    transition: "transform 0.18s",
+                  }}
+                />
+              }
               sx={{
-                background: "none",
-                border: "none",
-                p: 0,
+                textTransform: "none",
                 fontSize: 12,
+                fontWeight: 600,
                 color: "#6b7280",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.25,
-                fontFamily: "inherit",
-                textDecoration: "underline",
-                textDecorationColor: "#e5e7eb",
-                textUnderlineOffset: "3px",
-                "&:hover": { color: "#374151" }
+                "&:hover": { color: "#111827", bgcolor: "transparent" }
               }}
             >
-              Seller deep dive
-              <KeyboardArrowDownIcon
-                sx={{
-                  fontSize: 13,
-                  transform: sellerOpen ? "rotate(180deg)" : "none",
-                  transition: "transform 0.2s"
-                }}
-              />
-            </Box>
+              Seller
+            </Button>
           )}
         </Box>
 
-        {/* Seller panel */}
+        {/* ── Seller deep dive panel ────────────────────────────────────── */}
         {item.seller_name && (
           <Collapse in={sellerOpen} timeout={200} unmountOnExit>
             <Box sx={{ mt: 1 }}>

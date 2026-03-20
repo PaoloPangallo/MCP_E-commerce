@@ -58,7 +58,7 @@ ATTRIBUTE_CUES = {
     "uomo", "donna", "bambino", "bambina", "adulto", "adulti", "nuovo", "usato",
     "con", "senza", "zip", "cappuccio", "manica", "maniche",
     "nero", "nera", "bianco", "bianca", "blu", "rosso", "rossa",
-    "verde", "grigio", "grigia", "beige", "m", "l", "xl", "xxl", "xs", "s",
+    "verde", "grigio", "grigia", "beige", "xl", "xxl", "xs"
 }
 
 SHIPPING_CUES = {

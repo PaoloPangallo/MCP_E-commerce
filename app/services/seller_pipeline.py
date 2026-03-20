@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict
 
 from app.db.redis import redis_client
-from app.services.feedback import get_seller_feedback
+from app.services.feedback import get_seller_feedback, get_user_details, get_store_details
 from app.services.nlp_sentiment import compute_sentiment_score
 from app.services.trust import compute_trust_score
 
@@ -35,10 +35,13 @@ async def run_seller_pipeline(
 
     # Controlla la signature reale di get_seller_feedback:
     # se serve use_cache, aggiungilo esplicitamente
-    feedbacks = await get_seller_feedback(
-        seller_name,
-        limit=needed,
-        # use_cache=True,
+    # Parallel fetch of feedback and metadata
+    feedback_task = get_seller_feedback(seller_name, limit=needed)
+    user_task = get_user_details(seller_name)
+    store_task = get_store_details(seller_name)
+
+    feedbacks, user_details, store_details = await asyncio.gather(
+        feedback_task, user_task, store_task
     )
 
     start = (page - 1) * limit
@@ -81,6 +84,13 @@ async def run_seller_pipeline(
         "sentiment_score": round(float(sentiment_score), 3),
         "status": "ok",
         "error": None,
+        # Enriched metadata
+        "registration_date": user_details.get("registration_date"),
+        "location": user_details.get("location"),
+        "feedback_score": user_details.get("feedback_score"),
+        "store_name": store_details.get("store_name"),
+        "logo_url": store_details.get("logo_url"),
+        "store_description": store_details.get("description"),
     }
 
     redis_client.set_json(cache_key, res, ttl_seconds=_CACHE_TTL)

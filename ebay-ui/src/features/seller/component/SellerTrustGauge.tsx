@@ -9,17 +9,36 @@ export default function SellerTrustGauge({ score }: Props) {
   const good = percent >= 90
   const mid  = percent >= 70
 
-  const barColor = good ? "#6ee7b7" : mid ? "#fcd34d" : "#fca5a5"
+  const barColor = good ? "#10b981" : mid ? "#f59e0b" : "#ef4444"
   const textColor = good ? "#059669" : mid ? "#d97706" : "#dc2626"
+  const label = good ? "Eccellente" : mid ? "Buona" : "Da verificare"
 
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.4 }}>
-        <Typography sx={{ fontSize: 11, color: "#9ca3af" }}>seller trust</Typography>
-        <Typography sx={{ fontSize: 11, fontWeight: 500, color: textColor }}>{percent}%</Typography>
+    <Box sx={{ width: '100%' }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", mb: 0.75 }}>
+        <Box>
+          <Typography sx={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", mb: 0.25 }}>
+            Affidabilità
+          </Typography>
+          <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+            {label}
+          </Typography>
+        </Box>
+        <Typography sx={{ fontSize: 14, fontWeight: 800, color: textColor, lineHeight: 1 }}>
+          {percent}%
+        </Typography>
       </Box>
-      <Box sx={{ height: 4, borderRadius: 4, bgcolor: "#f3f4f6", overflow: "hidden" }}>
-        <Box sx={{ width: `${percent}%`, height: "100%", bgcolor: barColor, borderRadius: 4 }} />
+      <Box sx={{ height: 6, borderRadius: 3, bgcolor: "#f3f4f6", overflow: "hidden", position: 'relative' }}>
+        <Box 
+          sx={{ 
+            width: `${percent}%`, 
+            height: "100%", 
+            bgcolor: barColor, 
+            borderRadius: 3,
+            transition: 'width 1s ease-out',
+            boxShadow: `0 0 8px ${barColor}44`
+          }} 
+        />
       </Box>
     </Box>
   )

@@ -16,52 +16,73 @@ function formatDate(value?: string | number) {
 }
 
 const ratingMeta = {
-  positive: { dot: "#6ee7b7", text: "#059669", label: "positivo" },
-  neutral:  { dot: "#fcd34d", text: "#d97706", label: "neutro"   },
-  negative: { dot: "#fca5a5", text: "#dc2626", label: "negativo" }
+  positive: { dot: "#10b981", text: "#059669", bg: "#ecfdf5", label: "Positivo" },
+  neutral:  { dot: "#f59e0b", text: "#d97706", bg: "#fffbeb", label: "Neutro"   },
+  negative: { dot: "#ef4444", text: "#dc2626", bg: "#fef2f2", label: "Negativo" }
 }
 
 export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
   const type = normalizeRating(feedback.rating)
   const meta = ratingMeta[type]
   const date = formatDate(feedback.time ?? feedback.date)
+  const initial = (feedback.user || "U").charAt(0).toUpperCase()
 
   return (
     <Box
       sx={{
-        py: 1.5,
-        borderBottom: "1px solid #f5f5f5",
+        py: 2,
+        borderBottom: "1px solid #f0f0f0",
         "&:last-child": { borderBottom: "none" }
       }}
     >
       {/* Header row */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-        {/* Colored dot instead of Avatar */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1 }}>
         <Box
           sx={{
-            width: 7,
-            height: 7,
+            width: 24,
+            height: 24,
             borderRadius: "50%",
-            bgcolor: meta.dot,
+            bgcolor: "#f3f4f6",
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 10,
+            fontWeight: 700,
+            color: "#6b7280",
+            border: '1px solid #e5e7eb',
             flexShrink: 0
           }}
-        />
-        <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#374151" }}>
-          {feedback.user || "Utente"}
-        </Typography>
-        <Box
-          sx={{
-            px: 0.75,
-            py: 0.1,
-            borderRadius: "6px",
-            bgcolor: "#f9fafb",
-            border: "1px solid #f0f0f0"
-          }}
         >
-          <Typography sx={{ fontSize: 10, color: meta.text }}>{meta.label}</Typography>
+          {initial}
         </Box>
+        
+        <Box sx={{ flex: 1 }}>
+           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
+              {feedback.user || "Utente"}
+            </Typography>
+            <Box
+              sx={{
+                px: 1,
+                py: "1px",
+                borderRadius: "4px",
+                bgcolor: meta.bg,
+                border: "1px solid transparent",
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5
+              }}
+            >
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: meta.dot }} />
+              <Typography sx={{ fontSize: 10, fontWeight: 700, color: meta.text, textTransform: 'uppercase' }}>
+                {meta.label}
+              </Typography>
+            </Box>
+           </Box>
+        </Box>
+
         {date && (
-          <Typography sx={{ fontSize: 11, color: "#d1d5db", ml: "auto" }}>
+          <Typography sx={{ fontSize: 11, color: "#9ca3af" }}>
             {date}
           </Typography>
         )}
@@ -70,10 +91,10 @@ export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
       {/* Comment */}
       <Typography
         sx={{
-          fontSize: 12,
-          color: "#6b7280",
-          lineHeight: 1.6,
-          pl: "15px" // align with text after dot
+          fontSize: 13,
+          color: "#4b5563",
+          lineHeight: 1.5,
+          pl: "36px" // align with text after avatar
         }}
       >
         {feedback.comment || "Nessun commento disponibile"}

@@ -379,18 +379,20 @@ def fuzzy_brand_detection(text: str, threshold: int = 88) -> List[str]:
     found = []
 
     for word in words:
-        if len(word) < 4:
+        # Avoid fuzzy matching for very short words to prevent false positives
+        if len(word) < 5:
             continue
 
         match = process.extractOne(
             word,
             cast(List[str], list(vocab)),
-            scorer=fuzz.partial_ratio
+            scorer=fuzz.ratio
         )
 
         if match:
             brand, score, _ = match
-            if score >= threshold and abs(len(word) - len(brand)) <= 3:
+            # Higher threshold and stricter length difference for fuzzy matching
+            if score >= threshold and abs(len(word) - len(brand)) <= 2:
                 found.append(brand)
 
     return dedupe_keep_order(found)
