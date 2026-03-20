@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 import numpy as np
 
 from qdrant_client import QdrantClient
@@ -178,3 +178,40 @@ def search(query: str, k: int = 5, doc_type: Optional[str] = None) -> List[Dict]
         docs.append(doc)
         
     return docs
+def index_search_items(items: List[Dict[str, Any]]):
+    """
+    Indexes a list of SearchItems into Qdrant for 'Global Memory'.
+    """
+    if not items:
+        return
+
+    texts = []
+    metas = []
+
+    for item in items:
+        title = item.get("title")
+        if not title:
+            continue
+            
+        # We enrich the text with some metadata to improve retrieval
+        enrich_text = f"{title}"
+        if item.get("brand"):
+            enrich_text += f" brand:{item.get('brand')}"
+        if item.get("condition"):
+            enrich_text += f" condition:{item.get('condition')}"
+            
+        # We store the full item as metadata
+        meta = dict(item)
+        meta["type"] = "product"
+        # Ensure we have a doc_id based on ebay_id for consistency
+        ebay_id = item.get("ebay_id")
+        if ebay_id:
+            meta["doc_id"] = f"ebay_{ebay_id}"
+            
+        texts.append(enrich_text)
+        metas.append(meta)
+
+    if texts:
+        add_documents(texts, metas)
+        import logging as _log
+        _log.getLogger(__name__).info("Indexed %d items into Global Memory", len(texts))

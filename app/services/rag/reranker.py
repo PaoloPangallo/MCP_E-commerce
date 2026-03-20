@@ -6,6 +6,13 @@ import re
 from app.services.rag.cross_encoder import cross_rerank
 from app.services.rag.embedding import embed
 from app.services.rag.retriever import retrieve_context
+from app.services.rag.ltr_features import extract_ltr_features, get_feature_names
+
+import os
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 @dataclass
 class RerankWeights:
     SIMILARITY: float = 0.34
@@ -22,6 +29,67 @@ class RerankWeights:
     GOOD_TRUST: float = 0.70
 
 WEIGHTS = RerankWeights()
+
+# ============================================================
+# LTR MODEL (Learning to Rank)
+# ============================================================
+
+class LtrModel:
+    def __init__(self, model_path: Optional[str] = "app/services/rag/ltr_model.pkl"):
+        # Legacy weights as fallback
+        self.legacy_weights = {
+            "lexical_sim": 0.25,
+            "semantic_sim": 0.35,
+            "trust_score": 0.15,
+            "seller_rating": 0.05,
+            "log_price": -0.02,
+            "has_image": 0.05,
+            "is_new": 0.05,
+            "has_brand": 0.05,
+            "has_model": 0.03,
+            "num_specs": 0.02,
+            "price_z": -0.05,
+            "rag_product_boost": 0.15,
+            "rag_seller_boost": 0.10,
+            "rag_sentiment": 0.05
+        }
+        self.model = None
+        self.feature_names = None
+        
+        # In case the pickle is missing or errors out, relative path might be tricky
+        # depending on where it's run, so we try a few locations.
+        paths_to_try = [model_path, os.path.join(os.getcwd(), model_path)]
+        
+        for p in paths_to_try:
+            if p and os.path.exists(p):
+                try:
+                    import pickle
+                    with open(p, "rb") as f:
+                        payload = pickle.load(f)
+                        self.model = payload["model"]
+                        self.feature_names = payload["feature_names"]
+                        logger.info("LTR model loaded successfully from %s", p)
+                        break
+                except Exception as e:
+                    logger.warning("Failed to load LTR model from %s: %s", p, e)
+
+    def predict(self, features: Dict[str, float]) -> float:
+        if self.model and self.feature_names:
+            try:
+                # Prepare input vector in correct order
+                X = [[features.get(name, 0.0) for name in self.feature_names]]
+                return float(self.model.predict(X)[0])
+            except Exception as e:
+                logger.warning("LTR prediction failed, falling back to legacy: %s", e)
+        
+        # Fallback to linear combination of legacy weights
+        score = 0.0
+        for name, value in features.items():
+            score += value * self.legacy_weights.get(name, 0.0)
+        return score
+
+# Global LTR model instance
+_ltr_model = LtrModel()
 
 # ============================================================
 # COSINE SIMILARITY
@@ -314,8 +382,10 @@ def rerank_products(
                 item["_embedding"] = t_vec
 
             similarity = cosine_similarity(q_vec, t_vec)
+            item["_semantic_sim"] = similarity
         except Exception:
             similarity = 0.0
+            item["_semantic_sim"] = 0.0
 
         # ----------------------------------------
         # LEXICAL MATCH
@@ -385,19 +455,29 @@ def rerank_products(
         # FINAL SCORE
         # ----------------------------------------
 
-        score = (
-            WEIGHTS.SIMILARITY * similarity +
-            WEIGHTS.LEXICAL * lex_score +
-            WEIGHTS.TRUST * trust_boost +
-            WEIGHTS.RATING * rating -
-            WEIGHTS.PRICE_PENALTY * price_penalty -
-            acc_penalty -
-            length_penalty +
-            personalization +
-            product_rag_boost +
-            seller_rag_boost +
-            seller_sentiment_signal
-        )
+        # ----------------------------------------
+        # LTR FEATURES & MODEL PREDICTION
+        # ----------------------------------------
+
+        # Inject RAG signals into item for feature extraction
+        item["_rag_product_boost"] = product_rag_boost
+        item["_rag_seller_boost"] = seller_rag_boost
+        item["_rag_sentiment_signal"] = seller_sentiment_signal
+
+        ltr_context = {
+            "avg_price": avg_price,
+            "std_price": std_price
+        }
+        
+        features = extract_ltr_features(query, item, context=ltr_context)
+        
+        # Use LTR model if available, else it will use legacy weights inside predict()
+        score = _ltr_model.predict(features)
+
+        # Apply personalization (if not already learned/included in LTR)
+        # For now, we keep it as a separate boost to ensure it works even with 
+        # a model that might not have seen enough "favorite brand" examples.
+        score += personalization
 
         item["_rerank_score"] = round(float(score), 4)
         item["_rag_product_boost"] = round(float(product_rag_boost), 4)

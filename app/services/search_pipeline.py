@@ -24,6 +24,7 @@ from app.services.trust import compute_trust_score
 from app.services.user_profiling import update_user_profile
 from app.services.ebay_metadata import get_return_policies
 from app.services.nlp_ner import extract_attributes_batch
+from app.services.rag.qdrant_store import index_search_items
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +301,56 @@ def _apply_final_ranking(
     items.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
 
 
+def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict]) -> List[Dict]:
+    """
+    Merges live results from eBay with historical results from Global Memory (Qdrant).
+    Uses a simplified RRF (Reciprocal Rank Fusion) logic.
+    """
+    merged_map: Dict[str, Dict] = {}
+    
+    # 1. Process Memory results (historical)
+    for i, item in enumerate(memory_items):
+        eid = item.get("ebay_id")
+        if not eid: continue
+        item["_source_memory"] = True
+        item["_memory_rank"] = i + 1
+        merged_map[eid] = item
+        
+    # 2. Process eBay results (live)
+    for i, item in enumerate(ebay_items):
+        eid = item.get("ebay_id")
+        if not eid: continue
+        
+        if eid in merged_map:
+            # Item found in both! Give a strong relevance bonus
+            existing = merged_map[eid]
+            existing["_source_ebay"] = True
+            existing["_ebay_rank"] = i + 1
+            existing["_hybrid_bonus"] = 0.15 # Strong signal
+            # Update with live price/rating if newer
+            existing["price"] = item.get("price") or existing.get("price")
+            existing["seller_rating"] = item.get("seller_rating") or existing.get("seller_rating")
+        else:
+            item["_source_ebay"] = True
+            item["_ebay_rank"] = i + 1
+            merged_map[eid] = item
+            
+    # Convert back to list
+    final_list = list(merged_map.values())
+    
+    # Sort by a combination of original ranks and hybrid bonus
+    def sort_key(x):
+        # Lower is better for ranks, higher is better for bonus
+        ebay_r = x.get("_ebay_rank", 100)
+        mem_r = x.get("_memory_rank", 100)
+        bonus = x.get("_hybrid_bonus", 0)
+        # Final weight: prefer eBay top results, but boost those found in memory
+        return (1.0 / (ebay_r + 10)) + (0.5 / (mem_r + 10)) + bonus
+
+    final_list.sort(key=sort_key, reverse=True)
+    return final_list
+
+
 async def run_search_pipeline(
     query: str,
     db: Session,
@@ -310,12 +361,19 @@ async def run_search_pipeline(
     if not query or not query.strip():
         raise ValueError("Query vuota")
 
-    llm_engine = _normalize_llm_engine(llm_engine)
+    logger.info("PIPELINE START for query: '%s'", query)
     t0 = time.time()
-    timings: Dict[str, float] = {}
+    timings = {}
 
     # ============================================================
-    # 1) PARSE QUERY
+    # 0) FETCH FROM GLOBAL MEMORY (PHANTOM STEP)
+    # ============================================================
+    logger.info("PIPELINE STEP 0: global_memory_fetch")
+    t = time.time()
+    memory_items_task = asyncio.create_task(asyncio.to_thread(retrieve_context, query, k=15, doc_type="product"))
+    
+    # ============================================================
+    # 1) PARSE & EBAY SEARCH
     # ============================================================
 
     logger.info("PIPELINE STEP 1: parse_query")
@@ -347,14 +405,6 @@ async def run_search_pipeline(
     logger.info("PIPELINE: Parallel Search & RAG")
     t = time.time()
 
-    async def _do_ebay_search(parsed_query, limit):
-        try:
-            results = await search_items(parsed_query, limit=limit)
-            return results
-        except Exception as e:
-            logger.error(f"eBay search failed: {e}")
-            return {"itemSummaries": [], "aspectDistributions": []}
-
     async def _do_rag():
         try:
             expanded = await expand_query(query)
@@ -366,7 +416,7 @@ async def run_search_pipeline(
 
     # Run heavy I/O in parallel
     results = await asyncio.gather(
-        _do_ebay_search(parsed, MAX_RESULTS_FROM_EBAY),
+        search_items(parsed, limit=MAX_RESULTS_FROM_EBAY),
         _do_rag()
     )
     items = results[0].get("itemSummaries", []) if isinstance(results[0], dict) else []
@@ -375,6 +425,17 @@ async def run_search_pipeline(
     expanded_query, rag_docs = results[1]
     
     timings["parallel_io_s"] = round(time.time() - t, 3)
+
+    # 1.5) MERGE WITH GLOBAL MEMORY
+    try:
+        memory_items = await memory_items_task
+        if memory_items:
+            logger.info("Merging %d items from Global Memory", len(memory_items))
+            items = _merge_hybrid_results(items, memory_items)
+            timings["memory_hit"] = True
+    except Exception as e:
+        logger.warning("Memory fetch failed: %s", e)
+
     items = _dedupe_items(items) if items else []
 
     # ============================================================
@@ -539,6 +600,13 @@ async def run_search_pipeline(
     except Exception:
         db.rollback()
         logger.warning("DB commit failed; transaction rolled back")
+
+    # ============================================================
+    # 11) PERSIST TO GLOBAL MEMORY (ASYNC)
+    # ============================================================
+    if results_out:
+        # Index in background to not block response
+        asyncio.create_task(asyncio.to_thread(index_search_items, results_out[:15]))
 
     timings["total_s"] = round(time.time() - t0, 3)
 
