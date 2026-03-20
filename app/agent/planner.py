@@ -79,8 +79,8 @@ METADATA_CUES = {
 }
 MARKET_CUES = {
     "trend", "trends", "mercato", "analisi", "statistica", "andamento", "storico",
-    "serpapi", "google", "prezzo medio", "prezzi medi", "interesse", "popolarità", "popolarita",
-    "statistiche", "andamento prezzi", "prezzi online"
+    "serpapi", "google", "prezzo", "medio", "prezzi", "medi", "interesse", "popolarità", "popolarita",
+    "statistiche", "andamento prezzi", "prezzi online", "interesse di ricerca", "popolarità online"
 }
 
 PERSONAL_PRONOUNS = {
@@ -737,9 +737,12 @@ class ReactPlanner:
         market_hits = len(token_set & MARKET_CUES)
         if market_hits:
             # Punteggio molto alto per segnali di mercato
-            ev.add("market_trends", min(0.60 + 0.20 * market_hits, 0.95), "market_lexicon")
-            # Riduciamo l'implicazione di prodotto per evitare che search vinca per errore
-            ev.add("product", 0.1, "market_implies_product_low")
+            # Se abbiamo molte hit di mercato (es. "trend di mercato", "andamento prezzi"), deve vincere.
+            ev.add("market_trends", min(0.70 + 0.15 * market_hits, 0.98), "market_lexicon")
+            # Se c'è un forte segnale di mercato, riduciamo l'impatto dei segnali di prodotto
+            # per evitare che "search" vinca solo perché l'utente ha descritto bene l'oggetto.
+            ev.product = max(0.0, ev.product - 0.3)
+            ev.add("product", 0.05, "market_implies_product_minimal")
 
         attribute_hits = len(token_set & ATTRIBUTE_CUES)
         if attribute_hits:
