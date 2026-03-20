@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Box, Button, Collapse, Link, Typography } from "@mui/material"
+import { Box, Button, Collapse, Link, Typography, Chip } from "@mui/material"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
@@ -96,6 +97,10 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
   const ragPreviews = Array.isArray(item.rag_feedback)
     ? item.rag_feedback.map((fb) => fb?.comment || "").filter(Boolean).slice(0, 2)
     : []
+
+  // Extract specs from NER
+  const specs = item.ner_attributes?.specs || {};
+  const hasNer = !!(item.ner_attributes?.brand || item.ner_attributes?.model || Object.keys(specs).length > 0);
 
   return (
     <Box
@@ -196,6 +201,39 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             <OpenInNewIcon sx={{ fontSize: 13, color: "#9ca3af", flexShrink: 0, mt: 0.4 }} />
           )}
         </Box>
+
+        {/* ── NER Technical Attributes Row ────────────────────────────────── */}
+        {hasNer && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.75 }}>
+                {(item.ner_attributes?.brand || item.ner_attributes?.model) && (
+                    <Box 
+                        sx={{ 
+                            px: 1, py: 0.25, borderRadius: '4px', bgcolor: '#f1f5f9', border: '1px solid #e2e8f0',
+                            display: 'flex', alignItems: 'center', gap: 0.5
+                        }}
+                    >
+                        <SettingsSuggestIcon sx={{ fontSize: 12, color: '#64748b' }} />
+                        <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                            {item.ner_attributes?.brand} {item.ner_attributes?.model}
+                        </Typography>
+                    </Box>
+                )}
+                {Object.entries(specs).map(([key, value]) => (
+                    value && (
+                        <Chip 
+                            key={key}
+                            label={`${key}: ${value}`}
+                            size="small" 
+                            variant="outlined"
+                            sx={{ 
+                                height: 20, fontSize: 10, fontWeight: 600, color: '#6b7280', borderColor: '#f3f4f6', bgcolor: '#fafafa',
+                                '& .MuiChip-label': { px: 1 }
+                            }} 
+                        />
+                    )
+                ))}
+            </Box>
+        )}
 
         {/* ── Meta row: price · condition · pills ───────────────────────── */}
         <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 0.75 }}>

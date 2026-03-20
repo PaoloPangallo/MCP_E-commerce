@@ -16,6 +16,12 @@ export interface SearchItem {
   ranking_score?: number
   explanations?: string[]
   rag_feedback?: Feedback[]
+  ner_attributes?: {
+    brand?: string | null
+    model?: string | null
+    specs?: Record<string, any> | null
+    category?: string | null
+  }
   _already_in_db?: boolean
   _scores?: {
     overall?: number

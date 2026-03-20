@@ -23,6 +23,7 @@ from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
 from app.services.user_profiling import update_user_profile
 from app.services.ebay_metadata import get_return_policies
+from app.services.nlp_ner import extract_attributes_batch
 
 logger = logging.getLogger(__name__)
 
@@ -436,6 +437,23 @@ async def run_search_pipeline(
         except Exception:
             logger.warning("Rerank failed, keeping original order")
     timings["rerank_s"] = round(time.time() - t, 3)
+
+    # ============================================================
+    # 5.5) NER ATTRIBUTE EXTRACTION
+    # ============================================================
+    logger.info("PIPELINE STEP 6.5: ner_extraction")
+    t = time.time()
+    if items:
+        # Extract attributes for top 10 items only for performance
+        top_n = 10
+        top_titles = [it.get("title", "") for it in items[:top_n]]
+        try:
+            ner_results = await extract_attributes_batch(top_titles)
+            for it, ner in zip(items[:top_n], ner_results):
+                it["ner_attributes"] = ner
+        except Exception as e:
+            logger.warning("NER extraction skipped: %s", e)
+    timings["ner_extraction_s"] = round(time.time() - t, 3)
 
     # ============================================================
     # 6) DB PERSIST
