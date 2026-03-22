@@ -35,18 +35,33 @@ function humanizeToolName(action?: string, input?: any) {
   const seller = input?.seller_name || ""
 
   switch (val) {
+    case "search_products":
+      return q ? `Cerco "${q}" su eBay` : "Ricerca prodotti"
+    case "compare_products":
+      return q ? `Confronto "${q}"` : "Confronto prodotti"
+    case "profile_query":
+      return "Ricerca potenziata da Profilo"
+    case "analyze_seller":
+      return seller ? `Analizzo venditore ${seller}` : "Analisi venditore"
+    case "get_item_details":
+      return "Estrazione dettagli oggetto"
+    case "get_similar_items":
+      return "Ricerca oggetti simili"
+    case "get_shipping_costs":
+      return "Calcolo spedizione"
+    case "get_marketplace_metadata":
+      return "Ricerca metadati marketplace"
+    case "conversation":
+      return "Azione conversazionale"
+    case "finish":
+      return "Sintesi risultati"
+    // Legacy fallbacks
     case "search_pipeline":
       return q ? `Cerco "${q}" su eBay` : "Ricerca prodotti"
     case "seller_pipeline":
       return seller ? `Analizzo ${seller}` : "Analisi venditore"
-    case "weather_tool":
-      return "Condizioni meteo"
     case "price_history_tool":
       return "Storico prezzi"
-    case "shipping_tool":
-      return "Calcolo spedizione"
-    case "finish":
-      return "Sintesi risultati"
     default:
       return action || "Elaborazione"
   }
@@ -55,14 +70,13 @@ function humanizeToolName(action?: string, input?: any) {
 function getActionIcon(action?: string) {
   const val = (action || "").toLowerCase()
   const sx = { fontSize: 13, color: "inherit" }
-  switch (val) {
-    case "search_pipeline":     return <SearchIcon sx={sx} />
-    case "seller_pipeline":     return <StorefrontIcon sx={sx} />
-    case "weather_tool":        return <CloudOutlinedIcon sx={sx} />
-    case "price_history_tool":  return <InsightsOutlinedIcon sx={sx} />
-    case "finish":              return <CheckCircleOutlineIcon sx={sx} />
-    default:                    return <BuildCircleOutlinedIcon sx={sx} />
-  }
+  
+  if (val.includes("search") || val.includes("profile") || val.includes("similar")) return <SearchIcon sx={sx} />
+  if (val.includes("seller")) return <StorefrontIcon sx={sx} />
+  if (val.includes("shipping")) return <CloudOutlinedIcon sx={sx} />
+  if (val.includes("metadata") || val.includes("compare")) return <InsightsOutlinedIcon sx={sx} />
+  if (val === "finish") return <CheckCircleOutlineIcon sx={sx} />
+  return <BuildCircleOutlinedIcon sx={sx} />
 }
 
 function StepRow({

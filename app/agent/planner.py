@@ -170,8 +170,10 @@ class ReactPlanner:
     - aggiungiamo uno strato state-based prima del routing più astratto
     """
 
-    def __init__(self, llm_engine: str = "gemini"):
+    def __init__(self, llm_engine: str = "gemini", mcp_client: Optional[Any] = None):
         self.llm_engine = (llm_engine or "gemini").strip().lower()
+        self.mcp_client = mcp_client
+        self._cached_mcp_catalog: Optional[Dict[str, Any]] = None
         self.max_calls_per_tool = 2
         self.intent_threshold = 0.55
         self.margin_threshold = 0.18
@@ -380,12 +382,25 @@ class ReactPlanner:
         if self.llm_engine == "rule_based":
             return None
 
+        # DYMANIC MCP CATALOG FETCH
+        if self.mcp_client and self.mcp_client.is_available:
+            try:
+                tool_catalog = await self.mcp_client.get_tool_schemas_async()
+                self._cached_mcp_catalog = tool_catalog
+            except Exception as e:
+                logger.warning("Failed to fetch dynamic MCP catalog: %s", e)
+                tool_catalog = get_tool_catalog()
+                self._cached_mcp_catalog = None
+        else:
+            tool_catalog = get_tool_catalog()
+            self._cached_mcp_catalog = None
+
         prompt = build_planner_prompt(
             user_query=memory.user_query,
             scratchpad=memory.scratchpad(),
             step_index=step_index,
             max_steps=max_steps,
-            tool_catalog=get_tool_catalog(),
+            tool_catalog=tool_catalog,
             custom_instructions=custom_instructions
         )
 
@@ -408,7 +423,20 @@ class ReactPlanner:
                 action_input = data.get("action_input") or data.get("parameters")
 
                 if action and action not in {"finish", "stop"}:
-                    if action not in TOOLS:
+                    # VALIDATION CHECK AGAINST DYNAMIC OR STATIC CATALOG
+                    valid = False
+                    if self.mcp_client and self.mcp_client.is_available and self._cached_mcp_catalog is not None:
+                        if action in self._cached_mcp_catalog:
+                           valid = True
+                        else:
+                           # Fallback search in static TOOLS list
+                           if action in TOOLS:
+                               valid = True
+                    else:
+                        if action in TOOLS:
+                            valid = True
+
+                    if not valid:
                         logger.warning("LLM hallucinated invalid tool: %s. Falling back.", action)
                         return None
 
@@ -445,9 +473,7 @@ class ReactPlanner:
                 intent=intent,
             )
 
-        if action not in TOOLS:
-            logger.warning("Planner selected invalid tool=%r.", action)
-            return None
+        # Redundant check removed as it's now handled above during parsing
 
         if self._exceeds_tool_budget(memory, action):
             logger.warning("Planner selected tool=%s but budget is exhausted.", action)
@@ -528,6 +554,11 @@ class ReactPlanner:
             action_input: Dict[str, Any],
             memory: AgentMemory,
     ) -> Optional[Dict[str, Any]]:
+        # If we have an MCP catalog and the tool is dynamically found,
+        # we bypass local python normalization because FastMCP handles it on the server side!
+        if getattr(self, "_cached_mcp_catalog", None) and action in self._cached_mcp_catalog:
+            return action_input
+
         spec = get_tool_spec(action)
         if spec is None:
             return None

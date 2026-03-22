@@ -161,7 +161,10 @@ class EbayReactAgent:
         except Exception as exc:
             logger.warning("Unable to load tasks into memory: %s", exc)
 
-        planner = ReactPlanner(llm_engine=request.llm_engine)
+        planner = ReactPlanner(
+            llm_engine=request.llm_engine,
+            mcp_client=self.mcp_client,
+        )
 
         executor = ToolExecutor(
             context=ToolContext(
@@ -186,6 +189,63 @@ class EbayReactAgent:
         ).model_dump()
 
         async with self.mcp_client:
+            if self.mcp_client.is_available:
+                yield ThinkingEvent(
+                    step=0,
+                    message="🔄 Sincronizzazione Protocollo MCP in corso..."
+                ).model_dump()
+
+            # ---> MCP RESOURCE FETCH: PROFILO UTENTE DINAMICO <---
+            user_id = getattr(self.user, "id", None)
+            if self.mcp_client.is_available and user_id:
+                profile_uri = f"profile://{user_id}"
+                raw_profile = await self.mcp_client.read_resource_async(profile_uri)
+                if raw_profile:
+                    try:
+                        import json
+                        prof_data = json.loads(raw_profile).get("profile", {})
+                        if prof_data:
+                            addons = []
+                            if prof_data.get("language"):
+                                addons.append(f"Rispondi sempre all'utente nella lingua '{prof_data['language']}'")
+                            if prof_data.get("favorite_brands"):
+                                addons.append(f"L'utente preferisce questi brand: {prof_data['favorite_brands']}")
+                            if prof_data.get("price_preference"):
+                                addons.append(f"Note sul budget dell'utente: {prof_data['price_preference']}")
+                            
+                            if addons:
+                                extra = " ".join(addons)
+                                current = getattr(self.user, "custom_instructions", "") or ""
+                                # Inject dynamic instructions into user object
+                                setattr(self.user, "custom_instructions", current + " | [MCP PROFILE] " + extra if current else "[MCP PROFILE] " + extra)
+                                logger.info("Injected MCP Profile instructions: %s", extra)
+                                
+                                yield ThinkingEvent(
+                                    step=0,
+                                    message=f"📥 Profilo Utente MCP acquisito (Brand, Budget, Lingua in memory)."
+                                ).model_dump()
+                    except Exception as exc:
+                        logger.warning("Failed to parse MCP profile resource: %s", exc)
+
+            # ---> MCP PROMPT FETCH: SHOPPING EXPERT <---
+            if self.mcp_client.is_available:
+                expert_prompt = await self.mcp_client.get_prompt_async("shopping_expert_prompt")
+                if expert_prompt:
+                    # Se non c'è user in sessione, creiamo un mock object per ospitare le info
+                    if not self.user:
+                        class MockUser: pass
+                        self.user = MockUser()
+                    
+                    current = getattr(self.user, "custom_instructions", "") or ""
+                    # Iniettiamo l'identità MCP in cima alle allocazioni
+                    setattr(self.user, "custom_instructions", expert_prompt + "\n\n" + current if current else expert_prompt)
+                    logger.info("Injected MCP Identity Prompt.")
+                    
+                    yield ThinkingEvent(
+                        step=0,
+                        message="🧠 Identità MCP (shopping_expert_prompt) attivata con successo."
+                    ).model_dump()
+
             for step_index in range(1, max_steps + 1):
                 try:
                     decision = await planner.decide(

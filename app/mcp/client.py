@@ -93,6 +93,20 @@ class MCPToolClient:
         tools = await self._session.list_tools()
         return [tool.name for tool in tools.tools]
 
+    async def get_tool_schemas_async(self) -> Dict[str, Dict[str, Any]]:
+        self._ensure_ready()
+        logger.info("MCP client get_tool_schemas_async | server=%s", self.server_url)
+        tools = await self._session.list_tools()
+        
+        catalog = {}
+        for tool in tools.tools:
+            catalog[tool.name] = {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": getattr(tool, "inputSchema", {}) or {},
+            }
+        return catalog
+
     async def call_tool_async(
         self,
         tool_name: str,
@@ -142,3 +156,42 @@ class MCPToolClient:
                  "error": str(exc),
                  "_backend": "mcp"
              }
+
+    async def read_resource_async(self, uri: str) -> Optional[str]:
+        self._ensure_ready()
+        logger.info("MCP client read_resource_async | server=%s | uri=%s", self.server_url, uri)
+        try:
+            result = await self._session.read_resource(uri)
+            content = getattr(result, "contents", None)
+            if not content:
+                return None
+            
+            parts = []
+            for item in content:
+                text = getattr(item, "text", None)
+                if text is not None:
+                    parts.append(text)
+            return "\n".join(parts).strip() if parts else None
+        except Exception as exc:
+            logger.error("MCP read_resource_async failed | uri=%s | error=%s", uri, exc)
+            return None
+
+    async def get_prompt_async(self, name: str) -> Optional[str]:
+        self._ensure_ready()
+        logger.info("MCP client get_prompt_async | server=%s | prompt=%s", self.server_url, name)
+        try:
+            result = await self._session.get_prompt(name)
+            messages = getattr(result, "messages", None)
+            if not messages:
+                return None
+            
+            # Combine all pieces
+            parts = []
+            for msg in messages:
+                content = getattr(msg, "content", None)
+                if getattr(content, "type", "") == "text":
+                    parts.append(getattr(content, "text", ""))
+            return "\n".join(parts).strip() if parts else None
+        except Exception as exc:
+            logger.error("MCP get_prompt_async failed | prompt=%s | error=%s", name, exc)
+            return None
