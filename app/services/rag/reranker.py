@@ -30,66 +30,23 @@ class RerankWeights:
 
 WEIGHTS = RerankWeights()
 
-# ============================================================
-# LTR MODEL (Learning to Rank)
-# ============================================================
-
-class LtrModel:
-    def __init__(self, model_path: Optional[str] = "app/services/rag/ltr_model.pkl"):
-        # Legacy weights as fallback
-        self.legacy_weights = {
-            "lexical_sim": 0.25,
-            "semantic_sim": 0.35,
-            "trust_score": 0.15,
-            "seller_rating": 0.05,
-            "log_price": -0.02,
-            "has_image": 0.05,
-            "is_new": 0.05,
-            "has_brand": 0.05,
-            "has_model": 0.03,
-            "num_specs": 0.02,
-            "price_z": -0.05,
-            "rag_product_boost": 0.15,
-            "rag_seller_boost": 0.10,
-            "rag_sentiment": 0.05
-        }
-        self.model = None
-        self.feature_names = None
-        
-        # In case the pickle is missing or errors out, relative path might be tricky
-        # depending on where it's run, so we try a few locations.
-        paths_to_try = [model_path, os.path.join(os.getcwd(), model_path)]
-        
-        for p in paths_to_try:
-            if p and os.path.exists(p):
-                try:
-                    import pickle
-                    with open(p, "rb") as f:
-                        payload = pickle.load(f)
-                        self.model = payload["model"]
-                        self.feature_names = payload["feature_names"]
-                        logger.info("LTR model loaded successfully from %s", p)
-                        break
-                except Exception as e:
-                    logger.warning("Failed to load LTR model from %s: %s", p, e)
-
-    def predict(self, features: Dict[str, float]) -> float:
-        if self.model and self.feature_names:
-            try:
-                # Prepare input vector in correct order
-                X = [[features.get(name, 0.0) for name in self.feature_names]]
-                return float(self.model.predict(X)[0])
-            except Exception as e:
-                logger.warning("LTR prediction failed, falling back to legacy: %s", e)
-        
-        # Fallback to linear combination of legacy weights
-        score = 0.0
-        for name, value in features.items():
-            score += value * self.legacy_weights.get(name, 0.0)
-        return score
-
-# Global LTR model instance
-_ltr_model = LtrModel()
+SCORING_WEIGHTS = {
+    "lexical_sim": 0.25,
+    "semantic_sim": 0.35,
+    "trust_score": 0.15,
+    "seller_rating": 0.05,
+    "log_price": -0.02,
+    "has_image": 0.05,
+    "is_new": 0.05,
+    "has_brand": 0.05,
+    "has_model": 0.03,
+    "num_specs": 0.02,
+    "price_z": -0.10,  # Penalize high relative price
+    "rag_product_boost": 0.20,
+    "rag_seller_boost": 0.15,
+    "rag_sentiment": 0.05,
+    "price_match_constraint": 0.30
+}
 
 # ============================================================
 # COSINE SIMILARITY
@@ -314,6 +271,7 @@ def rerank_products(
     user: Optional[object] = None,
     product_docs: Optional[List[Dict]] = None,
     seller_docs: Optional[List[Dict]] = None,
+    constraints: Optional[List[Dict]] = None,
 ) -> List[Dict]:
 
     if not items:
@@ -464,19 +422,33 @@ def rerank_products(
         item["_rag_seller_boost"] = seller_rag_boost
         item["_rag_sentiment_signal"] = seller_sentiment_signal
 
+        # ----------------------------------------
+        # LTR FEATURES & MODEL PREDICTION
+        # ----------------------------------------
+
+        # Inject RAG signals into item for feature extraction
+        item["_rag_product_boost"] = product_rag_boost
+        item["_rag_seller_boost"] = seller_rag_boost
+        item["_rag_sentiment_signal"] = seller_sentiment_signal
+
         ltr_context = {
             "avg_price": avg_price,
-            "std_price": std_price
+            "std_price": std_price,
+            "constraints": constraints
         }
         
         features = extract_ltr_features(query, item, context=ltr_context)
-        
-        # Use LTR model if available, else it will use legacy weights inside predict()
-        score = _ltr_model.predict(features)
 
-        # Apply personalization (if not already learned/included in LTR)
-        # For now, we keep it as a separate boost to ensure it works even with 
-        # a model that might not have seen enough "favorite brand" examples.
+        # ----------------------------------------
+        # WEIGHT-BASED SCORING (Replaces LTR)
+        # ----------------------------------------
+        
+        score = 0.0
+        for feat_name, feat_val in features.items():
+            weight = SCORING_WEIGHTS.get(feat_name, 0.0)
+            score += feat_val * weight
+
+        # Apply personalization (not part of base features)
         score += personalization
 
         item["_rerank_score"] = round(float(score), 4)
@@ -574,7 +546,7 @@ def rerank_products(
         reverse=True
     )
 
-    remainder = ranked[5:]
+    remainder = ranked[10:]
 
     for item in remainder:
         item["_final_score"] = item.get("_rerank_score", 0)

@@ -90,14 +90,22 @@ def _build_deterministic_tasks(query: str) -> List[Dict]:
 
     # Priorità: se è un confronto, usiamo il tool dedicato
     if profile["comparison_signal"] and compare_tool:
-        normalized = _normalize_task(
-            compare_tool,
-            {"queries": query},
-            query=query,
-            explicit_seller=explicit_seller,
-        )
-        if normalized:
-            return [normalized]
+        # Safety check: l'utente deve aver inserito almeno due termini separati da virgola, ' e ', ' con ' o ' vs '
+        # altrimenti è una ricerca singola "per poi confrontare a mano"
+        text_lower = query.lower()
+        has_separators = any(s in text_lower for s in [",", " e ", " con ", " vs ", " versus "])
+        
+        if has_separators:
+            normalized = _normalize_task(
+                compare_tool,
+                {"queries": query},
+                query=query,
+                explicit_seller=explicit_seller,
+            )
+            if normalized:
+                return [normalized]
+        else:
+            logger.info("Comparison signal detected but no separators found. Falling back to search.")
 
     # Nei casi ibridi espliciti vogliamo prima la ricerca, poi il controllo seller.
     if profile["search_signal"] and search_tool:

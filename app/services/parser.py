@@ -1,15 +1,17 @@
 """
-Parser ottimizzato:
-- spaCy lazy load
-- brand vocab lazy load
-- fast path rule-based
-- fuzzy matching solo quando serve
-- LLM opzionale e con timeout controllato
-"""
+services/parser.py — Query parser ottimizzato
+----------------------------------------------
+Responsabilità:
+  - Parsing rule-based (spaCy + regex)
+  - Parsing LLM-enhanced (via app.llm.client — solo Ollama Cloud)
+  - Merge e normalizzazione risultati
 
+NON contiene più:
+  - client HTTP Ollama/Gemini (→ app/llm/client.py)
+  - Vision (→ app/llm/vision.py)
+"""
 from __future__ import annotations
 
-import httpx
 import json
 import logging
 import os
@@ -22,50 +24,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from rapidfuzz import fuzz, process
+
 from app.db.redis import redis_client
-
-# ============================================================
-# LOAD .env
-# ============================================================
-
-try:
-    from dotenv import load_dotenv
-
-    _ROOT = Path(__file__).resolve().parents[2]
-    load_dotenv(dotenv_path=_ROOT / ".env", override=False)
-    load_dotenv(override=False)
-except Exception:
-    pass
+from app.llm.client import call_llm
+from app.utils.collections import dedupe_keep_order
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# CONFIG
-# ============================================================
+# ── Config ───────────────────────────────────────────────────────────────────
 
 SPACY_MODEL = "it_core_news_sm"
-
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
-
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b-q4_K_M")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "45"))
-
-# ---------------- OLLAMA CLOUD / LOCAL ----------------
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
-OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
-OLLAMA_CLOUD_HOST = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com").rstrip("/")
-OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:235b-cloud")
-
-# If API KEY is present, we might want to use the cloud host
-if OLLAMA_API_KEY:
-    OLLAMA_URL = f"{OLLAMA_CLOUD_HOST}/api/chat"
-else:
-    OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/") + "/api/chat"
-
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "12"))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 ENABLE_FUZZY_BRANDS = os.getenv("ENABLE_FUZZY_BRANDS", "true").strip().lower() == "true"
 
@@ -116,14 +84,8 @@ CONDITION_SYNONYMS = {
 }
 
 VAGUE_PRODUCT_TERMS = {
-    "qualcosa",
-    "qualcosa tipo",
-    "cosa",
-    "roba",
-    "un qualcosa",
-    "una cosa",
-    "roba tipo",
-    "prodotto",
+    "qualcosa", "qualcosa tipo", "cosa", "roba",
+    "un qualcosa", "una cosa", "roba tipo", "prodotto",
 }
 
 DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
@@ -182,9 +144,7 @@ EXPLICIT_PRICE_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# ============================================================
-# LAZY LOADERS
-# ============================================================
+# ── Lazy loaders ─────────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=1)
 def get_nlp():
@@ -209,23 +169,15 @@ def load_brand_vocab() -> Tuple[str, ...]:
             logger.warning("brand_vocab.json invalid format")
             return tuple()
 
-        clean = []
-        for b in brands:
-            if isinstance(b, str):
-                b = b.strip()
-                if b:
-                    clean.append(b)
-
+        clean = [b.strip() for b in brands if isinstance(b, str) and b.strip()]
         return tuple(sorted(set(clean)))
 
-    except Exception as e:
-        logger.warning("Failed loading brand vocab: %s", e)
+    except Exception as exc:
+        logger.warning("Failed loading brand vocab: %s", exc)
         return tuple()
 
 
-# ============================================================
-# HELPERS
-# ============================================================
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def empty_result(original_query: str = "") -> Dict[str, Any]:
     result = deepcopy(DEFAULT_RESULT_TEMPLATE)
@@ -249,25 +201,20 @@ def normalize_brand(value: str) -> str:
     raw = (value or "").strip()
     if not raw:
         return raw
-
     lowered = raw.lower()
     if lowered in BRAND_WHITELIST:
         return BRAND_WHITELIST[lowered]
-
     return raw[0].upper() + raw[1:] if len(raw) > 1 else raw.upper()
 
 
 def normalize_float(value: Any) -> Optional[float]:
     if value is None:
         return None
-
     if isinstance(value, (int, float)):
         return float(value)
-
     if isinstance(value, str):
         s = value.strip().lower()
         s = s.replace("€", "").replace("euro", "").strip()
-
         if "," in s and "." in s:
             s = s.replace(".", "").replace(",", ".")
         elif "," in s:
@@ -275,26 +222,11 @@ def normalize_float(value: Any) -> Optional[float]:
         else:
             if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", s):
                 s = s.replace(".", "")
-
         try:
             return float(s)
         except ValueError:
             return None
-
     return None
-
-
-def dedupe_keep_order(items: List[Any]) -> List[Any]:
-    seen = set()
-    out = []
-
-    for item in items:
-        key = item.lower() if isinstance(item, str) else json.dumps(item, sort_keys=True, ensure_ascii=False)
-        if key not in seen:
-            seen.add(key)
-            out.append(item)
-
-    return out
 
 
 def is_vague_product(text: str) -> bool:
@@ -304,20 +236,15 @@ def is_vague_product(text: str) -> bool:
 
 def should_try_llm(query: str) -> bool:
     q = normalize_for_matching(query)
-
-    # Fast path: if query is short and clearly parseable, avoid LLM if not needed
     easy_patterns = [
         r"\b(?:sotto|massimo|entro|tra|da|almeno|minimo|nuovo|usato|ricondizionato)\b",
         r"\b(?:iphone|samsung|xiaomi|ps5|playstation|macbook|lenovo|asus|dyson|bose|jbl)\b",
     ]
-
     hits = sum(1 for p in easy_patterns if re.search(p, q))
     return hits < 2
 
 
-# ============================================================
-# EXTRACTION
-# ============================================================
+# ── Extraction ────────────────────────────────────────────────────────────────
 
 def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
     normalized = normalize_for_matching(text)
@@ -358,19 +285,16 @@ def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
 
 def extract_condition(text: str) -> Optional[str]:
     normalized = normalize_for_matching(text)
-
     for canonical, variants in CONDITION_SYNONYMS.items():
         for variant in variants:
             if re.search(rf"\b{re.escape(variant)}\b", normalized):
                 return canonical
-
     return None
 
 
 def fuzzy_brand_detection(text: str, threshold: int = 88) -> List[str]:
     if not ENABLE_FUZZY_BRANDS:
         return []
-
     vocab = load_brand_vocab()
     if not vocab:
         return []
@@ -379,19 +303,11 @@ def fuzzy_brand_detection(text: str, threshold: int = 88) -> List[str]:
     found = []
 
     for word in words:
-        # Avoid fuzzy matching for very short words to prevent false positives
         if len(word) < 5:
             continue
-
-        match = process.extractOne(
-            word,
-            cast(List[str], list(vocab)),
-            scorer=fuzz.ratio
-        )
-
+        match = process.extractOne(word, cast(List[str], list(vocab)), scorer=fuzz.ratio)
         if match:
             brand, score, _ = match
-            # Higher threshold and stricter length difference for fuzzy matching
             if score >= threshold and abs(len(word) - len(brand)) <= 2:
                 found.append(brand)
 
@@ -407,7 +323,6 @@ def extract_brands(doc, original_text: str) -> List[str]:
         if re.search(rf"\b{re.escape(raw)}\b", text_norm):
             found.append(canonical)
 
-    # only fuzzy if whitelist found nothing
     if not found:
         found.extend(fuzzy_brand_detection(original_text))
 
@@ -427,43 +342,33 @@ def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]
     }
 
     content_tokens: List[str] = []
-    
-    # Scansione lineare di tutti i token rilevanti
+
     for token in doc:
-        # 1. Filtriamo punteggiatura e spazi
         if token.is_punct or token.is_space:
             continue
-
-        # 2. Filtriamo i brand già identificati e le parole vietate
         t_low = token.text.lower()
         if t_low in brand_norm or t_low in forbidden_tokens:
             continue
-
-        # 3. Prendiamo NOUN, PROPN, ADJ e NUM (fondamentali per le specifiche)
         if token.pos_ in {"NOUN", "PROPN", "ADJ", "NUM"}:
             content_tokens.append(token.text)
 
     if not content_tokens:
         return None
 
-    # 4. Pulizia stop words solo se all'inizio o alla fine (es. "un", "con", "di")
     vocab = get_nlp().vocab
     while content_tokens and vocab[content_tokens[0]].is_stop:
         content_tokens.pop(0)
     while content_tokens and vocab[content_tokens[-1]].is_stop:
         content_tokens.pop()
-            
+
     if not content_tokens:
         return None
-        
-    # Uniamo fino a un massimo di 8 token (solitamente un prodotto non è più lungo)
+
     best = " ".join(content_tokens[:8]).strip()
     return None if is_vague_product(best) else best
 
 
-# ============================================================
-# RULE PARSE
-# ============================================================
+# ── Rule-based parse ──────────────────────────────────────────────────────────
 
 def rule_based_parse(query: str) -> Dict[str, Any]:
     normalized = normalize_text(query)
@@ -492,281 +397,12 @@ def rule_based_parse(query: str) -> Dict[str, Any]:
     return result
 
 
-# ============================================================
-# LLM CALLS
-# ============================================================
-
-
-async def call_ollama(
-    prompt: str,
-    *,
-    system_prompt: Optional[str] = None,
-    think: bool = False,
-    stream: bool = False,
-) -> Any:
-    """
-    Wrapper async per Ollama chat API.
-    Se stream=True, restituisce un AsyncGenerator[str, None].
-    Altrimenti restituisce Optional[str].
-    """
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": messages,
-        "stream": stream,
-        "think": think,
-        "options": {
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "num_predict": 4096,
-            "num_ctx": 8192,
-        },
-    }
-
-    headers = {}
-    if OLLAMA_API_KEY:
-        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
-
-    if not stream:
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-                response = await client.post(OLLAMA_URL, json=payload, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-
-            message = data.get("message") or {}
-            content = (message.get("content") or "").strip()
-            thinking = (message.get("thinking") or "").strip()
-
-            if content:
-                return content
-
-            if think and thinking:
-                return await call_ollama(prompt, system_prompt=system_prompt, think=False)
-
-            return None
-        except Exception as e:
-            logger.warning("Ollama async error: %s", e)
-            return None
-    else:
-        # Streaming mode
-        async def _ollama_generator():
-            try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=float(OLLAMA_TIMEOUT))) as client:
-                    async with client.stream("POST", OLLAMA_URL, json=payload, headers=headers) as response:
-                        response.raise_for_status()
-                        async for line in response.aiter_lines():
-                            if not line:
-                                continue
-                            try:
-                                chunk = json.loads(line)
-                                msg = chunk.get("message", {})
-                                content = msg.get("content", "")
-                                if content:
-                                    yield content
-                            except json.JSONDecodeError:
-                                continue
-            except Exception as e:
-                logger.warning("Ollama streaming error: %s", e)
-                yield ""
-
-        return _ollama_generator()
-
-
-async def call_gemini(prompt: str, stream: bool = False) -> Any:
-    if not GEMINI_API_KEY:
-        return None
-
-    method = "streamGenerateContent" if stream else "generateContent"
-    # API key nell'header, NON nella query string (evita leak nei log/proxy)
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:{method}"
-    )
-    headers = {"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-
-    if not stream:
-        try:
-            async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
-                response = await client.post(url, json=payload, headers=headers)
-                if response.status_code != 200:
-                    return None
-                data = response.json()
-                text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text")
-                return text.strip() if text else None
-        except Exception as e:
-            logger.warning("Gemini async error: %s", e)
-            return None
-    else:
-        # Gemini streaming
-        async def _gemini_generator():
-            try:
-                async with httpx.AsyncClient(timeout=float(GEMINI_TIMEOUT)) as client:
-                    async with client.stream("POST", url, json=payload, headers=headers) as response:
-                        response.raise_for_status()
-                        async for line in response.aiter_lines():
-                            if not line:
-                                continue
-                            line = line.strip()
-                            if line.startswith("[") or line.startswith(","):
-                                line = line[1:].strip()
-                            if line.endswith("]"):
-                                line = line[:-1].strip()
-                            if not line:
-                                continue
-                            try:
-                                chunk = json.loads(line)
-                                text = chunk.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                                if text:
-                                    yield text
-                            except json.JSONDecodeError:
-                                continue
-            except Exception as e:
-                logger.warning("Gemini streaming error: %s", e)
-                yield ""
-
-        return _gemini_generator()
-
-
-async def call_ollama_cloud(
-    prompt: str,
-    *,
-    system_prompt: Optional[str] = None,
-    stream: bool = False,
-    images: Optional[List[bytes]] = None,
-    model: Optional[str] = None,
-) -> Any:
-    """
-    Chiama Ollama Cloud (ollama.com) via SDK Python ufficiale.
-    Supporta Multi-modalità (immagini).
-    """
-    if not OLLAMA_API_KEY:
-        logger.warning("OLLAMA_API_KEY non impostata — Ollama Cloud non disponibile")
-        return None
-
-    try:
-        from ollama import AsyncClient
-    except ImportError:
-        logger.error(
-            "Libreria 'ollama' non installata. Esegui: pip install ollama"
-        )
-        return None
-
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    message = {"role": "user", "content": prompt}
-    if images:
-        message["images"] = images
-
-    messages.append(message)
-
-    selected_model = model or OLLAMA_CLOUD_MODEL
-    client = AsyncClient(
-        host=OLLAMA_CLOUD_HOST,
-        headers={"Authorization": f"Bearer {OLLAMA_API_KEY}"},
-    )
-
-    if not stream:
-        try:
-            response = await client.chat(
-                model=selected_model,
-                messages=messages,
-                options={"num_predict": 4096},
-            )
-            content = (response.message.content or "").strip()
-            return content if content else None
-        except Exception as e:
-            logger.warning("Ollama Cloud error: %s", e)
-            return None
-    else:
-        async def _ollama_cloud_generator():
-            try:
-                async for part in await client.chat(
-                    model=selected_model,
-                    messages=messages,
-                    stream=True,
-                    options={"num_predict": 4096},
-                ):
-                    content = part.message.content
-                    if content:
-                        yield content
-            except Exception as e:
-                logger.warning("Ollama Cloud streaming error: %s", e)
-                yield ""
-
-        return _ollama_cloud_generator()
-
-
-async def call_llm(prompt: str) -> Tuple[Optional[str], str]:
-    primary = LLM_PROVIDER
-    fallback = LLM_FALLBACK_PROVIDER
-
-    # Auto-upgrade ollama to ollama_cloud if API key exists
-    if primary == "ollama" and OLLAMA_API_KEY:
-        primary = "ollama_cloud"
-    if fallback == "ollama" and OLLAMA_API_KEY:
-        fallback = "ollama_cloud"
-
-    async def _call(provider: str) -> Optional[str]:
-        if provider == "ollama":
-            return await call_ollama(prompt)
-        if provider == "ollama_cloud":
-            return await call_ollama_cloud(prompt)
-        if provider == "gemini":
-            return await call_gemini(prompt)
-        return None
-
-    out = await _call(primary)
-    if out:
-        return out, primary
-
-    if fallback and fallback != primary:
-        out2 = await _call(fallback)
-        if out2:
-            return out2, fallback
-
-    return None, primary
-
-
-async def describe_image_with_vision(image_b64: str) -> Optional[str]:
-    """Interroga il modello Vision per ottenere una descrizione testuale dell'immagine."""
-    import base64
-    try:
-        # Pulisci header base64 se presente (es. data:image/png;base64,...)
-        if "," in image_b64:
-            image_b64 = image_b64.split(",")[1]
-        
-        image_bytes = base64.b64decode(image_b64)
-        
-        prompt = "Descrivi questo oggetto in modo estremamente dettagliato per una ricerca e-commerce. Indica marca, modello, colore, materiali e ogni dettaglio identificativo visibile. Rispondi solo con la descrizione."
-        
-        description = await call_ollama_cloud(
-            prompt,
-            model=OLLAMA_VISION_MODEL,
-            images=[image_bytes]
-        )
-        
-        if description:
-            logger.info("VISION: Image described as: %s", description[:100] + "...")
-            return description.strip()
-            
-    except Exception as e:
-        logger.error("VISION error: %s", e)
-    
-    return None
-
+# ── JSON helpers ──────────────────────────────────────────────────────────────
 
 def extract_first_json_object(text: str) -> Optional[str]:
     start = text.find("{")
     if start == -1:
         return None
-
     depth = 0
     for i in range(start, len(text)):
         ch = text[i]
@@ -776,26 +412,20 @@ def extract_first_json_object(text: str) -> Optional[str]:
             depth -= 1
             if depth == 0:
                 return text[start:i + 1]
-
     return None
 
 
-# ============================================================
-# NORMALIZATION
-# ============================================================
+# ── Normalizers ───────────────────────────────────────────────────────────────
 
 def normalize_condition(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
-
     value_norm = str(value).strip().lower()
     if not value_norm:
         return None
-
     for canonical, variants in CONDITION_SYNONYMS.items():
         if value_norm == canonical or value_norm in variants:
             return canonical
-
     return value_norm
 
 
@@ -809,19 +439,15 @@ def normalize_price_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if operator == "between":
         if not isinstance(value, list) or len(value) != 2:
             return None
-
         v1 = normalize_float(value[0])
         v2 = normalize_float(value[1])
-
         if v1 is None or v2 is None:
             return None
-
         return {"type": "price", "operator": "between", "value": [min(v1, v2), max(v1, v2)]}
 
     v = normalize_float(value)
     if v is None:
         return None
-
     return {"type": "price", "operator": operator, "value": v}
 
 
@@ -835,7 +461,6 @@ def normalize_condition_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(c, dict):
         return None
-
     ctype = c.get("type")
     if ctype == "price":
         return normalize_price_item(c)
@@ -846,28 +471,22 @@ def normalize_constraint(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         value = c.get("value")
         if name and value:
             return {"type": "aspect", "name": str(name), "value": str(value)}
-
     return None
 
 
 def normalize_preference(p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(p, dict):
         return None
-
     ptype = p.get("type")
-
     if ptype == "price":
         return normalize_price_item(p)
-
     if ptype == "condition":
         return normalize_condition_item(p)
-
     if ptype == "brand":
         val = p.get("value")
         if not isinstance(val, str) or not val.strip():
             return None
         return {"type": "brand", "value": normalize_brand(val)}
-
     return None
 
 
@@ -883,10 +502,7 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
 
     brands = data.get("brands", [])
     if isinstance(brands, list):
-        normalized_brands = []
-        for b in brands:
-            if isinstance(b, str) and b.strip():
-                normalized_brands.append(normalize_brand(b))
+        normalized_brands = [normalize_brand(b) for b in brands if isinstance(b, str) and b.strip()]
         result["brands"] = dedupe_keep_order(normalized_brands)
 
     product = data.get("product")
@@ -907,9 +523,9 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
     if isinstance(preferences, list):
         norm_prefs = []
         for p in preferences:
-            np = normalize_preference(p)
-            if np is not None:
-                norm_prefs.append(np)
+            np_ = normalize_preference(p)
+            if np_ is not None:
+                norm_prefs.append(np_)
         result["preferences"] = dedupe_keep_order(norm_prefs)
 
     compatibilities = data.get("compatibilities", {})
@@ -926,7 +542,6 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
 def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> Dict[str, Any]:
     original_numbers = re.findall(r"\b\d+\b", original_query)
     product = result.get("product")
-
     if not product:
         return result
 
@@ -939,9 +554,7 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
     return result
 
 
-# ============================================================
-# LLM PARSE
-# ============================================================
+# ── LLM parse ─────────────────────────────────────────────────────────────────
 
 async def llm_parse(query: str, context_info: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], str]:
     context_block = ""
@@ -952,9 +565,7 @@ async def llm_parse(query: str, context_info: Optional[str] = None) -> Tuple[Opt
 You are a strict semantic query parser for an e-commerce assistant.
 {context_block}
 Return ONLY valid minified JSON.
-No markdown.
-No explanations.
-No code fences.
+No markdown. No explanations. No code fences.
 
 Schema:
 {{
@@ -969,30 +580,16 @@ Schema:
 Allowed constraint/preference item types:
 
 Price:
-{{
-  "type": "price",
-  "operator": "<=" | ">=" | "between",
-  "value": number OR [min, max]
-}}
+{{"type": "price", "operator": "<=" | ">=" | "between", "value": number OR [min, max]}}
 
 Condition:
-{{
-  "type": "condition",
-  "value": "new" | "used" | "refurbished"
-}}
+{{"type": "condition", "value": "new" | "used" | "refurbished"}}
 
 Optional brand preference:
-{{
-  "type": "brand",
-  "value": "Samsung"
-}}
+{{"type": "brand", "value": "Samsung"}}
 
 Specific attribute/aspect (color, material, storage, size, model_version, etc.):
-{{
-  "type": "aspect",
-  "name": "Color" | "Material" | "Storage" | "Size" | "Model",
-  "value": "Blue" | "Leather" | "256GB" | "42" | "iPhone 13"
-}}
+{{"type": "aspect", "name": "Color" | "Material" | "Storage" | "Size" | "Model", "value": "Blue" | "Leather" | "256GB" | "42" | "iPhone 13"}}
 
 Rules:
 - Put ONLY mandatory requirements in constraints.
@@ -1001,10 +598,7 @@ Rules:
 - Do NOT invent brands or products.
 - IMPORTANT: Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
 - If the user says "cercalo", "trovali", "show me more", etc., the 'product' and 'brands' fields must be populated based on the previous topic found in the context.
-- If the query is "cercalo da 128gb" and the context mentions "iPad M1", you MUST output product="iPad M1" and an aspect constraint for Storage="128GB".
 - Output JSON only.
-- If you see a size like "taglia 43" or "size 43", categorize it as an aspect with name "Size" and value "43".
-- If you see a color like "blue" or "rosa", categorize it as an aspect with name "Color" and value the color name.
 
 Query: {json.dumps(query, ensure_ascii=False)}
 """.strip()
@@ -1030,24 +624,17 @@ Query: {json.dumps(query, ensure_ascii=False)}
     return parsed, used_provider
 
 
-# ============================================================
-# MERGE / CONFIDENCE
-# ============================================================
+# ── Merge / confidence ────────────────────────────────────────────────────────
 
 def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not llm_result:
         semantic_parts = []
-
         if rule_result.get("brands"):
             semantic_parts.extend(rule_result["brands"])
-
         if rule_result.get("product"):
             semantic_parts.append(rule_result["product"])
-
         rule_result["semantic_query"] = (
-            " ".join(semantic_parts)
-            if semantic_parts
-            else rule_result["original_query"]
+            " ".join(semantic_parts) if semantic_parts else rule_result["original_query"]
         )
         return rule_result
 
@@ -1062,8 +649,8 @@ def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, An
     rule_constraints = rule_result.get("constraints", [])
     llm_constraints = llm_result.get("constraints", [])
 
-    llm_price_constraints = [c for c in llm_constraints if c.get("type") == "price"]
-    price_constraints = llm_price_constraints if llm_price_constraints else [c for c in rule_constraints if c.get("type") == "price"]
+    llm_price = [c for c in llm_constraints if c.get("type") == "price"]
+    price_constraints = llm_price if llm_price else [c for c in rule_constraints if c.get("type") == "price"]
 
     llm_condition = next((c for c in llm_constraints if c.get("type") == "condition"), None)
     condition_constraints = [llm_condition] if llm_condition else [c for c in rule_constraints if c.get("type") == "condition"]
@@ -1077,7 +664,6 @@ def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, An
 
 def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> float:
     score = 0.15
-
     if final_result.get("brands"):
         score += 0.15
     if final_result.get("constraints"):
@@ -1088,7 +674,6 @@ def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[s
         score += 0.05
     if llm_result is not None:
         score += 0.10
-
     return round(min(score, 0.95), 2)
 
 
@@ -1102,13 +687,11 @@ def correct_brands_in_text(text: str) -> str:
 
     for w in words:
         w_low = w.lower()
-        
-        # SKIP numeric/postal codes
+
         if re.fullmatch(r"\d+", w):
             corrected.append(w)
             continue
-            
-        # EXACT MATCH check - if it's already a known brand, don't fuzzy replace it
+
         if w_low in BRAND_WHITELIST:
             corrected.append(BRAND_WHITELIST[w_low])
             continue
@@ -1120,12 +703,10 @@ def correct_brands_in_text(text: str) -> str:
         match = process.extractOne(
             w,
             cast(List[str], list(vocab)),
-            scorer=fuzz.token_sort_ratio # Stricter than partial_ratio for full words
+            scorer=fuzz.token_sort_ratio,
         )
-
         if match:
             brand, score, _ = match
-            # Only replace if score is very high and it's not a short word match
             if score >= 92 and abs(len(w) - len(brand)) <= 2:
                 corrected.append(brand)
                 continue
@@ -1135,9 +716,7 @@ def correct_brands_in_text(text: str) -> str:
     return " ".join(corrected)
 
 
-# ============================================================
-# MAIN SERVICE
-# ============================================================
+# ── Main service ──────────────────────────────────────────────────────────────
 
 async def parse_query_service(
     text: str,
@@ -1149,7 +728,6 @@ async def parse_query_service(
     text = normalize_text(text)
     text = correct_brands_in_text(text)
 
-    # Caching check (includes context to avoid collisions)
     cache_key = f"query_parse:{text}:{use_llm}:{context_info or ''}"
     if use_llm:
         cached = redis_client.get_json(cache_key)
@@ -1164,8 +742,7 @@ async def parse_query_service(
     effective_use_llm = use_llm and should_try_llm(text)
 
     if effective_use_llm:
-        parsed_llm, used_provider = await llm_parse(text, context_info=context_info)
-        llm_result = parsed_llm
+        llm_result, used_provider = await llm_parse(text, context_info=context_info)
 
     final = merge_results(rule_result, llm_result)
 
@@ -1179,8 +756,7 @@ async def parse_query_service(
     else:
         final.pop("_meta", None)
 
-    # Cache the result if LLM was used and successful or if rule-based was enough
     if effective_use_llm and llm_result:
-        redis_client.set_json(cache_key, final, ttl_seconds=3600) # 1 hour cache
+        redis_client.set_json(cache_key, final, ttl_seconds=3600)
 
     return final

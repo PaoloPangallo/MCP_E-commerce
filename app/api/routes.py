@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,11 +12,12 @@ from app.db.database import get_db
 from app.services.parser import parse_query_service
 from app.services.search_pipeline import run_search_pipeline
 from app.services.memory_service import clear_session_memory
+from app.config.settings import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_IS_PROD = os.getenv("ENV", "development").strip().lower() in {"production", "prod"}
+_IS_PROD = settings.is_production
 
 
 class SearchRequest(BaseModel):

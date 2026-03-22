@@ -99,9 +99,9 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     seen_tokens_low = set()
     
     raw_query = " ".join(parts)
-    # LOG PER ANALISI PARSER (Richiesta Utente)
-    print(f"\n[PARSER ANALYSIS] EBAY QUERY: {raw_query}\n")
-    logger.info("EBAY QUERY: %s", raw_query)
+    # CRITICAL DEBUG: Vediamo cosa stiamo mandando a eBay
+    # print(f"\n[DEBUG] EBAY SEARCH QUERY: '{raw_query}' (Original fallback: '{fallback_query}')\n")
+    # logger.info("EBAY QUERY: %s", raw_query)
     
     for word in raw_query.split():
         w_low = word.lower()
@@ -301,17 +301,38 @@ def _apply_final_ranking(
     items.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
 
 
-def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict]) -> List[Dict]:
+def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict], query: str = "", parsed: Dict = None) -> List[Dict]:
     """
     Merges live results from eBay with historical results from Global Memory (Qdrant).
     Uses a simplified RRF (Reciprocal Rank Fusion) logic.
     """
+    parsed = parsed or {}
+    product_word = (parsed.get("product") or "").lower()
     merged_map: Dict[str, Dict] = {}
     
     # 1. Process Memory results (historical)
+    q_words = set(re.findall(r"\w+", query.lower())) - {"il", "lo", "la", "i", "gli", "le", "un", "una", "uno", "di", "a", "da", "con"}
+    valid_q_words = [w for w in q_words if len(w) > 2]
+    
     for i, item in enumerate(memory_items):
         eid = item.get("ebay_id")
         if not eid: continue
+        
+        title_low = (item.get("title") or "").lower()
+        
+        # Filtro forte 1: Se abbiamo il "product" target, verifichiamone la base (esclude plurali/suffissi lievi)
+        if product_word and len(product_word) > 3:
+            stem = product_word[:-1]
+            if stem not in title_low:
+                continue
+                
+        # Filtro forte 2: Almeno il 50% delle parole rilevanti della query deve matchare nel titolo
+        if valid_q_words:
+            match_count = sum(1 for w in valid_q_words if w in title_low)
+            required = max(1, len(valid_q_words) // 2)
+            if match_count < required:
+                continue
+
         item["_source_memory"] = True
         item["_memory_rank"] = i + 1
         merged_map[eid] = item
@@ -431,7 +452,7 @@ async def run_search_pipeline(
         memory_items = await memory_items_task
         if memory_items:
             logger.info("Merging %d items from Global Memory", len(memory_items))
-            items = _merge_hybrid_results(items, memory_items)
+            items = _merge_hybrid_results(items, memory_items, query=query, parsed=parsed)
             timings["memory_hit"] = True
     except Exception as e:
         logger.warning("Memory fetch failed: %s", e)
@@ -494,8 +515,10 @@ async def run_search_pipeline(
                 query, items, user=user,
                 product_docs=product_docs,
                 seller_docs=seller_docs,
+                constraints=parsed.get("constraints"),
             )
-        except Exception:
+        except Exception as e:
+            logger.exception("Rerank failed: %s", e)
             logger.warning("Rerank failed, keeping original order")
     timings["rerank_s"] = round(time.time() - t, 3)
 

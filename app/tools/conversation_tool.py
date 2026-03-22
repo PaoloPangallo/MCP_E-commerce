@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Protocol
 
-from app.services.parser import call_gemini, call_ollama
+import app.llm.client as llm_client
 
 
 class ToolContextLike(Protocol):
@@ -25,12 +25,8 @@ def normalize_conversation_arguments(action_input: Dict[str, Any], fallback_quer
 async def _call_conversation_llm(prompt: str, llm_engine: str) -> str:
     engine = _clean_text(llm_engine).lower() or "ollama"
 
-    if engine == "gemini":
-        return _clean_text(await call_gemini(prompt))
-    if engine == "ollama":
-        return _clean_text(await call_ollama(prompt))
-
-    return ""
+    result, _ = await llm_client.call_llm(prompt=prompt, llm_engine=engine)
+    return _clean_text(result) if result else "Non sono riuscito a generare una risposta."
 
 
 def _build_conversation_prompt(

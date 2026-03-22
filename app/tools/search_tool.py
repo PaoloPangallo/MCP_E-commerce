@@ -29,7 +29,7 @@ def clean_search_query(query: str) -> str:
         q,
     )
     q = re.sub(
-        r"(dammi i feedback|analizza il venditore|analizza|controlla il venditore|controlla se vende|verifica se vende|feedback del venditore|controlla|verifica|affidabilità|reputazione|trust|feedback|confronta|compara)",
+        r"(dammi i feedback|analizza il venditore|analizza|controlla il venditore|controlla se vende|verifica se vende|feedback del venditore|controlla|verifica|affidabilità|reputazione|trust|feedback|confronta|compara|mi serve|trovami|cerca|mostrami|fammi|bro|poi|grazie|per favore|qualsiasi)",
         "",
         q,
     )

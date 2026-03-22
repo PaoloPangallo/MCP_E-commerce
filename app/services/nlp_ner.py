@@ -3,7 +3,7 @@ import logging
 import asyncio
 from typing import List, Dict, Any, Optional
 
-from app.services.parser import call_gemini, call_ollama, LLM_PROVIDER
+from app.llm.client import call_llm
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +42,7 @@ async def extract_attributes_batch(titles: List[str]) -> List[Dict[str, Any]]:
     
     # We use the same configuration as parser.py
     try:
-        if LLM_PROVIDER == "gemini":
-            response = await call_gemini(f"{NER_SYSTEM_PROMPT}\n\n{prompt}")
-        else:
-            response = await call_ollama(prompt, system_prompt=NER_SYSTEM_PROMPT)
+        response, _ = await call_llm(prompt, system_prompt=NER_SYSTEM_PROMPT)
 
         if not response:
             return [{} for _ in titles]

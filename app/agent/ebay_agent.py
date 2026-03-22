@@ -26,7 +26,7 @@ from app.agent.schemas import (
 from app.agent.task_decomposer import decompose_query
 from app.agent.tool_registry import ToolContext, analyze_user_query
 from app.mcp.client import MCPToolClient
-from app.services.parser import call_gemini, call_ollama, call_llm
+from app.llm.client import call_ollama_cloud, call_llm_stream
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class EbayReactAgent:
         # 1. Vision Pre-processing (IMMEDIATELY, to enrich query before planning)
         vision_desc_temp = None
         if getattr(request, "image", None):
-            from app.services.parser import describe_image_with_vision
+            from app.llm.vision import describe_image_with_vision
             yield ThinkingEvent(
                 step=0,
                 message="Sto analizzando la tua immagine con Qwen-VL...",
@@ -427,7 +427,12 @@ class EbayReactAgent:
     async def _finalize_comparison_stream(self, memory: AgentMemory, llm_engine: str) -> AsyncGenerator[str, None]:
         """Gestisce la finalizzazione per intent di confronto o dettagli."""
         if self._should_use_llm_for_final(memory, llm_engine):
-            comparison_prompt = f"Basandoti su questi dati:\n{memory.scratchpad()}\n\nRispondi alla domanda utente: {memory.user_query}"
+            comparison_prompt = build_final_answer_prompt(
+                user_query=memory.user_query,
+                scratchpad=memory.scratchpad(),
+                final_data=memory.final_data(),
+                custom_instructions=getattr(self.user, "custom_instructions", None)
+            )
             got_any = False
             async for chunk in self._call_final_llm_stream(comparison_prompt, llm_engine):
                 got_any = True
@@ -500,19 +505,8 @@ class EbayReactAgent:
 
     async def _call_final_llm_stream(self, prompt: str, llm_engine: str) -> AsyncGenerator[str, None]:
         try:
-            if llm_engine == "gemini":
-                gen = await call_gemini(prompt, stream=True)
-                async for chunk in gen:
-                    yield chunk
-            elif llm_engine == "ollama":
-                gen = await call_ollama(prompt, stream=True)
-                async for chunk in gen:
-                    yield chunk
-            elif llm_engine == "ollama_cloud":
-                from app.services.parser import call_ollama_cloud
-                gen = await call_ollama_cloud(prompt, stream=True)
-                async for chunk in gen:
-                    yield chunk
+            async for chunk in call_llm_stream(prompt):
+                yield chunk
         except Exception as exc:
             logger.warning("Final answer streaming LLM failed: %s", exc)
             yield ""
@@ -576,8 +570,14 @@ class EbayReactAgent:
 
         if profile["seller_signal"]:
             return "Per analizzare il venditore mi serve il suo nome esatto."
+            
+        # Nota breve sulle istruzioni se presenti nel fallback rule-based
+        custom = getattr(self.user, "custom_instructions", None)
+        suffix = ""
+        if custom:
+            suffix = "\n\n(Nota: Ho ricevuto le tue istruzioni personalizzate ma ho riscontrato un problema tecnico nel generare una risposta complessa. Ecco i dati grezzi)."
 
-        return "Non ho raccolto abbastanza informazioni per produrre una risposta utile."
+        return "Non ho raccolto abbastanza informazioni per produrre una risposta utile." + suffix
 
     def _build_hybrid_answer(self, memory: AgentMemory) -> str:
         seller_part = self._build_seller_answer(memory)

@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from dotenv import load_dotenv
-
 from app.db.database import SessionLocal
 from app.mcp.server import configure_mcp, mcp
-
-load_dotenv()
 
 configure_mcp(db_factory=SessionLocal)
 

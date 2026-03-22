@@ -48,9 +48,19 @@ def update_user_profile(user: User, parsed: Dict, db: Session) -> bool:
     if brands:
         new_brand = str(brands[0]).strip()
 
-        if new_brand and user.favorite_brands != new_brand:
-            user.favorite_brands = new_brand
-            updated = True
+        if new_brand:
+            current_brands_str = getattr(user, "favorite_brands", "") or ""
+            current_brands = [b.strip() for b in current_brands_str.split(",") if b.strip()]
+            
+            # Put new brand at front, deduplicate, keep 10 max
+            new_list = [new_brand] + [b for b in current_brands if str(b).lower() != new_brand.lower()]
+            new_list = new_list[:10]
+            
+            new_brands_str = ",".join(new_list)
+            
+            if user.favorite_brands != new_brands_str:
+                user.favorite_brands = new_brands_str
+                updated = True
 
     # --------------------------------------------------
     # PRICE PREFERENCE
@@ -63,8 +73,9 @@ def update_user_profile(user: User, parsed: Dict, db: Session) -> bool:
                 user.price_preference = str(price_signal)
                 updated = True
             else:
-                old = int(user.price_preference)
-                new_price = int((old + price_signal) / 2)
+                old = int(float(user.price_preference))
+                # Exponential Moving Average: 80% old history, 20% new signal
+                new_price = int((old * 0.8) + (price_signal * 0.2))
 
                 if str(new_price) != str(user.price_preference):
                     user.price_preference = str(new_price)

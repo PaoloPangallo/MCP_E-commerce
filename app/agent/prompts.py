@@ -274,7 +274,13 @@ def build_planner_prompt(
 
     system_prompt = PLANNER_SYSTEM_PROMPT
     if custom_instructions:
-        system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}"
+        # INIEZIONE AD ALTA PRIORITÀ: Sopra le regole standard del planner
+        system_prompt = (
+            f"### [ISTRUZIONI PERSONALIZZATE UTENTE - PRIORITÀ MASSIMA]\n"
+            f"{custom_instructions}\n"
+            f"### [FINE ISTRUZIONI PERSONALIZZATE]\n\n"
+            f"{PLANNER_SYSTEM_PROMPT}"
+        )
 
     # Estimate token usage to safeguard context window
     current_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(tools_json) + _estimate_tokens(user_query)
@@ -307,7 +313,14 @@ def build_final_answer_prompt(
 
     system_prompt = FINAL_ANSWER_SYSTEM_PROMPT
     if custom_instructions:
-        system_prompt += f"\n\nUSER CUSTOM INSTRUCTIONS (Apply these specifically to your tone/style/content):\n{custom_instructions}"
+        # INIEZIONE AD ALTA PRIORITÀ: Le istruzioni utente devono sovrascrivere il tono di default
+        system_prompt = (
+            f"### [REGOLE DI RISPOSTA UTENTE - PRIORITÀ ASSOLUTA]\n"
+            f"DEVI rispecchiare rigorosamente queste istruzioni nello stile e nel contenuto:\n"
+            f"{custom_instructions}\n"
+            f"### [FINE REGOLE UTENTE]\n\n"
+            f"{FINAL_ANSWER_SYSTEM_PROMPT}"
+        )
         
     pref_str = ""
     # Estrai le preferenze utente dalla long_term_memory nello scratchpad
@@ -316,13 +329,25 @@ def build_final_answer_prompt(
     if ltm:
         prefs = ltm.get("user_preferences") or {}
         pref_parts = []
+        
+        # Preferenze DB (Le più affidabili)
+        db_brands = prefs.get("db_favorite_brands")
+        if db_brands:
+            pref_parts.append(f"Brand preferiti consolidati (DB): {db_brands}")
+            
+        db_price = prefs.get("db_price_preference")
+        if db_price:
+            pref_parts.append(f"Fascia di prezzo abituale (DB): ~{db_price}€")
+
         if prefs.get("favorite_sellers"):
             pref_parts.append(f"Venditori preferiti: {', '.join(str(s) for s in prefs['favorite_sellers'][:3])}")
         if prefs.get("recent_brand_hints"):
-            pref_parts.append(f"Brand/hint recenti: {', '.join(str(b) for b in prefs['recent_brand_hints'][:3])}")
+            pref_parts.append(f"Interessi recenti: {', '.join(str(b) for b in prefs['recent_brand_hints'][:3])}")
+            
         prev = ltm.get("previous_searches") or []
         if prev:
             pref_parts.append(f"Ricerche precedenti: {', '.join(str(q) for q in prev[:3])}")
+            
         if pref_parts:
             pref_str = "\n".join(pref_parts)
 

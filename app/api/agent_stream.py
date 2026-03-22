@@ -180,7 +180,6 @@ async def agent_event_generator(
         yield _sse({"type": "done"})
         return
 
-    db: Optional[Session] = None
     done_sent = False
     
     # Use a queue to decouple agent execution from SSE yielding.
@@ -188,15 +187,15 @@ async def agent_event_generator(
     queue = asyncio.Queue()
 
     async def run_agent():
-        nonlocal db
+        db = None
         try:
             db = SessionLocal()
             agent = EbayReactAgent(db=db, user=user)
             
             logger.info(
-            "Agent created for stream [VER: QUEUE_HBEAT_FIX] | user=%s",
-            getattr(user, "id", None)
-        )
+                "Agent created for stream [VER: QUEUE_HBEAT_FIX] | user=%s",
+                getattr(user, "id", None)
+            )
             agent_request = AgentRequest(
                 query=query,
                 llm_engine=llm_engine,
@@ -214,9 +213,12 @@ async def agent_event_generator(
             logger.exception("Error in background agent task")
             await queue.put({"type": "error", "message": str(e)})
         finally:
-            await queue.put(None) # Sentinel for completion
-            if db:
-                db.close()
+            await queue.put(None)  # Sentinel for completion
+            if db is not None:
+                try:
+                    db.close()
+                except Exception as exc:
+                    logger.warning("Failed to close agent DB session: %s", exc)
 
     # Start agent in background
     agent_task = asyncio.create_task(run_agent())

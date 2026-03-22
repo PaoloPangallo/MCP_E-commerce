@@ -8,24 +8,21 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import httpx
 import urllib.parse
-from dotenv import load_dotenv
-
-load_dotenv()
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-EBAY_CLIENT_ID = os.getenv("EBAY_CLIENT_ID")
-EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
-EBAY_ENV = os.getenv("EBAY_ENV", "sandbox").strip().lower()
-EBAY_MARKETPLACE_ID = os.getenv("EBAY_MARKETPLACE_ID", "EBAY_IT").strip()
+EBAY_CLIENT_ID = settings.EBAY_CLIENT_ID
+EBAY_CLIENT_SECRET = settings.EBAY_CLIENT_SECRET
+EBAY_ENV = settings.EBAY_ENV
+EBAY_MARKETPLACE_ID = settings.EBAY_MARKETPLACE_ID
 
-REQUEST_TIMEOUT = float(os.getenv("EBAY_REQUEST_TIMEOUT", "15")) # Changed to float for httpx client
+REQUEST_TIMEOUT = settings.EBAY_REQUEST_TIMEOUT
+MAX_PAGE_SIZE = min(settings.EBAY_PAGE_SIZE, 200)
+MAX_OFFSET_PAGES = settings.EBAY_MAX_OFFSET_PAGES
 
-MAX_PAGE_SIZE = min(int(os.getenv("EBAY_PAGE_SIZE", "20")), 200)
-MAX_OFFSET_PAGES = int(os.getenv("EBAY_MAX_OFFSET_PAGES", "3"))
-
-APPROX_PRICE_PCT = float(os.getenv("APPROX_PRICE_PCT", "0.2"))
-APPROX_PRICE_MIN_DELTA = float(os.getenv("APPROX_PRICE_MIN_DELTA", "10"))
+APPROX_PRICE_PCT = settings.APPROX_PRICE_PCT
+APPROX_PRICE_MIN_DELTA = settings.APPROX_PRICE_MIN_DELTA
 
 if EBAY_ENV == "production":
     OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
@@ -107,6 +104,15 @@ def _dedupe_keep_order(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # ============================================================
 # OAUTH
 # ============================================================
+
+async def _request_with_retry(client: httpx.AsyncClient, method: str, url: str, headers: Dict[str, str], **kwargs) -> httpx.Response:
+    """Helper che gestisce in automatico il rinnovo del token oauth in caso di HTTP 401."""
+    response = await getattr(client, method)(url, headers=headers, **kwargs)
+    if response.status_code == 401:
+        token = await _get_oauth_token(force_refresh=True)
+        headers["Authorization"] = f"Bearer {token}"
+        response = await getattr(client, method)(url, headers=headers, **kwargs)
+    return response
 
 async def _get_oauth_token(force_refresh: bool = False) -> str:
     global _token_cache
@@ -392,8 +398,10 @@ async def _perform_search_request(
         params["sort"] = sort
 
     try:
-        response = await client.get(
-            SEARCH_URL,
+        response = await _request_with_retry(
+            client=client,
+            method="get",
+            url=SEARCH_URL,
             headers=headers,
             params=params,
             timeout=REQUEST_TIMEOUT,
@@ -404,16 +412,6 @@ async def _perform_search_request(
     except Exception as exc:
         logger.exception("EBAY CONNECTION ERROR")
         raise RuntimeError("EBAY connection error")
-
-    if response.status_code == 401:
-        token = await _get_oauth_token(force_refresh=True)
-        headers["Authorization"] = f"Bearer {token}"
-        response = await client.get(
-            SEARCH_URL,
-            headers=headers,
-            params=params,
-            timeout=REQUEST_TIMEOUT,
-        )
 
     if response.status_code != 200:
         logger.error("EBAY ERROR %s %s", response.status_code, response.text)
@@ -516,11 +514,13 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
 
     client = get_client()
     try:
-        response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if response.status_code == 401:
-            token = await _get_oauth_token(force_refresh=True)
-            headers["Authorization"] = f"Bearer {token}"
-            response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        response = await _request_with_retry(
+            client=client,
+            method="get",
+            url=url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
             
         if response.status_code != 200:
             logger.warning("EBAY GET ITEM ERROR | status=%s | body=%s", response.status_code, response.text)
@@ -582,11 +582,13 @@ async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
 
     client = get_client()
     try:
-        response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if response.status_code == 401:
-            token = await _get_oauth_token(force_refresh=True)
-            headers["Authorization"] = f"Bearer {token}"
-            response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        response = await _request_with_retry(
+            client=client,
+            method="get",
+            url=url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
 
         if response.status_code != 200:
             logger.warning("EBAY GET SIMILAR ITEMS ERROR | status=%s | body=%s", response.status_code, response.text)
@@ -627,11 +629,13 @@ async def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> 
     url = f"{ITEM_URL}{encoded_item_id}"
     client = get_client()
     try:
-        response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if response.status_code == 401:
-            token = await _get_oauth_token(force_refresh=True)
-            headers["Authorization"] = f"Bearer {token}"
-            response = await client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        response = await _request_with_retry(
+            client=client,
+            method="get",
+            url=url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
 
         if response.status_code != 200:
             return None

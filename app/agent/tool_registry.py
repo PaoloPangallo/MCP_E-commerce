@@ -249,13 +249,6 @@ def _normalize_conversation_action_input(action_input: Dict[str, Any], memory: A
     }
 
 
-def _normalize_youtube_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
-    query = action_input.get("query")
-    if not query:
-        # Tenta di recuperare l'ultimo prodotto cercato o la query utente
-        query = getattr(memory, "user_query", "")
-    
-
 
 def _normalize_market_trends_action_input(action_input: Dict[str, Any], memory: Any) -> Dict[str, Any]:
     query = action_input.get("query")

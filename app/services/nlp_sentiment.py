@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from functools import lru_cache
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Optional
 
 import numpy as np
 
@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 from app.services.model_singleton import get_sentence_transformer as _get_model
-from app.services.parser import call_gemini, call_ollama
-
+from app.llm.client import call_llm
 
 
 # ============================================================
@@ -205,6 +204,14 @@ def compute_sentiment_score(
 # LLM SENTIMENT LABEL FOR RAG INGESTION
 # ============================================================
 
+async def _call_llm(prompt: str) -> Optional[str]:
+    try:
+        result, _ = await call_llm(prompt)
+        return result
+    except Exception as exc:
+        logger.warning("Sentiment LLM failed: %s", exc)
+    return None
+
 async def extract_sentiment_label(text: str) -> str:
     """
     Uses LLM (fastest available, e.g. Gemini) to label a single feedback 
@@ -222,10 +229,11 @@ async def extract_sentiment_label(text: str) -> str:
     """
     try:
         # Fallback to Ollama if Gemini is not set/fails, but call_gemini is usually faster
-        res = await call_ollama(prompt)
-        res = res.strip().upper()
-        if "POSITIVE" in res: return "POSITIVE"
-        if "NEGATIVE" in res: return "NEGATIVE"
+        res = await _call_llm(prompt)
+        if res:
+            res = res.strip().upper()
+            if "POSITIVE" in res: return "POSITIVE"
+            if "NEGATIVE" in res: return "NEGATIVE"
         return "NEUTRAL"
     except Exception as e:
         logger.warning(f"Extrac_sentiment LLM failed: {e}")
@@ -235,3 +243,4 @@ async def extract_sentiment_label(text: str) -> str:
         if pos_hits > neg_hits: return "POSITIVE"
         if neg_hits > pos_hits: return "NEGATIVE"
         return "NEUTRAL"
+

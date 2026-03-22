@@ -291,6 +291,11 @@ class MemoryService:
         session_memory = self.load_session_memory(user)
         long_term_memory = self.load_long_term_memory(user)
 
+        # --- SINCRONIZZAZIONE PROFILO UTENTE DB -> MEMORIA LLM ---
+        if user:
+            long_term_memory.user_preferences["db_favorite_brands"] = getattr(user, "favorite_brands", None)
+            long_term_memory.user_preferences["db_price_preference"] = getattr(user, "price_preference", None)
+
         clean_query = sanitize_user_query_for_memory(user_query)
 
         # salviamo in memoria solo testo utente pulito
@@ -309,8 +314,9 @@ class MemoryService:
             session_memory.recent_queries = getattr(last_queries, "val", last_queries) if last_queries else []
             # --------------------------------------------------------------------
 
-            self.save_session_memory(session_memory)
-            self.save_long_term_memory(long_term_memory)
+        # Salviamo sempre per mantenere aggiornato il profilo in Redis
+        self.save_session_memory(session_memory)
+        self.save_long_term_memory(long_term_memory)
 
         return RequestState(
             user_query=str(user_query or "").strip(),

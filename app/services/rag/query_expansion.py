@@ -1,5 +1,5 @@
 import logging
-from app.services.parser import call_ollama
+from app.llm.client import call_llm
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +22,11 @@ async def expand_query(query: str) -> str:
     User query: "{query}"
     """
     try:
-        res = await call_ollama(prompt)
-        if res is None:
+        response, _ = await call_llm(prompt)
+        if not response: # Changed from 'if res is None:' to 'if not response:'
             return query
             
-        expanded = res.strip().replace('"', '').replace('\n', ' ')
+        expanded = response.strip().replace('"', '').replace('\n', ' ') # Changed 'res' to 'response'
         
         # Fallback if the LLM returns something weird or too long
         if len(expanded.split()) > 20 or not expanded:

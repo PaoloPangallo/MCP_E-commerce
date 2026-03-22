@@ -43,12 +43,30 @@ def extract_ltr_features(query: str, item: Dict[str, Any], context: Optional[Dic
     ner = item.get("ner_attributes", {})
     features["has_brand"] = 1.0 if ner.get("brand") else 0.0
     features["has_model"] = 1.0 if ner.get("model") else 0.0
-    features["num_specs"] = float(len(ner.get("specs", {})))
+    features["num_specs"] = float(len(ner.get("specs") or {}))
 
     # 6. RAG signals (pre-computed in search/rerank)
     features["rag_product_boost"] = float(item.get("_rag_product_boost", 0.0))
     features["rag_seller_boost"] = float(item.get("_rag_seller_boost", 0.0))
     features["rag_sentiment"] = float(item.get("_rag_sentiment_signal", 0.0))
+
+    # 7. Constraint Matching
+    constraints = context.get("constraints") or []
+    price_match = 1.0 # Default if no constraints
+    for c in constraints:
+        if c.get("type") == "price":
+            op = c.get("operator")
+            val = c.get("value")
+            if op == "between" and isinstance(val, list) and len(val) == 2:
+                if price < val[0] or price > val[1]:
+                    price_match = 0.0
+            elif op == "<=" and val is not None:
+                if price > float(val):
+                    price_match = 0.0
+            elif op == ">=" and val is not None:
+                if price < float(val):
+                    price_match = 0.0
+    features["price_match_constraint"] = price_match
 
     return features
 
@@ -56,5 +74,6 @@ def get_feature_names() -> List[str]:
     return [
         "lexical_sim", "semantic_sim", "trust_score", "seller_rating",
         "log_price", "price_z", "has_image", "is_new", "has_brand",
-        "has_model", "num_specs", "rag_product_boost", "rag_seller_boost", "rag_sentiment"
+        "has_model", "num_specs", "rag_product_boost", "rag_seller_boost", 
+        "rag_sentiment", "price_match_constraint"
     ]

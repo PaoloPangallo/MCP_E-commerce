@@ -5,11 +5,6 @@ import logging
 from typing import Any, Dict, List
 
 import redis
-import faiss
-import numpy as np
-from app.services.model_singleton import get_sentence_transformer
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -59,96 +54,4 @@ def clear_session_memory(user_key: str):
     for key in keys:
         redis_client.delete(key)
 
-
-# ============================================================
-# POSTGRES (LONG TERM MEMORY)
-# ============================================================
-
-def get_user_memory(db: Session, user_key: str) -> Dict[str, Any]:
-
-    rows = db.execute(
-        text("""
-        SELECT key,value
-        FROM user_memory
-        WHERE user_id=:uid
-        """),
-        {"uid": user_key},
-    )
-
-    memory = {}
-
-    for r in rows:
-        try:
-            memory[r.key] = json.loads(r.value)
-        except Exception:
-            memory[r.key] = r.value
-
-    return memory
-
-
-def save_user_memory(db: Session, user_key: str, key: str, value: Any):
-
-    db.execute(
-        text("""
-        INSERT INTO user_memory(user_id,key,value)
-        VALUES(:uid,:k,:v)
-        """),
-        {
-            "uid": user_key,
-            "k": key,
-            "v": json.dumps(value),
-        },
-    )
-
-    db.commit()
-
-
-# ============================================================
-# FAISS (SEMANTIC MEMORY)
-# ============================================================
-
-def _embedding_model():
-    """Return the shared SentenceTransformer singleton."""
-    return get_sentence_transformer()
-
-VECTOR_DIM = 384
-
-faiss_index = faiss.IndexFlatL2(VECTOR_DIM)
-
-semantic_store: List[Dict[str, Any]] = []
-
-
-def add_semantic_memory(text_data: str, metadata: Dict[str, Any]):
-
-    vector = _embedding_model().encode([text_data])[0]
-    vector = np.array([vector]).astype("float32")
-
-    faiss_index.add(vector)
-
-    semantic_store.append(
-        {
-            "text": text_data,
-            "metadata": metadata,
-        }
-    )
-
-
-def search_semantic_memory(query: str, k: int = 5):
-
-    if faiss_index.ntotal == 0:
-        return []
-
-    q_vector = _embedding_model().encode([query])[0]
-    q_vector = np.array([q_vector]).astype("float32")
-
-    distances, indices = faiss_index.search(q_vector, k)
-
-    results = []
-
-    for idx in indices[0]:
-
-        if idx < len(semantic_store):
-
-            results.append(semantic_store[idx])
-
-    return results
+

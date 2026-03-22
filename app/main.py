@@ -12,8 +12,7 @@ from app.api.routes import router as search_router
 from app.api.seller import seller_router
 from app.auth.auth_router import router as auth_router
 from app.db.database import Base, engine
-
-load_dotenv()
+from app.config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,8 +20,7 @@ logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from app.mcp.asgi import app as mcp_app
 
-_ENV = os.getenv("ENV", "development").strip().lower()
-_IS_PROD = _ENV in {"production", "prod"}
+_IS_PROD = settings.is_production
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
@@ -58,7 +56,7 @@ _allowed_origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 ]
-_ngrok_url = os.getenv("NGROK_URL", "").strip()
+_ngrok_url = settings.NGROK_URL
 if _ngrok_url:
     _allowed_origins.append(_ngrok_url)
     logger.info("CORS: Added ngrok origin: %s", _ngrok_url)

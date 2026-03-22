@@ -90,6 +90,18 @@ def _close_db(db: Any) -> None:
             logger.warning("Failed to close DB session: %s", exc)
 
 
+from contextlib import contextmanager
+
+@contextmanager
+def _db_context():
+    """Context manager garantisce la chiusura della sessione DB anche in caso di eccezione."""
+    db = _get_db()
+    try:
+        yield db
+    finally:
+        _close_db(db)
+
+
 def resolve_user_by_id(user_id_str: str) -> Optional[User]:
     """Default user resolver that fetches user from DB by ID string."""
     if not user_id_str:
@@ -221,63 +233,53 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     ),
 )
 async def search_products(query: str, include_shipping: bool = False, session_id: str = "") -> str:
-    db = None
-
     try:
-
         logger.info("MCP TOOL search_products START")
 
-        db = _get_db()
+        with _db_context() as db:
+            context = _build_context(db=db, session_id=session_id)
 
-        context = _build_context(db=db, session_id=session_id)
+            raw = await run_search_pipeline(
+                query=query,
+                db=db,
+                user=context.user,
+                llm_engine=context.llm_engine,
+                session_id=session_id,
+            )
 
-        raw = await run_search_pipeline(
-            query=query,
-            db=db,
-            user=context.user,
-            llm_engine=context.llm_engine,
-            session_id=session_id,
-        )
+            normalized = _normalize_search_output(raw)
 
-        normalized = _normalize_search_output(raw)
+            if include_shipping and normalized.get("top_result"):
+                top_item_id = normalized["top_result"].get("ebay_id")
+                if top_item_id:
+                    try:
+                        logger.info("MCP TOOL search_products - fetching shipping for top item %s", top_item_id)
+                        shipping_raw = await execute_shipping_costs_tool(
+                            {
+                                "item_id": top_item_id,
+                                "country_code": "IT",
+                                "zip_code": "",
+                            },
+                            context,
+                        )
+                        shipping_norm = _normalize_shipping_costs_output(shipping_raw)
+                        normalized["top_result"]["shipping_info"] = shipping_norm.get("data")
+                        normalized["top_result"]["shipping_status"] = shipping_norm.get("status")
+                    except Exception as e:
+                        logger.warning("Auto-shipping fetch failed in search pipeline: %s", e)
 
-        if include_shipping and normalized.get("top_result"):
-            top_item_id = normalized["top_result"].get("ebay_id")
-            if top_item_id:
-                try:
-                    logger.info("MCP TOOL search_products - fetching shipping for top item %s", top_item_id)
-                    shipping_raw = await execute_shipping_costs_tool(
-                        {
-                            "item_id": top_item_id,
-                            "country_code": "IT",
-                            "zip_code": "",
-                        },
-                        context,
-                    )
-                    shipping_norm = _normalize_shipping_costs_output(shipping_raw)
-                    normalized["top_result"]["shipping_info"] = shipping_norm.get("data")
-                    normalized["top_result"]["shipping_status"] = shipping_norm.get("status")
-                except Exception as e:
-                    logger.warning("Auto-shipping fetch failed in search pipeline: %s", e)
+            normalized["_backend"] = "mcp"
 
-        normalized["_backend"] = "mcp"
+            logger.info("MCP TOOL search_products END")
 
-        logger.info("MCP TOOL search_products END")
-
-        return _safe_json(normalized)
+            return _safe_json(normalized)
 
     except Exception as exc:
-
         logger.exception("MCP search_products failed")
-
         return _tool_error(
             query=query,
             error=str(exc)
         )
-
-    finally:
-
-        _close_db(db)
 
 
 @mcp.tool(
@@ -285,22 +287,19 @@ async def search_products(query: str, include_shipping: bool = False, session_id
     description="Analizza un venditore e-commerce usando feedback, trust score e sentiment.",
 )
 async def analyze_seller(seller_name: str, page: int = 1, limit: int = 10, session_id: str = "") -> str:
-    db = None
     try:
-        db = _get_db()
-        raw = await run_seller_pipeline(
-            seller_name=seller_name,
-            page=page,
-            limit=limit,
-        )
-        normalized = _normalize_seller_output(raw)
-        normalized["_backend"] = "mcp"
-        return _safe_json(normalized)
+        with _db_context() as db:
+            raw = await run_seller_pipeline(
+                seller_name=seller_name,
+                page=page,
+                limit=limit,
+            )
+            normalized = _normalize_seller_output(raw)
+            normalized["_backend"] = "mcp"
+            return _safe_json(normalized)
     except Exception as exc:
         logger.exception("MCP analyze_seller failed")
         return _tool_error(seller_name=seller_name, error=str(exc))
-    finally:
-        _close_db(db)
 
 
 @mcp.tool(
@@ -333,25 +332,22 @@ async def profile_query(query: str, session_id: str = "") -> str:
     ),
 )
 async def conversation(query: str, llm_engine: str = "ollama", session_id: str = "") -> str:
-    db = None
     try:
-        db = _get_db()
-        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
-        payload = await execute_conversation_tool({"query": query}, context)
+        with _db_context() as db:
+            context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
+            payload = await execute_conversation_tool({"query": query}, context)
 
-        if not isinstance(payload, dict):
-            payload = {"result": payload}
+            if not isinstance(payload, dict):
+                payload = {"result": payload}
 
-        payload.setdefault("status", "ok")
-        payload["_backend"] = "mcp"
+            payload.setdefault("status", "ok")
+            payload["_backend"] = "mcp"
 
-        return _safe_json(payload)
+            return _safe_json(payload)
 
     except Exception as exc:
         logger.exception("MCP conversation failed")
         return _tool_error(query=query, error=str(exc))
-    finally:
-        _close_db(db)
 
 
 @mcp.tool(
@@ -371,7 +367,6 @@ async def compare_products(queries: str, llm_engine: str = "ollama", session_id:
     """
     from app.services.compare_pipeline import run_compare_pipeline
 
-    db = None
     try:
         # Parse the comma/semicolon-separated query string
         sep_queries = [
@@ -386,26 +381,23 @@ async def compare_products(queries: str, llm_engine: str = "ollama", session_id:
                 example="iphone 13, samsung galaxy s22",
             )
 
-        db = _get_db()
-        context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
+        with _db_context() as db:
+            context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
 
-        logger.info("MCP TOOL compare_products START | queries=%s", queries)
+            logger.info("MCP TOOL compare_products START | queries=%s", queries)
 
-        result = await execute_compare_tool(
-            {"queries": queries},
-            context
-        )
+            result = await execute_compare_tool(
+                {"queries": queries},
+                context
+            )
 
-        result["_backend"] = "mcp"
-        logger.info("MCP TOOL compare_products END")
-        return _safe_json(result)
-
+            result["_backend"] = "mcp"
+            logger.info("MCP TOOL compare_products END")
+            return _safe_json(result)
 
     except Exception as exc:
         logger.exception("MCP compare_products failed")
         return _tool_error(queries=queries, error=str(exc))
-    finally:
-        _close_db(db)
 
 
 @mcp.tool(
@@ -416,26 +408,23 @@ async def compare_products(queries: str, llm_engine: str = "ollama", session_id:
     ),
 )
 async def get_item_details(item_id: str, session_id: str = "") -> str:
-    db = None
     try:
-        db = _get_db()
-        context = _build_context(db=db, session_id=session_id)
-        logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
-        
-        result = await execute_item_details_tool(
-            {"item_id": item_id},
-            context
-        )
-        normalized = _normalize_item_details_output(result)
-        normalized["_backend"] = "mcp"
-        
-        logger.info("MCP TOOL get_item_details END")
-        return _safe_json(normalized)
+        with _db_context() as db:
+            context = _build_context(db=db, session_id=session_id)
+            logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
+            
+            result = await execute_item_details_tool(
+                {"item_id": item_id},
+                context
+            )
+            normalized = _normalize_item_details_output(result)
+            normalized["_backend"] = "mcp"
+            
+            logger.info("MCP TOOL get_item_details END")
+            return _safe_json(normalized)
     except Exception as exc:
         logger.exception("MCP get_item_details failed")
         return _tool_error(item_id=item_id, error=str(exc))
-    finally:
-        _close_db(db)
 
 
 @mcp.tool(
@@ -446,30 +435,27 @@ async def get_item_details(item_id: str, session_id: str = "") -> str:
     ),
 )
 async def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: str = "", session_id: str = "") -> str:
-    db = None
     try:
-        db = _get_db()
-        context = _build_context(db=db, session_id=session_id)
-        logger.info("MCP TOOL get_shipping_costs START | item_id=%s", item_id)
-        
-        result = await execute_shipping_costs_tool(
-            {
-                "item_id": item_id,
-                "country_code": country_code,
-                "zip_code": zip_code,
-            },
-            context
-        )
-        normalized = _normalize_shipping_costs_output(result)
-        normalized["_backend"] = "mcp"
-        
-        logger.info("MCP TOOL get_shipping_costs END")
-        return _safe_json(normalized)
+        with _db_context() as db:
+            context = _build_context(db=db, session_id=session_id)
+            logger.info("MCP TOOL get_shipping_costs START | item_id=%s", item_id)
+            
+            result = await execute_shipping_costs_tool(
+                {
+                    "item_id": item_id,
+                    "country_code": country_code,
+                    "zip_code": zip_code,
+                },
+                context
+            )
+            normalized = _normalize_shipping_costs_output(result)
+            normalized["_backend"] = "mcp"
+            
+            logger.info("MCP TOOL get_shipping_costs END")
+            return _safe_json(normalized)
     except Exception as exc:
         logger.exception("MCP get_shipping_costs failed")
         return _tool_error(item_id=item_id, error=str(exc))
-    finally:
-        _close_db(db)
 
 
 @mcp.tool(
@@ -479,26 +465,23 @@ async def get_shipping_costs(item_id: str, country_code: str = "IT", zip_code: s
     )
 )
 async def get_similar_items(item_id: str, session_id: str = "") -> str:
-    db = None
     try:
-        db = _get_db()
-        context = _build_context(db=db, session_id=session_id)
-        logger.info("MCP TOOL get_similar_items START | item_id=%s", item_id)
-        
-        result = await execute_similar_items_tool(
-            {"item_id": item_id},
-            context
-        )
-        normalized = _normalize_similar_items_output(result)
-        normalized["_backend"] = "mcp"
-        
-        logger.info("MCP TOOL get_similar_items END")
-        return _safe_json(normalized)
+        with _db_context() as db:
+            context = _build_context(db=db, session_id=session_id)
+            logger.info("MCP TOOL get_similar_items START | item_id=%s", item_id)
+            
+            result = await execute_similar_items_tool(
+                {"item_id": item_id},
+                context
+            )
+            normalized = _normalize_similar_items_output(result)
+            normalized["_backend"] = "mcp"
+            
+            logger.info("MCP TOOL get_similar_items END")
+            return _safe_json(normalized)
     except Exception as exc:
         logger.exception("MCP get_similar_items failed")
         return _tool_error(item_id=item_id, error=str(exc))
-    finally:
-        _close_db(db)
 
 @mcp.tool(
     name="get_marketplace_metadata",
@@ -509,30 +492,27 @@ async def get_similar_items(item_id: str, session_id: str = "") -> str:
     )
 )
 async def get_marketplace_metadata(policy_type: str = "item_conditions", marketplace_id: str = "", category_id: str = "", session_id: str = "") -> str:
-    db = None
     try:
-        db = _get_db()
-        context = _build_context(db=db, session_id=session_id)
-        logger.info("MCP TOOL get_marketplace_metadata START | policy_type=%s", policy_type)
-        
-        result = await execute_metadata_tool(
-            {
-                "policy_type": policy_type,
-                "marketplace_id": marketplace_id,
-                "category_id": category_id or None,
-            },
-            context
-        )
-        
-        result["_backend"] = "mcp"
-        
-        logger.info("MCP TOOL get_marketplace_metadata END")
-        return _safe_json(result)
+        with _db_context() as db:
+            context = _build_context(db=db, session_id=session_id)
+            logger.info("MCP TOOL get_marketplace_metadata START | policy_type=%s", policy_type)
+            
+            result = await execute_metadata_tool(
+                {
+                    "policy_type": policy_type,
+                    "marketplace_id": marketplace_id,
+                    "category_id": category_id or None,
+                },
+                context
+            )
+            
+            result["_backend"] = "mcp"
+            
+            logger.info("MCP TOOL get_marketplace_metadata END")
+            return _safe_json(result)
     except Exception as exc:
         logger.exception("MCP get_marketplace_metadata failed")
         return _tool_error(policy_type=policy_type, error=str(exc))
-    finally:
-        _close_db(db)
 
 # ============================================================
 # MCP RESOURCES
