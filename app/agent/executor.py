@@ -198,6 +198,14 @@ class ToolExecutor:
                 assert self.mcp_client is not None  # noqa: S101 – controllato da _should_use_mcp
                 if self.mcp_client is None:
                     raise RuntimeError("MCP client is None nonostante _should_use_mcp() == True")
+                if tool_call.tool == "inspect_mcp_resource":
+                    uri = tool_call.input.get("uri")
+                    logger.info("ToolExecutor reading MCP RESOURCE | uri=%s", uri)
+                    raw_data = await self.mcp_client.read_resource_async(uri)
+                    result = {"status": "ok", "uri": uri, "resource_content": raw_data}
+                    result.setdefault("_backend", "mcp")
+                    return result
+
                 result = await self.mcp_client.call_tool_async(tool_call.tool, tool_call.input)
                 result = self._normalize_result_payload(result)
                 result.setdefault("_backend", "mcp")

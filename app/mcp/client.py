@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 try:
-    from mcp import ClientSession
+    from mcp.client.session import ClientSession
     from mcp.client.streamable_http import streamable_http_client
     _MCP_IMPORT_ERROR: Exception | None = None
 except Exception as exc:
@@ -106,6 +106,32 @@ class MCPToolClient:
                 "input_schema": getattr(tool, "inputSchema", {}) or {},
             }
         return catalog
+
+    async def list_resources_async(self) -> List[Dict[str, Any]]:
+        self._ensure_ready()
+        logger.info("MCP client list_resources_async | server=%s", self.server_url)
+        resources = await self._session.list_resources()
+        return [
+            {
+                "uri": str(r.uri),
+                "name": r.name,
+                "description": getattr(r, "description", None),
+                "mime_type": getattr(r, "mimeType", None)
+            }
+            for r in resources.resources
+        ]
+
+    async def list_prompts_async(self) -> List[Dict[str, Any]]:
+        self._ensure_ready()
+        logger.info("MCP client list_prompts_async | server=%s", self.server_url)
+        prompts = await self._session.list_prompts()
+        return [
+            {
+                "name": p.name,
+                "description": getattr(p, "description", None)
+            }
+            for p in prompts.prompts
+        ]
 
     async def call_tool_async(
         self,

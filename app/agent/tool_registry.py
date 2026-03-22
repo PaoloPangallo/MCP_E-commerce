@@ -17,6 +17,7 @@ from app.tools import (
     execute_shipping_costs_tool,
     execute_metadata_tool,
     execute_market_trends_tool,
+    execute_inspect_mcp_resource_tool,
 )
 from app.tools.search_tool import clean_search_query, normalize_search_arguments
 from app.tools.seller_tool import extract_explicit_seller, normalize_seller_arguments
@@ -857,6 +858,37 @@ def _bootstrap_tools() -> None:
             result_normalizer=_normalize_market_trends_result,
             terminal_resolver=lambda _: True,
             summarizer=_summarize_market_trends,
+        )
+    )
+
+    register_tool(
+        ToolSpec(
+            name="inspect_mcp_resource",
+            description="Legge il contenuto di una risorsa MCP (es: ebays://categories) conoscendo la sua URI. Utile per consultare cataloghi o guide caricate dinamicamente.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "uri": {"type": "string", "description": "URI della risorsa da leggere, es: 'ebay://categories'"},
+                },
+                "required": ["uri"],
+            },
+            executor=execute_inspect_mcp_resource_tool,
+            tags=("metadata", "mcp", "resources"),
+            examples=(
+                "leggi l'URI ebay://categories",
+                "mostrami il contenuto della risorsa ebay://market-logic",
+            ),
+            required_fields=("uri",),
+            state_key="mcp_resource",
+            max_retries=0,
+            cost=1,
+            latency_class="low",
+            dependencies=(),
+            produced_entities=("resource_content",),
+            can_run_in_parallel=True,
+            use_cache=True,
+            terminal_resolver=lambda _: True,
+            summarizer=lambda res: f"Risorsa '{res.get('uri')}' letta con successo." if res.get("status") == "ok" else f"Errore nel caricamento della risorsa: {res.get('message')}",
         )
     )
 

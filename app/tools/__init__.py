@@ -8,6 +8,7 @@ from app.tools.shipping_costs_tool import execute_shipping_costs_tool
 from app.tools.similar_items_tool import execute_similar_items_tool
 from app.tools.metadata_tool import execute_metadata_tool
 from app.tools.market_trends_tool import execute_market_trends_tool
+from app.tools.mcp_resource_tool import execute_inspect_mcp_resource_tool
 
 __all__ = [
     "execute_search_tool",
@@ -20,4 +21,5 @@ __all__ = [
     "execute_similar_items_tool",
     "execute_metadata_tool",
     "execute_market_trends_tool",
+    "execute_inspect_mcp_resource_tool",
 ]
