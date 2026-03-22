@@ -1,7 +1,19 @@
 import { useState, useRef } from "react"
-import { Box, IconButton, InputBase, Typography, CircularProgress } from "@mui/material"
+import { 
+  Box, 
+  IconButton, 
+  InputBase, 
+  Typography, 
+  CircularProgress, 
+  Menu, 
+  MenuItem, 
+  ListItemIcon, 
+  ListItemText 
+} from "@mui/material"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate"
+import AddIcon from "@mui/icons-material/Add"
+import SellIcon from "@mui/icons-material/Sell"
 import CloseIcon from "@mui/icons-material/Close"
 
 interface Props {
@@ -19,6 +31,18 @@ export default function ChatInput({
   const [image, setImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Menu State
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const openMenu = Boolean(anchorEl)
+
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget)
+  }
+
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+  }
 
   const handleSend = () => {
     const trimmed = value.trim()
@@ -37,6 +61,7 @@ export default function ChatInput({
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleMenuClose()
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -50,15 +75,18 @@ export default function ChatInput({
       setIsProcessing(false)
     }
     reader.readAsDataURL(file)
-    // Reset input so the same file can be selected again
     e.target.value = ""
+  }
+
+  const handleDealsClick = () => {
+    handleMenuClose()
+    onSend("Mostrami le migliori offerte del giorno su eBay 🏷️", undefined)
   }
 
   const canSend = (!!value.trim() || !!image) && !disabled && !isProcessing
 
   return (
     <Box>
-      {/* Hidden File Input */}
       <input
         type="file"
         accept="image/*"
@@ -66,6 +94,45 @@ export default function ChatInput({
         onChange={handleFileChange}
         style={{ display: "none" }}
       />
+
+      {/* Menu Contextual */}
+      <Menu
+        anchorEl={anchorEl}
+        open={openMenu}
+        onClose={handleMenuClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+            mt: -1,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+            border: '1px solid #f1f5f9',
+            minWidth: 180,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <MenuItem onClick={() => fileInputRef.current?.click()} sx={{ py: 1.5, px: 2 }}>
+          <ListItemIcon sx={{ color: '#64748b' }}>
+            <AddPhotoAlternateIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText 
+            primary="Aggiungi foto e file" 
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#334155' }} 
+          />
+        </MenuItem>
+        
+        <MenuItem onClick={handleDealsClick} sx={{ py: 1.5, px: 2 }}>
+          <ListItemIcon sx={{ color: '#ef4444' }}>
+            <SellIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText 
+            primary="eBay Deals" 
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#334155' }} 
+          />
+        </MenuItem>
+      </Menu>
 
       {/* Image Preview */}
       {image && (
@@ -124,15 +191,16 @@ export default function ChatInput({
         }}
       >
         <IconButton
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleMenuClick}
           disabled={disabled || isProcessing}
           sx={{
             mb: 0.25,
-            color: "#9ca3af",
-            "&:hover": { color: "#111827" }
+            color: "#64748b",
+            bgcolor: openMenu ? "#f1f5f9" : "transparent",
+            "&:hover": { color: "#111827", bgcolor: "#f1f5f9" }
           }}
         >
-          {isProcessing ? <CircularProgress size={16} color="inherit" /> : <AddPhotoAlternateIcon sx={{ fontSize: 20 }} />}
+          {isProcessing ? <CircularProgress size={16} color="inherit" /> : <AddIcon sx={{ fontSize: 24 }} />}
         </IconButton>
 
         <InputBase

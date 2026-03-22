@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @mcp.tool(
     name="get_marketplace_metadata",
-    description="Recupera i metadata delle policy eBay per un marketplace (item_conditions, return_policies, listing_structure)."
+    description="Recupera i metadata tecnici e le policy eBay (condizioni usato, regole restituzione). NON usare per cercare prodotti o offerte."
 )
 async def get_marketplace_metadata(
     policy_type: Annotated[str, Field(description="Tipo query metadata ('item_conditions', 'return_policies', 'listing_structure')")] = "item_conditions",

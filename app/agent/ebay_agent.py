@@ -339,6 +339,9 @@ class EbayReactAgent:
                         quality=observation.quality,
                         summary=observation.summary,
                     ).model_dump()
+                    
+                    if observation.ok and observation.data:
+                        event_payload["data"] = observation.data
 
                     if backend:
                         event_payload["backend"] = backend

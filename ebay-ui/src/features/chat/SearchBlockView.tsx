@@ -10,6 +10,7 @@ import SearchResultList from "../search/components/SearchResultList.tsx"
 import ComparisonDisplay from "../search/components/ComparisonDisplay.tsx"
 import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
 import MetadataCard from "./MetadataCard.tsx"
+import DealsDisplay from "../search/components/DealsDisplay.tsx"
 import VisionAnalysisCard from "./VisionAnalysisCard.tsx"
 
 function CollapsibleSection({
@@ -155,6 +156,7 @@ export default function SearchBlockView({ search }: { search: SearchBlock }) {
       {search.shipping_costs && <ShippingCostsCard data={search.shipping_costs} />}
 
       {search.market_trends && <MarketTrendsCard data={search.market_trends} />}
+      {search.deals && <DealsDisplay data={search.deals} />}
 
 
       {search.errors && search.errors.length > 0 && (

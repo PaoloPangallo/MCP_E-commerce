@@ -351,6 +351,25 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
     price_info = item.get("price") or {}
     seller_info = item.get("seller") or {}
     image_info = item.get("image") or {}
+    shipping_opts = item.get("shippingOptions") or []
+    
+    # Extract basic shipping if available in summary
+    shipping_data = None
+    if shipping_opts:
+        # Take the first option (usually the primary one)
+        main_opt = shipping_opts[0]
+        cost_info = main_opt.get("shippingCost") or {}
+        try:
+            cost_val = float(cost_info.get("value", 0))
+        except (TypeError, ValueError):
+            cost_val = 0.0
+            
+        shipping_data = {
+            "cost": cost_val,
+            "currency": cost_info.get("currency", "EUR"),
+            "free": cost_val == 0.0,
+            "service": main_opt.get("shippingServiceCode")
+        }
 
     return {
         "ebay_id": item.get("itemId"),
@@ -363,6 +382,7 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "url": _clean_text(item.get("itemWebUrl")),
         "image_url": _clean_text(image_info.get("imageUrl")),
         "brand": _clean_text(item.get("brand")),
+        "shipping": shipping_data,
     }
 
 
@@ -543,7 +563,7 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
         
         # Enrich with similar items
         try:
-            item_details["similar_items"] = await get_similar_items(item_id)
+            item_details["similar_items"] = await get_similar_items(item_id, item_details.get("title"))
         except Exception as e:
             logger.warning("Failed to fetch similar items for %s: %s", item_id, e)
             item_details["similar_items"] = []
@@ -557,9 +577,10 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
 # SIMILAR ITEMS API
 # ============================================================
 
-async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
+async def get_similar_items(item_id: str, fallback_title: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Fetches items similar to the given item_id using eBay's Browse API.
+    If the dedicated similar_items endpoint fails (404), falls back to a search by title.
     """
     logger.info("EBAY GET SIMILAR ITEMS START | item_id=%s", item_id)
 
@@ -573,10 +594,6 @@ async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
     }
 
-    # eBay Browse API endpoint for similar items
-    # Note: Using product_id or seeds might be better in some cases, 
-    # but for simplicity we stick to item_id if the API supports it or use a search fallback.
-    # Actually, Browse API provides 'get_similar_items' via 'item' resource.
     encoded_item_id = urllib.parse.quote(item_id)
     url = f"{ITEM_URL}{encoded_item_id}/get_similar_items"
 
@@ -590,14 +607,25 @@ async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
             timeout=REQUEST_TIMEOUT
         )
 
-        if response.status_code != 200:
-            logger.warning("EBAY GET SIMILAR ITEMS ERROR | status=%s | body=%s", response.status_code, response.text)
-            return []
-
-        data = response.json()
-        raw_items = data.get("itemSummaries", []) or []
+        if response.status_code == 200:
+            data = response.json()
+            raw_items = data.get("itemSummaries", []) or []
+            return [_normalize_item(i) for i in raw_items]
+        
+        # 404 Fallback: Search by title
+        if response.status_code == 404 and fallback_title:
+            logger.info("EBAY SIMILAR ITEMS 404 | Falling back to search for: %s", fallback_title)
+            # Create a simple search query from the title
+            # Filter out non-alphanumeric chars for better search performance
+            clean_query = " ".join(fallback_title.split()[:5]) # Take first 5 words
+            search_results = await search_items({"product": clean_query}, limit=5)
             
-        return [_normalize_item(i) for i in raw_items]
+            # Simple deduplication (remove the item itself if it shows up in search)
+            items = search_results.get("itemSummaries", []) or []
+            return [i for i in items if i.get("ebay_id") != item_id]
+
+        logger.warning("EBAY GET SIMILAR ITEMS ERROR | status=%s | body=%s", response.status_code, response.text)
+        return []
     except Exception as e:
         logger.error("EBAY GET SIMILAR ITEMS EXCEPTION | %s", e)
         return []
@@ -612,6 +640,8 @@ async def get_similar_items(item_id: str) -> List[Dict[str, Any]]:
 async def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> Optional[Dict[str, Any]]:
     """
     Fetches precise shipping costs using an async client.
+    Returns enriched payload with pre-computed cheapest_option, free_shipping_available
+    and estimated_delivery_days for quick frontend consumption.
     """
     try:
         token = await _get_oauth_token()
@@ -641,10 +671,42 @@ async def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> 
             return None
 
         data = response.json()
+        options = data.get("shippingOptions", []) or []
+
+        # ── Pre-compute helpers for frontend / compare pipeline ──────────
+        free_shipping_available = False
+        cheapest_option: Optional[Dict[str, Any]] = None
+        cheapest_cost: float = float("inf")
+
+        for opt in options:
+            cost_info = opt.get("shippingCost") or {}
+            try:
+                cost_val = float(cost_info.get("value", 9999))
+            except (TypeError, ValueError):
+                cost_val = 9999.0
+
+            if cost_val == 0.0:
+                free_shipping_available = True
+
+            if cost_val < cheapest_cost:
+                cheapest_cost = cost_val
+                cheapest_option = {
+                    "service":       opt.get("shippingServiceCode", "Standard"),
+                    "cost":          cost_val,
+                    "currency":      cost_info.get("currency", "EUR"),
+                    "free":          cost_val == 0.0,
+                    "min_delivery":  opt.get("minEstimatedDeliveryDate"),
+                    "max_delivery":  opt.get("maxEstimatedDeliveryDate"),
+                    "type":          opt.get("shippingCostType", "FIXED"),
+                }
+
         return {
-            "item_id": item_id,
-            "shipping_options": data.get("shippingOptions", []),
-            "item_location": data.get("itemLocation", {}),
+            "item_id":                 item_id,
+            "shipping_options":       options,
+            "item_location":          data.get("itemLocation", {}),
+            "options_count":          len(options),
+            "free_shipping_available": free_shipping_available,
+            "cheapest_option":        cheapest_option,
         }
     except Exception:
         return None

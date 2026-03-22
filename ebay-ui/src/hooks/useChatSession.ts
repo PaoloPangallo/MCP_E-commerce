@@ -77,6 +77,7 @@ export function useChatSession() {
       shipping_costs: finalPayload.shippingCosts || null,
       metadata: finalPayload.metadata || null,
       market_trends: finalPayload.marketTrends || null,
+      deals: finalPayload.deals || null,
       final_answer: finalPayload.finalAnswer || "Ho completato l’analisi della richiesta.",
       mode,
       errors: finalPayload.errors
@@ -93,6 +94,7 @@ export function useChatSession() {
       !!newSearch.shipping_costs ||
       !!newSearch.vision_analysis ||
       !!newSearch.market_trends ||
+      !!newSearch.deals ||
       !!finalPayload.plannedTasks?.length ||
       (!!finalPayload.toolStates && Object.keys(finalPayload.toolStates).length > 0)
 

@@ -70,6 +70,7 @@ export type FinalPayload = {
   itemDetails?: import("../search/types").ItemDetailsData | null
   shippingCosts?: import("../search/types").ShippingCostsData | null
   metadata?: any | null
+  deals?: import("../search/types").DealsData | null
   trace: AgentStep[]
   errors?: string[]
 

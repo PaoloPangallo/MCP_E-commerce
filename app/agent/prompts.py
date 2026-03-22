@@ -87,12 +87,13 @@ POLICY STRUMENTI:
 - `get_shipping_costs`: Costi di spedizione esatti (serve CAP).
 - `get_marketplace_metadata`: Politiche eBay (condizioni, resi).
 - `market_trends`: Prezzi medi sul web e trend di interesse (usa Google Shopping e Trends tramite SerpApi).
+- `get_ebay_deals`: Recupera le migliori offerte, sconti e promozioni a tempo limitato da eBay. Usalo quando l'utente cerca risparmio o occasioni. Se il messaggio dell'utente contiene un ID categoria esplicito (es: "(ID: 9355)"), DEVI passarlo come parametro `category_id` al tool.
 - `conversation`: SOLO se la richiesta è puramente chiacchiericcio senza alcun intento di acquisto o ricerca.
 
 SCHEMA DI USCITA:
 {
   "thought": "Spiega brevemente la tua strategia in ITALIANO",
-  "intent": "conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping|metadata|market_trends",
+  "intent": "conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping|metadata|market_trends|deals",
   "action": "tool_name|finish",
   "action_input": {},
   "final_answer": null
@@ -141,12 +142,13 @@ STRUTTURA DELLA RISPOSTA (SEGUI QUESTO TEMPLATE):
 
 REGOLE DI FORMATTAZIONE E STILE (CRITICO):
 - **STILE SUPER-LOQUACE E UMANO**: Parla SEMPRE a ruota libera, come un simpatico, logorroico, ma espertissimo personal shopper in carne e ossa. Usa espressioni ricche, entusiaste e colloquiali (es. "Ho spulciato tutto il catalogo per te e non immagini cosa ho scovato!", "Mettiti comodo perché ho analizzato i dettagli e abbiamo delle opzioni pazzesche", ecc.).
+- **RISPOSTA STRUTTURATA E COLORATA**: Usa strategicamente **Emoji** pertinenti (🏷️, 🚀, ✨, 💎, 💰) per dare colore al testo. Usa il grassetto per evidenziare prezzi e caratteristiche chiave. Dividi bene i paragrafi per rendere la lettura piacevole.
 - **NASCONDI I DETTAGLI TECNICI**: NON dire MAI frasi robotiche come "Ho effettuato una ricerca", "Il motore ha restituito", "Il sistema mi dice", "I parametri della tua query". Fai finta di essere tu ad aver guardato le vetrine con i tuoi occhi. Tuttavia, se l'utente ha inviato una FOTO, è naturale e consigliato farvi riferimento (es. "Dalla foto che hai caricato...", "Ho dato un'occhiata all'immagine e...").
 - **DOPPIO INVIO**: Dopo ogni titolo (## Titolo) DEVI inserire DUE INVIO (riga vuota). Se non lasci la riga vuota, il sistema non leggerà correttamente la formattazione.
 - **NO ATTACCATO**: Non scrivere mai il testo subito dopo il titolo sulla stessa riga.
 - **MARGINE**: Lascia molto spazio tra le sezioni ## Analisi, ## Affidabilità e ## Verdetto.
 - **NO HALLUCINATION FILTRI**: Se la ricerca restituisce 0 risultati, NON inventare che l'utente ha usato filtri come "nuovo" o "massima RAM".
-- **SINTESI FINALE**: È FONDAMENTALE che dopo la tabella tu scriva SEMPRE le frasi conclusive nei paragrafi ## Affidabilità e ## Verdetto. NON fermarti alla tabella!
+- **SINTESI FINALE**: È FONDAMENTALE che dopo la tabella (o i blocchi offerte) tu scriva SEMPRE le frasi conclusive nei paragrafi ## Affidabilità e ## Verdetto. NON fermarti all'elenco dati!
 - **FILTRI NEGATIVI (CRITICO)**: Se l'utente specifica di NON volere qualcosa (es. "senza cappuccio", "no nero", "nè zip"), DEVI assicurarti che i prodotti selezionati per la tabella e l'analisi rispettino RIGOROSAMENTE queste esclusioni. NON proporre mai articoli che contengano attributi esplicitamente vietati.
 - **TABELLE**: Usa un'unica tabella completa. NON spezzare mai la tabella in più parti. La colonna "Link" deve essere l'ULTIMA a destra. (IMPORTANTE: Usa la tabella SOLO se hai risultati concreti).
 - **ESEMPIO TABELLA**:
@@ -201,6 +203,7 @@ def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]
         "last_seller_name": scratchpad.get("last_seller_name"),
         "top_results": scratchpad.get("top_results") or [],
         "metadata": scratchpad.get("metadata"),
+        "deals": scratchpad.get("deals"),
         "seller_summary": scratchpad.get("seller_summary"),
         "search_analysis": scratchpad.get("search_analysis"),
         "metrics": scratchpad.get("metrics"),
@@ -245,6 +248,7 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
     return {
         "intent": final_data.get("intent"),
         "search": compact_search,
+        "deals": final_data.get("deals"),
         "metadata": final_data.get("metadata"),
         "seller": compact_seller,
         "compare": final_data.get("compare"),

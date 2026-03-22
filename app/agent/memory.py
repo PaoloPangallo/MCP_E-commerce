@@ -375,6 +375,7 @@ class RequestState:
     item_details_payload: Optional[Dict[str, Any]] = None
     shipping_costs_payload: Optional[Dict[str, Any]] = None
     market_trends_payload: Optional[Dict[str, Any]] = None
+    deals_payload: Optional[Dict[str, Any]] = None
     vision_description: Optional[str] = None
     final_answer: Optional[str] = None
 
@@ -486,6 +487,14 @@ class RequestState:
         if observation.tool == "market_trends" and observation.ok:
             if isinstance(observation.data, dict):
                 self.market_trends_payload = observation.data
+
+        if observation.tool == "get_ebay_deals" and observation.ok:
+            if isinstance(observation.data, dict):
+                payload = deepcopy(observation.data)
+                # Mappatura items -> deals per compatibilità frontend
+                if "items" in payload and "deals" not in payload:
+                    payload["deals"] = payload.pop("items")
+                self.deals_payload = payload
 
     def _apply_compare_payload(self, payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
@@ -634,6 +643,7 @@ class RequestState:
             "item_details": self.item_details_payload,
             "shipping_costs": self.shipping_costs_payload,
             "metadata": self.metadata_payload,
+            "deals": self.deals_payload,
             "tool_calls": dict(self.tool_call_counts),
             "llm_calls": dict(self.llm_call_counts),
             "tool_states": self.tool_state_summaries(),
@@ -655,6 +665,7 @@ class RequestState:
             "item_details": self.item_details_payload,
             "shipping_costs": self.shipping_costs_payload,
             "market_trends": self.market_trends_payload,
+            "deals": self.deals_payload,
             "top_result": compact_top,
             "last_seller_name": self.last_seller_name,
             "search_analysis": self.search_analysis,

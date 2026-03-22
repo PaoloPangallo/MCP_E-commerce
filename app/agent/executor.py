@@ -43,23 +43,43 @@ class ToolExecutor:
 
     async def execute(self, tool_call: ToolCall) -> Observation:
         spec = TOOLS.get(tool_call.tool)
-        if spec is None:
-            logger.warning("Unknown tool requested: %s", tool_call.tool)
-            return Observation(
-                tool=tool_call.tool,
-                ok=False,
-                status="error",
-                error=f"Unknown tool '{tool_call.tool}'",
-                summary=f"Tool '{tool_call.tool}' non disponibile.",
-                retryable=False,
-                state_key=None,
-                terminal=False,
-                quality="empty",
-            )
-
-        # Assicurati che _mcp_tools sia inizializzato se necessario
-        if self._mcp_tools is None and self._should_use_mcp(tool_call.tool, check_list=False):
+        
+        # Inizializziamo la lista dei tool MCP se non ancora presente
+        if self._mcp_tools is None and self.mcp_client:
             await self.initialize()
+
+        is_mcp_only = False
+        if spec is None:
+            # Se il tool non è in TOOLS locali, controlliamo se è disponibile su MCP
+            if self._mcp_tools and tool_call.tool in self._mcp_tools:
+                is_mcp_only = True
+                # Creiamo una spec minima sintetica per i tool puramente MCP
+                from app.agent.tool_registry import ToolSpec
+                spec = ToolSpec(
+                    name=tool_call.tool,
+                    description="Tool MCP dinamico",
+                    input_schema={},
+                    executor=lambda x, y: {"status": "error", "message": "unreachable local executor"},
+                    use_cache=False,  # Disabilitiamo cache per tool dinamici per sicurezza
+                    summarizer=lambda res: res.get("message") or res.get("summary") or f"Tool MCP '{tool_call.tool}' eseguito.",
+                    status_resolver=lambda res: "error" if res.get("status") == "error" else ("no_data" if res.get("status") == "no_data" else "ok"),
+                    state_key=tool_call.tool,  # Permettiamo al planner di tracciare questo tool
+                    terminal_resolver=lambda res: res.get("status") in {"ok", "no_data"}
+                )
+                logger.info("ToolExecutor using synthetic spec for MCP-only tool: %s", tool_call.tool)
+            else:
+                logger.warning("Unknown tool requested: %s", tool_call.tool)
+                return Observation(
+                    tool=tool_call.tool,
+                    ok=False,
+                    status="error",
+                    error=f"Unknown tool '{tool_call.tool}'",
+                    summary=f"Tool '{tool_call.tool}' non disponibile.",
+                    retryable=False,
+                    state_key=None,
+                    terminal=False,
+                    quality="empty",
+                )
 
         cache_key = self._make_cache_key(tool_call.tool, tool_call.input)
         if spec.use_cache:

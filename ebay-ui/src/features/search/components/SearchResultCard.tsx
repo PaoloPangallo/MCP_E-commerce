@@ -4,6 +4,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
+import LocalShippingIcon from "@mui/icons-material/LocalShipping"
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
@@ -248,15 +249,34 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
                   px: 1,
                   py: 0.25,
                   borderRadius: "4px",
-                  bgcolor: "#f3f4f6",
-                  color: "#4b5563",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.02em"
+                  bgcolor: (item.condition || "").toLowerCase().includes("nuovo") ? "#eff6ff" : "#f1f5f9",
+                  border: "1px solid",
+                  borderColor: (item.condition || "").toLowerCase().includes("nuovo") ? "#dbeafe" : "#e2e8f0",
                 }}
               >
-                {item.condition}
+                <Typography sx={{ fontSize: 10, fontWeight: 700, color: (item.condition || "").toLowerCase().includes("nuovo") ? "#2563eb" : "#475569", textTransform: 'uppercase' }}>
+                  {item.condition}
+                </Typography>
+              </Box>
+            )}
+            {item.shipping && (
+              <Box
+                sx={{
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: "4px",
+                  bgcolor: item.shipping.free ? "#dcfce7" : "#f1f5f9",
+                  border: "1px solid",
+                  borderColor: item.shipping.free ? "#bbf7d0" : "#e2e8f0",
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5
+                }}
+              >
+                <LocalShippingIcon sx={{ fontSize: 12, color: item.shipping.free ? "#166534" : "#64748b" }} />
+                <Typography sx={{ fontSize: 10, fontWeight: 800, color: item.shipping.free ? "#166534" : "#475569", textTransform: 'uppercase' }}>
+                  {item.shipping.free ? "FREE SHIP" : `+ ${item.shipping.cost} ${item.shipping.currency || '€'}`}
+                </Typography>
               </Box>
             )}
 
@@ -320,6 +340,30 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             }}
           >
             Dettagli
+          </Button>
+
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("send-chat", {
+                  detail: `Calcola i costi di spedizione per l'oggetto ${item.ebay_id} in Italia 🇮🇹`,
+                })
+              )
+            }
+            sx={{
+              textTransform: "none",
+              borderRadius: "8px",
+              fontSize: 12,
+              fontWeight: 600,
+              borderColor: "#e5e7eb",
+              color: "#374151",
+              px: 2,
+              "&:hover": { borderColor: "#d1d5db", bgcolor: "#f9fafb" }
+            }}
+          >
+            Spedizione
           </Button>
 
           <Button

@@ -136,6 +136,34 @@ export default function ChatPage() {
                 query={loadingQuery ?? undefined}
                 plannedTasks={typedPlannedTasks}
               />
+
+              {/* BLOCCO RISULTATI LIVE: Mostriamo i dati tecnici (deals, search, etc.) 
+                  appena arrivano, anche se l'agente sta ancora scrivendo la risposta. */}
+              {finalPayload && (
+                <Box sx={{ mt: 2 }}>
+                  <SearchBlockView 
+                    search={{
+                      query: loadingQuery || "",
+                      results: finalPayload.results || [],
+                      analysis: finalPayload.analysis,
+                      metrics: finalPayload.metrics,
+                      rag_context: finalPayload.ragContext,
+                      agent_trace: typedSteps,
+                      seller_summary: finalPayload.sellerSummary,
+                      comparison: finalPayload.comparison,
+                      item_details: finalPayload.itemDetails,
+                      shipping_costs: finalPayload.shippingCosts,
+                      metadata: finalPayload.metadata,
+                      deals: finalPayload.deals,
+                      market_trends: finalPayload.marketTrends,
+                      vision_analysis: finalPayload.visionAnalysis,
+                      errors: finalPayload.errors,
+                      mode: "hybrid" // Default per il live view
+                    }} 
+                  />
+                </Box>
+              )}
+
               {finalPayload?.finalAnswer && (
                 <MessageBubble role="assistant">
                   {finalPayload.finalAnswer}

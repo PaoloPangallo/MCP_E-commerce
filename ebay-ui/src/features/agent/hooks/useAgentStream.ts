@@ -198,6 +198,47 @@ export function useAgentStream(options?: {
 
         localTrace = upsertStep(localTrace, nextStep)
         setSteps(localTrace)
+
+        // AGGIORNAMENTO DINAMICO: Se il tool ha restituito dati strutturati, popoliamo subito il finalPayload
+        // per permettere alla UI di mostrare i blocchi tecnici prima che il LLM finisca answer_chunk.
+        if (event.ok && (event as any).data) {
+          const toolData = (event as any).data;
+          setFinalPayload((prev) => {
+            const base = prev || {
+              finalAnswer: null,
+              results: [],
+              analysis: null,
+              trace: localTrace,
+              plannedTasks: localPlannedTasks
+            };
+
+            const next = { ...base };
+            
+            // Logica di mappatura identica a quella dell'evento 'final'
+            if (event.tool === "get_ebay_deals") {
+               next.deals = toolData.deals || toolData.items || toolData;
+            } else if (event.tool === "search_products") {
+               next.results = toolData.results || [];
+               next.analysis = toolData.analysis || null;
+               next.metrics = toolData.metrics || toolData.ir_metrics;
+               next.ragContext = toolData.rag_context;
+            } else if (event.tool === "analyze_seller") {
+               next.sellerSummary = toolData;
+            } else if (event.tool === "compare_products") {
+               next.comparison = toolData;
+            } else if (event.tool === "get_item_details") {
+               next.itemDetails = toolData.data || toolData;
+            } else if (event.tool === "get_shipping_costs") {
+               next.shippingCosts = toolData.data || toolData;
+            } else if (event.tool === "market_trends") {
+               next.marketTrends = toolData;
+            } else if (event.tool === "get_marketplace_metadata") {
+               next.metadata = toolData;
+            }
+
+            return next as any;
+          });
+        }
         return
       }
 
@@ -273,9 +314,10 @@ export function useAgentStream(options?: {
           sellerSummary: seller,
           comparison: finalData.compare || null,
           itemDetails: finalData.item_details || null,
-          shippingCosts: finalData.shipping_costs || null,
+          shippingCosts: finalData.shipping_costs || finalData.shippingCosts || null,
           metadata: finalData.metadata || null,
-          marketTrends: finalData.market_trends || null,
+          marketTrends: finalData.market_trends || finalData.marketTrends || null,
+          deals: finalData.deals || null,
           trace: finalTrace,
           errors: Array.isArray(finalData.errors) ? finalData.errors : [],
           plannedTasks: localPlannedTasks,

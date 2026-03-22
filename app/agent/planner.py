@@ -22,7 +22,7 @@ from app.services.parser import extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends", "deals"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -44,9 +44,12 @@ SELLER_CUES = {
 }
 
 TRANSACTIONAL_CUES = {
-    "cerca", "cerco", "trova", "trovami", "cercami", "mostra", "mostrami", "ricerca", "vorrei", "voglio", "mi serve",
     "compra", "acquistare", "prezzo", "prezzi", "costo", "budget", "massimo",
-    "minimo", "sotto", "meno", "entro", "offerta", "offerte",
+    "minimo", "sotto", "meno", "entro",
+}
+
+DEALS_CUES = {
+    "offerta", "offerte", "deals", "occasioni", "promozioni", "sconti", "sconto", "promozione", "occasione", "deal"
 }
 
 COMPARISON_CUES = {
@@ -118,10 +121,11 @@ class IntentEvidence:
     reasons: Dict[str, list[str]] = field(
         default_factory=lambda: {
             "product": [], "seller": [], "conversation": [], "comparison": [],
-            "shipping": [], "item_details": [], "metadata": [], "market_trends": []
+            "shipping": [], "item_details": [], "metadata": [], "market_trends": [], "deals": []
         }
     )
     market: float = 0.0
+    deals: float = 0.0
 
     # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
     _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
@@ -155,6 +159,7 @@ class IntentEvidence:
                 ("item_details", self.item_details),
                 ("metadata", self.metadata),
                 ("market_trends", self.market),
+                ("deals", getattr(self, "deals", 0.0)),
             ],
             key=lambda x: x[1],
             reverse=True,
@@ -197,6 +202,14 @@ class ReactPlanner:
                 return decision
 
         logger.info(f"Deciding for query: {memory.user_query}")
+
+        # Inizializza catalogo MCP precocemente per renderlo disponibile a deterministic_decide
+        if self.mcp_client is not None and getattr(self.mcp_client, "is_available", False) and self._cached_mcp_catalog is None:
+            try:
+                self._cached_mcp_catalog = await self.mcp_client.get_tool_schemas_async()
+                logger.info("Early MCP catalog fetch successful.")
+            except Exception as e:
+                logger.warning("Early MCP catalog fetch failed: %s", e)
 
         # FIX B:
         # fast path conversazionale prima di qualunque possibile chiamata lenta al planner LLM
@@ -557,6 +570,20 @@ class ReactPlanner:
         # If we have an MCP catalog and the tool is dynamically found,
         # we bypass local python normalization because FastMCP handles it on the server side!
         if getattr(self, "_cached_mcp_catalog", None) and action in self._cached_mcp_catalog:
+            # ---> DETERMINISTIC PARAMS EXTRACTION FOR MCP TOOLS <---
+            # Se siamo nel percorso deterministico, l'input originale potrebbe essere vuoto.
+            # Proviamo ad autopopolare i parametri più comuni per get_ebay_deals.
+            if action == "get_ebay_deals" and not action_input.get("category_id") and not action_input.get("query"):
+                q = memory.user_query.lower()
+                # Cerchiamo un ID categoria esplicito (es: (ID: 111422) o ID: 111422)
+                cat_match = re.search(r"\b(?:id[:\s]+)?(\d{4,8})\b", q)
+                if cat_match:
+                    action_input["category_id"] = cat_match.group(1)
+                    logger.info("Auto-extracted category_id for get_ebay_deals: %s", action_input["category_id"])
+                
+                # Se non c'è ID, proviamo a estrarre una query pulita se mancano segnali forti di categoria
+                # (Ma per ora l'ID è prioritario per la richiesta dell'utente)
+
             return action_input
 
         spec = get_tool_spec(action)
@@ -646,6 +673,9 @@ class ReactPlanner:
 
         if intent == "market_trends":
             return ["market_trends"]
+
+        if intent == "deals":
+            return ["get_ebay_deals"]
 
         return []
 
@@ -743,6 +773,18 @@ class ReactPlanner:
         details_hits = len(token_set & DETAILS_CUES)
         if details_hits:
             ev.add("item_details", min(0.35 + 0.15 * details_hits, 0.8), "details_lexicon")
+
+        deals_hits = len(token_set & DEALS_CUES)
+        if deals_hits:
+            ev.add("deals", min(0.75 + 0.15 * deals_hits, 0.99), "deals_lexicon")
+            # Segnale forte di interazione frontend (ID categoria tra parentesi)
+            if "(id:" in q:
+                ev.add("deals", 0.3, "frontend_category_selection")
+            # Un segnale di deal spesso implica una ricerca prodotto, ma vogliamo che viga deals
+            ev.add("product", 0.05, "deals_implies_product_minimal")
+            # Riduciamo search se deals è molto probabile
+            if ev.deals > 0.8:
+                ev.product = max(0.0, ev.product - 0.4)
 
         metadata_hits = len(token_set & METADATA_CUES)
         if metadata_hits:

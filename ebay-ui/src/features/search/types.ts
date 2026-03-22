@@ -29,7 +29,17 @@ export interface SearchItem {
     trust?: number
     relevance?: number
     condition?: number
+    value?: number
   }
+  shipping?: {
+    cost: number
+    currency: string
+    free: boolean
+    service: string
+    min_delivery?: string
+    max_delivery?: string
+    options_count?: number
+  } | null
 }
 
 export interface ComparisonCandidate extends SearchItem {
@@ -40,7 +50,17 @@ export interface ComparisonCandidate extends SearchItem {
     relevance: number
     condition: number
     overall: number
+    value?: number
   }
+  shipping?: {
+    cost: number
+    currency: string
+    free: boolean
+    service: string
+    min_delivery?: string
+    max_delivery?: string
+    options_count?: number
+  } | null
 }
 
 export interface ItemDetailsData {
@@ -65,6 +85,30 @@ export interface ItemDetailsData {
   [key: string]: any
 }
 
+export interface DealItem {
+  title: string
+  link: string
+  price: {
+    raw: string
+    extracted: number
+  }
+  old_price?: {
+    raw: string
+    extracted: number
+    discount: string
+  }
+  thumbnail?: string
+  product_id?: string
+  extensions?: string[]
+}
+
+export interface DealsData {
+  status: string
+  title?: string
+  subtitle?: string
+  deals: DealItem[]
+}
+
 export interface ShippingCostsData {
   item_id?: string
   shipping_options?: any[]
@@ -77,7 +121,7 @@ export interface ComparisonData {
   status: string
   queries_compared: number
   candidates_found: number
-  winner: ComparisonCandidate
+  winner: ComparisonCandidate & { value_score?: number }
   winner_reason: string
   comparison_matrix: ComparisonCandidate[]
 }
@@ -103,6 +147,7 @@ export interface SearchBlock {
   comparison?: ComparisonData | null
   item_details?: ItemDetailsData | null
   shipping_costs?: ShippingCostsData | null
+  deals?: DealsData | null
   metadata?: any | null
   final_answer?: string | null
   vision_analysis?: {
@@ -165,6 +210,7 @@ export interface AgentResponse {
     seller?: import("../seller/types").SellerFeedbackResponse
     item_details?: ItemDetailsData
     shipping_costs?: ShippingCostsData
+    deals?: DealsData
     metadata?: any
     top_result?: SearchItem | null
     last_seller_name?: string | null
