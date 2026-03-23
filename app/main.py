@@ -17,7 +17,12 @@ from app.db.database import Base, engine
 from app.config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
+# Force app loggers to INFO for extra visibility
+for logger_name in ["app", "uvicorn", "fastapi"]:
+    logging.getLogger(logger_name).setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
+logger.info("LOGGING INITIALIZED | LEVEL=INFO")
 
 from contextlib import asynccontextmanager
 from app.mcp.asgi import app as mcp_app

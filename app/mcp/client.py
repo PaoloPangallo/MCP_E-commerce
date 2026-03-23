@@ -147,6 +147,7 @@ class MCPToolClient:
         arguments: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         self._ensure_ready()
+        print(f"\n>>> [MCP] CALL TOOL: {tool_name} | args={arguments}")
         logger.info("MCP client call_tool_async | local=%s | tool=%s", self.is_local, tool_name)
 
         try:
@@ -154,8 +155,19 @@ class MCPToolClient:
                 from app.mcp.server import mcp
                 # Natively call underlying execution
                 result_content = await mcp.call_tool(tool_name, arguments or {})
-                # FastMCP call_tool returns a list of contents, likely TextContent
-                content = result_content
+                print(f">>> [MCP] Local Result Content: {str(result_content)[:200]}...")
+                
+                # FastMCP in newer versions might return a list of Content objects
+                # or a CallToolResult object.
+                if hasattr(result_content, "content"):
+                     content = result_content.content
+                elif isinstance(result_content, list):
+                     content = result_content
+                elif isinstance(result_content, tuple):
+                     # Se è una tuple, di solito il primo elemento è la lista di content
+                     content = result_content[0] if len(result_content) > 0 else []
+                else:
+                     content = [result_content]
             else:
                 result = await self._session.call_tool(tool_name, arguments or {})
                 content = getattr(result, "content", None)
@@ -165,23 +177,54 @@ class MCPToolClient:
                 return {"status": "ok", "result": None, "_backend": "mcp"}
 
             parts: List[str] = []
-            for item in content:
-                text: Optional[str] = getattr(item, "text", None)
-                if text is not None:
-                    parts.append(text)
+            if isinstance(content, list):
+                for item in content:
+                    # 1. Proviamo come oggetto (TextContent)
+                    text = getattr(item, "text", None)
+                    if text is not None:
+                        parts.append(text)
+                    # 2. Proviamo come dict
+                    elif isinstance(item, dict) and "text" in item:
+                        parts.append(item["text"])
+                    # 3. Se l'item stesso è una stringa (es. se FastMCP ha restituito list[str])
+                    elif isinstance(item, str):
+                        parts.append(item)
+                    # 4. Fallback estremo: se l'item è un dict ma NON ha "text", 
+                    # potrebbe essere il risultato RAW del tool che FastMCP non ha inscatolato.
+                    elif isinstance(item, dict):
+                        parts.append(json.dumps(item))
+            elif isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, dict):
+                parts.append(json.dumps(content))
 
             if not parts:
                 return {"status": "ok", "result": None, "_backend": "mcp"}
 
             joined: str = "\n".join(parts).strip()
+            print(f">>> [MCP] Final JOINED for parsing: {joined[:100]}...")
             
             try:
                 parsed_result: Any = json.loads(joined)
+                print(f"[MCP] JSON parsed successfully. Type: {type(parsed_result)}")
                 if isinstance(parsed_result, dict):
                     parsed_result["_backend"] = "mcp"
                     return parsed_result
                 return {"status": "ok", "result": parsed_result, "_backend": "mcp"}
-            except Exception:
+            except Exception as e:
+                print(f"[MCP] JSON parse FAILED: {e}")
+                # Se il parsing fallisce, proviamo a vedere se è un dict-string python (con apici singoli)
+                # Questo succede se FastMCP non serializza correttamente in JSON in modalità locale
+                if joined.startswith("{") and joined.endswith("}"):
+                    try:
+                        import ast
+                        evaluated = ast.literal_eval(joined)
+                        if isinstance(evaluated, dict):
+                             print("[MCP] ast.literal_eval SUCCEEDED for dict-string")
+                             evaluated["_backend"] = "mcp"
+                             return evaluated
+                    except:
+                        pass
                 return {"status": "ok", "result": joined, "_backend": "mcp"}
                 
         except Exception as exc:

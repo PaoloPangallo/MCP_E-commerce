@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -123,12 +124,42 @@ def _looks_like_event_stream_payload(query: str) -> bool:
     return False
 
 
+class _SafeEncoder(json.JSONEncoder):
+    """Converte tipi non-serializzabili standard (numpy floats, nan, inf)."""
+    def default(self, obj):
+        # numpy scalar types
+        try:
+            import numpy as np
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, (np.floating,)):
+                return None if (math.isnan(float(obj)) or math.isinf(float(obj))) else float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+        except ImportError:
+            pass
+        # Python floats nan/inf
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return None
+        return super().default(obj)
+
+
 def _sse(data: Dict[str, Any], event: str | None = None) -> str:
-    payload = json.dumps(data, ensure_ascii=False)
+    try:
+        payload = json.dumps(data, ensure_ascii=False, cls=_SafeEncoder)
+    except Exception as e:
+        # Stampiamo l'errore esatto su stdout cosicché l'utente possa vederlo
+        print(f"\n[ERROR] SSE SERIALIZATION FAILED: {str(e)}")
+        print(f"[DEBUG] Failed keys: {list(data.keys())}")
+        
+        logger.error("SSE serialization failed: %s | keys=%s", e, list(data.keys()))
+        # Fallback estremo: emetti l'evento senza il campo "data" ma con una notifica di errore
+        safe = {k: v for k, v in data.items() if k != "data"}
+        safe["serialization_error"] = str(e)
+        payload = json.dumps(safe, ensure_ascii=False, cls=_SafeEncoder)
 
     if event:
         return f"event: {event}\ndata: {payload}\n\n"
-
     return f"data: {payload}\n\n"
 
 
@@ -245,10 +276,12 @@ async def agent_event_generator(
                     break
                 
                 validated = _validate_event(msg)
-                logger.debug("Yielding SSE event | type=%s", validated.get("type"))
+                event_type = validated.get("type", "unknown")
+                print(f"[SSE] Yielding event: {event_type}")
+                logger.debug("Yielding SSE event | type=%s", event_type)
                 yield _sse(validated)
                 
-                if validated.get("type") == "done":
+                if event_type == "done":
                     done_sent = True
 
             except asyncio.TimeoutError:

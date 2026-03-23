@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { useShallow } from "zustand/react/shallow"
 
 import type { ChatEntry, Message } from "../features/chat/store/chatStore.ts"
@@ -67,8 +67,8 @@ export function useChatSession() {
     resetConversation()
   }
 
-  const handleSend = async (text: string, image?: string) => {
-    if (!text.trim() && !image) return
+  const handleSend = useCallback(async (text: string, image?: string) => {
+    if ((!text.trim() && !image) || running) return
 
     const query = text.trim()
     const cacheKey = (query + (image ? "_img" : "")).toLowerCase()
@@ -93,7 +93,7 @@ export function useChatSession() {
 
     setLoadingQuery(query || "Analisi immagine")
     run(query, image)
-  }
+  }, [running, appendMessage, appendAssistantMessage, appendSearchBlock, cache, setLoadingQuery, run])
 
   return {
     chat,

@@ -113,6 +113,30 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     return " ".join(final_tokens).strip()
 
 
+def _sanitize_floats(obj: Any) -> Any:
+    """Ricorsivamente converte numpy floats o NaN/Inf in tipi Python-native."""
+    import math
+    try:
+        import numpy as np
+    except ImportError:
+        np = None
+
+    if isinstance(obj, dict):
+        return {k: _sanitize_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitize_floats(i) for i in obj]
+    elif np and isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif np and isinstance(obj, (np.floating,)):
+        v = float(obj)
+        return None if (math.isnan(v) or math.isinf(v)) else v
+    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    elif hasattr(obj, 'item') and callable(getattr(obj, 'item')): # NumPy scalars
+        return obj.item()
+    return obj
+
+
 async def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
     seller_key = seller_name.strip().lower()
     cache_key = f"seller_feedback:{seller_key}"
@@ -405,6 +429,7 @@ async def run_search_pipeline(
     if not query or not query.strip():
         raise ValueError("Query vuota")
 
+    print(f"\n[PIPELINE] START query='{query}' | user={getattr(user, 'id', 'anonymous')}")
     logger.info("PIPELINE START for query: '%s'", query)
     t0 = time.time()
     timings = {}
@@ -724,6 +749,12 @@ async def run_search_pipeline(
         asyncio.create_task(asyncio.to_thread(index_search_items, [results_out[i] for i in range(len(results_out)) if i < 15]))
 
     timings["total_s"] = int(float(time.time() - t0) * 1000) / 1000.0
+
+    # Sanitize EVERYTHING before returning to ensure JSON serializability
+    results_out = _sanitize_floats(results_out)
+    metrics = _sanitize_floats(metrics)
+    
+    print(f"[PIPELINE] DONE | results={len(results_out)} | time={timings['total_s']}s")
 
     return {
         "parsed_query": parsed,

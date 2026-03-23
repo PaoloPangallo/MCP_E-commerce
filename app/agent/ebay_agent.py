@@ -347,6 +347,9 @@ class EbayReactAgent:
                     ).model_dump()
                     
                     if observation.ok and observation.data:
+                        res_count = len(observation.data.get("results", []))
+                        logger.info("SSE tool_result payload | results_count=%d | keys=%s",
+                                    res_count, list(observation.data.keys()))
                         event_payload["data"] = observation.data
 
                     if backend:

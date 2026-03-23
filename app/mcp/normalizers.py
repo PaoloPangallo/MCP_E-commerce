@@ -33,6 +33,7 @@ def _normalize_search_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "status": "ok" if results else "no_data",
         "query": raw.get("query"),
+        "ebay_query_used": raw.get("ebay_query_used"),
         "results_count": count,
         "results": results,
         "top_result": top_result,
@@ -40,7 +41,6 @@ def _normalize_search_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "analysis": raw.get("analysis"),
         "metrics": raw.get("metrics"),
         "rag_context": raw.get("rag_context"),
-        "raw": raw,
     }
 
 
