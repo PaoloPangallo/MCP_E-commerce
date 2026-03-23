@@ -440,9 +440,53 @@ async def run_search_pipeline(
         search_items(parsed, limit=MAX_RESULTS_FROM_EBAY),
         _do_rag()
     )
-    items = results[0].get("itemSummaries", []) if isinstance(results[0], dict) else []
-    aspect_distributions = results[0].get("aspectDistributions", []) if isinstance(results[0], dict) else []
-    logger.info("eBay returned %d itemSummaries", len(items))
+    search_res = results[0] if isinstance(results[0], dict) else {}
+    items = search_res.get("itemSummaries", [])
+    aspect_distributions = search_res.get("aspectDistributions", [])
+    category_distributions = search_res.get("categoryDistributions", [])
+    
+    # -------------------------------------------------------------------------
+    # SMART CATEGORY FILTERING (Anti-Accessory Logic)
+    # -------------------------------------------------------------------------
+    intent_type = parsed.get("product_type", "Unknown")
+    
+    if intent_type == "Main" and items:
+        accessory_cats = ["Accessori", "Parti", "Cover", "Case", "Protective", "Replacement", "Cavo", "Caricatore"]
+        
+        # Check top 5 items for accessory categories
+        top_items = items[:5]
+        acc_count = 0
+        for it in top_items:
+            cat_name = it.get("category_name") or ""
+            if any(word.lower() in cat_name.lower() for word in accessory_cats):
+                acc_count += 1
+        
+        # If > 60% are accessories but we want Main
+        if acc_count >= 3:
+            logger.info("SMART FILTER | Detected accessory dominance (%d/5) for Main intent. Attempting re-search.", acc_count)
+            
+            best_cat_id = None
+            for dist in category_distributions:
+                c_name = dist.get("categoryName") or ""
+                if not any(word.lower() in c_name.lower() for word in accessory_cats):
+                    best_cat_id = dist.get("categoryId")
+                    logger.info("SMART FILTER | Found better category: '%s' (%s)", c_name, best_cat_id)
+                    break
+            
+            if best_cat_id:
+                logger.info("SMART FILTER | Triggering RE-SEARCH with categoryId=%s", best_cat_id)
+                # Modify a copy of parsed query to add the category filter
+                parsed_copy = parsed.copy()
+                constraints = list(parsed_copy.get("constraints") or [])
+                constraints.append({"type": "category_id", "value": best_cat_id})
+                parsed_copy["constraints"] = constraints
+                
+                new_search_res = await search_items(parsed_copy, limit=MAX_RESULTS_FROM_EBAY)
+                items = new_search_res.get("itemSummaries", [])
+                aspect_distributions = new_search_res.get("aspectDistributions", [])
+                category_distributions = new_search_res.get("categoryDistributions", [])
+
+    logger.info("Final eBay results count: %d", len(items))
     expanded_query, rag_docs = results[1]
     
     timings["parallel_io_s"] = round(time.time() - t, 3)
