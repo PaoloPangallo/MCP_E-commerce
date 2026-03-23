@@ -271,6 +271,11 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
     if aspect_filters:
         filters.extend(aspect_filters)
 
+    # Smart Category Filter
+    for c in constraints:
+        if c.get("type") == "category_id":
+            filters.append(f"categoryId:{{{c.get('value')}}}")
+
     if not filters:
         return None
 
@@ -371,6 +376,10 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
             "service": main_opt.get("shippingServiceCode")
         }
 
+    # Extract category info
+    categories = item.get("categories") or []
+    primary_category = categories[0] if categories else {}
+    
     return {
         "ebay_id": item.get("itemId"),
         "title": _clean_text(item.get("title")),
@@ -382,6 +391,8 @@ def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "url": _clean_text(item.get("itemWebUrl")),
         "image_url": _clean_text(image_info.get("imageUrl")),
         "brand": _clean_text(item.get("brand")),
+        "category_id": primary_category.get("categoryId"),
+        "category_name": primary_category.get("categoryName"),
         "shipping": shipping_data,
     }
 
@@ -491,6 +502,7 @@ async def search_items(
         if pages_done == 0:
             refinement = data.get("refinement") or {}
             aspects = refinement.get("aspectDistributions", []) or []
+            categories = refinement.get("categoryDistributions", []) or []
         
         if not page_items:
             break
@@ -506,6 +518,7 @@ async def search_items(
     return {
         "itemSummaries": items[:wanted],
         "aspectDistributions": aspects,
+        "categoryDistributions": categories,
     }
 
 
