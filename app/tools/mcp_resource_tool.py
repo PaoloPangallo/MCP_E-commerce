@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, Optional
-from app.agent.tool_registry import ToolContext
+from typing import Any, Dict, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.agent.tool_registry import ToolContext
 
 logger = logging.getLogger(__name__)
 
