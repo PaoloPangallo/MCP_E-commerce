@@ -30,7 +30,11 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   const token = getToken()
   const controller = new AbortController()
-  const timeout = options.timeout ?? 90000
+  
+  // Stricter timeouts for better UX
+  const isAuthMe = path === "/auth/me"
+  const defaultTimeout = isAuthMe ? 8000 : 15000
+  const timeout = options.timeout ?? defaultTimeout
 
   const timeoutId = window.setTimeout(() => {
     controller.abort()
@@ -44,6 +48,10 @@ export async function apiFetch<T = unknown>(
     })
 
     if (!response.ok) {
+      if (response.status !== 401 || path !== "/auth/me") {
+        console.warn(`API Error [${response.status}] for ${path}`);
+      }
+
       let message = "API error"
 
       try {
@@ -70,7 +78,8 @@ export async function apiFetch<T = unknown>(
     return (await response.json()) as T
   } catch (err: any) {
     if (err?.name === "AbortError") {
-      throw new Error("Request timeout")
+      console.error(`Request timeout for ${path} after ${timeout}ms`);
+      throw new Error("Il server impiega troppo tempo a rispondere. Verifica la connessione.")
     }
 
     throw err

@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 try:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
-    _MCP_IMPORT_ERROR: Exception | None = None
+    _MCP_IMPORT_ERROR: Optional[Exception] = None
 except Exception as exc:
-    ClientSession = None
-    streamable_http_client = None
+    # Use class mocks to satisfy Pyre's type form requirements
+    class ClientSession: pass
+    class streamable_http_client: pass
     _MCP_IMPORT_ERROR = exc
 
 
@@ -28,8 +29,9 @@ class MCPToolClient:
         self.enabled = bool(enabled)
         self.is_local = "127.0.0.1" in self.server_url or "localhost" in self.server_url
         
-        self._exit_stack = None
-        self._session = None
+        from contextlib import AsyncExitStack
+        self._exit_stack: Optional[AsyncExitStack] = None
+        self._session: Optional[ClientSession] = None
 
     @property
     def is_available(self) -> bool:
@@ -49,17 +51,24 @@ class MCPToolClient:
 
         try:
             from contextlib import AsyncExitStack
-            self._exit_stack = AsyncExitStack()
+            stack = AsyncExitStack()
+            self._exit_stack = stack
             
-            read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
+            # Use local variables to avoid Optional[None] Pyre errors
+            if streamable_http_client is None:
+                raise RuntimeError("mcp streamable_http_client not available")
+
+            read_stream, write_stream, _ = await stack.enter_async_context(
                 streamable_http_client(self.server_url)
             )
             
-            self._session = await self._exit_stack.enter_async_context(
+            session = await stack.enter_async_context(
                 ClientSession(read_stream, write_stream)
             )
+            self._session = session
             
-            await self._session.initialize()
+            if session:
+                await session.initialize()
             logger.info("MCP client connected via HTTP | server=%s", self.server_url)
             
         except Exception as exc:
@@ -94,9 +103,10 @@ class MCPToolClient:
         
         if self.is_local:
             from app.mcp.server import mcp
-            tools = await mcp.list_tools()
-            return [t.name for t in tools]
+            tools_list = await mcp.list_tools()
+            return [t.name for t in tools_list]
 
+        assert self._session is not None
         tools = await self._session.list_tools()
         return [tool.name for tool in tools.tools]
 
@@ -121,6 +131,7 @@ class MCPToolClient:
                 }
             return catalog
 
+        assert self._session is not None
         tools = await self._session.list_tools()
         for tool in tools.tools:
             catalog[tool.name] = {
@@ -155,17 +166,17 @@ class MCPToolClient:
 
             parts: List[str] = []
             for item in content:
-                text = getattr(item, "text", None)
+                text: Optional[str] = getattr(item, "text", None)
                 if text is not None:
                     parts.append(text)
 
             if not parts:
                 return {"status": "ok", "result": None, "_backend": "mcp"}
 
-            joined = "\n".join(parts).strip()
+            joined: str = "\n".join(parts).strip()
             
             try:
-                parsed_result = json.loads(joined)
+                parsed_result: Any = json.loads(joined)
                 if isinstance(parsed_result, dict):
                     parsed_result["_backend"] = "mcp"
                     return parsed_result
@@ -187,8 +198,17 @@ class MCPToolClient:
         try:
             if self.is_local:
                 from app.mcp.server import mcp
-                # Not fully supported seamlessly in FastMCP wrapper bypassing, so we fallback gracefully
-                return None
+                # FastMCP supports reading resources by URI
+                try:
+                    # In FastMCP, read_resource usually returns a list of ResourceContent
+                    content = await mcp.read_resource(uri)
+                    if not content:
+                        return None
+                    parts = [getattr(item, "text", "") for item in content if hasattr(item, "text")]
+                    return "\n".join(parts).strip() if parts else None
+                except Exception as e:
+                    logger.warning("Local MCP read_resource failed for %s: %s", uri, e)
+                    return None
                 
             result = await self._session.read_resource(uri)
             content = getattr(result, "contents", None)
@@ -211,7 +231,22 @@ class MCPToolClient:
         try:
             if self.is_local:
                 from app.mcp.server import mcp
-                return None
+                try:
+                    # FastMCP supports getting prompts by name
+                    # Returns a GetPromptResult which has 'messages'
+                    result = await mcp.get_prompt(name)
+                    messages = getattr(result, "messages", None)
+                    if not messages:
+                        return None
+                    parts = []
+                    for msg in messages:
+                        content = getattr(msg, "content", None)
+                        if hasattr(content, "text"):
+                            parts.append(content.text)
+                    return "\n".join(parts).strip() if parts else None
+                except Exception as e:
+                    logger.warning("Local MCP get_prompt failed for %s: %s", name, e)
+                    return None
 
             result = await self._session.get_prompt(name)
             messages = getattr(result, "messages", None)

@@ -44,6 +44,15 @@ async def app_lifespan(app: FastAPI):
     await ebay.init_http_client()
     logger.info("eBay shared HTTP client initialized.")
 
+    from sqlalchemy import text
+    from app.db.database import engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Database connection warmed up.")
+    except Exception as e:
+        logger.error("Database warmup failed: %s", e)
+
     async with mcp_app.router.lifespan_context(app):
         yield
 

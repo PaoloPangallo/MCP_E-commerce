@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
+from app.db.database import SessionLocal
 from app.db.redis import redis_client
 from app.config.cache import SEARCH_PIPELINE_TTL
 from app.models.listing import Listing
@@ -100,8 +101,8 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     
     raw_query = " ".join(parts)
     # CRITICAL DEBUG: Vediamo cosa stiamo mandando a eBay
-    # print(f"\n[DEBUG] EBAY SEARCH QUERY: '{raw_query}' (Original fallback: '{fallback_query}')\n")
-    # logger.info("EBAY QUERY: %s", raw_query)
+    print(f"\n[DEBUG] EBAY SEARCH QUERY: '{raw_query}' (Original fallback: '{fallback_query}')\n")
+    logger.info("EBAY QUERY: %s", raw_query)
     
     for word in raw_query.split():
         w_low = word.lower()
@@ -137,7 +138,7 @@ async def _compute_seller_trust_cached(seller_name: str) -> Optional[float]:
     cached = redis_client.get_json(cache_key)
     if cached is not None:
         if int(cached.get("count", -1)) == len(feedbacks):
-            return round(float(cached["trust_score"]), 3)
+            return int(float(cached["trust_score"]) * 1000) / 1000.0
 
     # These are CPU bound, but let's keep them in thread for now if complex, 
     # or just run them here if they are fast enough.
@@ -151,7 +152,7 @@ async def _compute_seller_trust_cached(seller_name: str) -> Optional[float]:
     }
     redis_client.set_json(cache_key, result, ttl_seconds=int(_CACHE_TTL))
 
-    return round(float(trust_score), 3)
+    return int(float(trust_score) * 1000) / 1000.0
 
 
 async def _prefetch_top_sellers_feedback(items: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -192,13 +193,33 @@ def _batch_fetch_existing_ebay_ids(db: Session, items: List[Dict[str, Any]]) -> 
     if not ebay_ids:
         return set()
 
+    # Step A: Check Redis first
+    existing_in_cache = set()
+    to_query_db = []
+    
+    for eid in ebay_ids:
+        if redis_client.set_is_member("known_ebay_ids", str(eid)):
+            existing_in_cache.add(str(eid))
+        else:
+            to_query_db.append(eid)
+            
+    if not to_query_db:
+        return existing_in_cache
+
+    # Step B: Query DB for those not in cache
     rows = (
         db.query(Listing.ebay_id)
-        .filter(Listing.ebay_id.in_(ebay_ids))
+        .filter(Listing.ebay_id.in_(to_query_db))
         .all()
     )
-
-    return {row[0] for row in rows}
+    
+    found_in_db = {str(row[0]) for row in rows}
+    
+    # Step C: Update cache with what we found in DB
+    for eid in found_in_db:
+        redis_client.set_add("known_ebay_ids", eid)
+        
+    return existing_in_cache.union(found_in_db)
 
 
 def _prepare_and_persist_items(
@@ -234,6 +255,8 @@ def _prepare_and_persist_items(
             )
             db.add(listing)
             saved_count += 1
+            # Update cache so we don't query DB next time
+            redis_client.set_add("known_ebay_ids", str(ebay_id))
 
         seller_name = item.get("seller_name")
         trust_score = seller_trust_map.get(seller_name) if seller_name else None
@@ -293,7 +316,7 @@ def _apply_final_ranking(
         elif trust >= 0.6:
             explanations.append("Seller shows generally positive feedback.")
 
-        item["ranking_score"] = round(ranking_score, 3)
+        item["ranking_score"] = int(float(ranking_score) * 1000) / 1000.0
         if explanations:
             item["explanations"] = explanations
 
@@ -416,7 +439,8 @@ async def run_search_pipeline(
         include_meta=True,
         context_info=context_info,
     )
-    timings["parse_query_s"] = round(time.time() - t, 3)
+    t_parse = time.time() - t
+    timings["parse_query_s"] = int(float(t_parse) * 1000) / 1000.0
 
     ebay_query_used = _build_ebay_query(parsed, query)
 
@@ -454,7 +478,7 @@ async def run_search_pipeline(
         accessory_cats = ["Accessori", "Parti", "Cover", "Case", "Protective", "Replacement", "Cavo", "Caricatore"]
         
         # Check top 5 items for accessory categories
-        top_items = items[:5]
+        top_items = [items[i] for i in range(len(items)) if i < 5]
         acc_count = 0
         for it in top_items:
             cat_name = it.get("category_name") or ""
@@ -489,7 +513,8 @@ async def run_search_pipeline(
     logger.info("Final eBay results count: %d", len(items))
     expanded_query, rag_docs = results[1]
     
-    timings["parallel_io_s"] = round(time.time() - t, 3)
+    delta_io = time.time() - t
+    timings["parallel_io_s"] = int(float(delta_io) * 1000) / 1000.0
 
     # 1.5) MERGE WITH GLOBAL MEMORY
     try:
@@ -538,8 +563,9 @@ async def run_search_pipeline(
     # ============================================================
     logger.info("PIPELINE STEP 5: seller_trust")
     t = time.time()
-    seller_trust_map = await _prefetch_top_sellers_feedback(items[:MAX_SELLERS_FOR_TRUST * 2])
-    timings["seller_trust_s"] = round(time.time() - t, 3)
+    seller_trust_map = await _prefetch_top_sellers_feedback([items[i] for i in range(len(items)) if i < MAX_SELLERS_FOR_TRUST * 2])
+    delta_trust_time = time.time() - t
+    timings["seller_trust_s"] = int(float(delta_trust_time) * 1000) / 1000.0
 
     # Inietta trust_score negli item prima del reranker
     for item in items:
@@ -564,7 +590,8 @@ async def run_search_pipeline(
         except Exception as e:
             logger.exception("Rerank failed: %s", e)
             logger.warning("Rerank failed, keeping original order")
-    timings["rerank_s"] = round(time.time() - t, 3)
+    delta_rerank = time.time() - t
+    timings["rerank_s"] = int(float(delta_rerank) * 1000) / 1000.0
 
     # ============================================================
     # 5.5) NER ATTRIBUTE EXTRACTION
@@ -574,22 +601,42 @@ async def run_search_pipeline(
     if items:
         # Extract attributes for top few items only for performance
         top_n = 6
-        top_titles = [it.get("title", "") for it in items[:top_n]]
+        top_titles = [items[i].get("title", "") for i in range(len(items)) if i < top_n]
         try:
             ner_results = await extract_attributes_batch(top_titles)
-            for it, ner in zip(items[:top_n], ner_results):
+            top_items_ner = [items[i] for i in range(len(items)) if i < top_n]
+            for it, ner in zip(top_items_ner, ner_results):
                 it["ner_attributes"] = ner
         except Exception as e:
             logger.warning("NER extraction skipped: %s", e)
-    timings["ner_extraction_s"] = round(time.time() - t, 3)
+    delta_ner = time.time() - t
+    timings["ner_extraction_s"] = int(float(delta_ner) * 1000) / 1000.0
 
     # ============================================================
-    # 6) DB PERSIST
+    # 6) DB PERSIST (Isolated Session)
     # ============================================================
     logger.info("PIPELINE STEP 7: db_persist")
     t = time.time()
-    results_out, saved_count = _prepare_and_persist_items(db, items, seller_trust_map)
-    timings["db_prepare_s"] = round(time.time() - t, 3)
+    
+    # Use a localized session factory to avoid closure conflicts with the main request task
+    def _bg_persist_thread_task():
+        from app.db.database import SessionLocal
+        bg_db = SessionLocal()
+        try:
+            # Prepare and persist items in an isolated session
+            res, count = _prepare_and_persist_items(bg_db, items, seller_trust_map)
+            bg_db.commit()
+            return res, count
+        except Exception as bg_e:
+            logger.error("Background persistence error: %s", bg_e)
+            bg_db.rollback()
+            return [], 0
+        finally:
+            bg_db.close()
+
+    results_out, saved_count = await asyncio.to_thread(_bg_persist_thread_task)
+    delta_persist = time.time() - t
+    timings["db_prepare_s"] = int(float(delta_persist) * 1000) / 1000.0
 
     # ============================================================
     # 7) FINAL RANKING + CONTEXT
@@ -600,9 +647,9 @@ async def run_search_pipeline(
     
     # Attach RAG feedback
     logger.info("PIPELINE STEP 9: rag_attach")
-    for item in results_out:
+    for item in [results_out[i] for i in range(len(results_out)) if i < 15]:
         seller_name = item.get("seller_name")
-        item["rag_feedback"] = [d for d in rag_docs if d.get("seller") == seller_name][:3] if seller_name else []
+        item["rag_feedback"] = [rag_docs[j] for j in range(len(rag_docs)) if j < 3 and rag_docs[j].get("seller") == seller_name] if seller_name else []
 
     # Recupera i risultati del fetch meta se completato
     meta_policies = None
@@ -633,10 +680,11 @@ async def run_search_pipeline(
     analysis = None
     if results_out:
         try:
-            analysis = await asyncio.to_thread(explain_results, query, results_out[:3])
+            analysis = await asyncio.to_thread(explain_results, query, [results_out[i] for i in range(len(results_out)) if i < 3])
         except Exception:
             pass
-    timings["explain_s"] = round(time.time() - t, 3)
+    delta_explain = time.time() - t
+    timings["explain_s"] = int(float(delta_explain) * 1000) / 1000.0
 
     # ============================================================
     # 9) IR METRICS
@@ -663,7 +711,8 @@ async def run_search_pipeline(
     # ============================================================
 
     try:
-        db.commit()
+        # Commit can be slow, offload to thread
+        await asyncio.to_thread(db.commit)
     except Exception:
         db.rollback()
         logger.warning("DB commit failed; transaction rolled back")
@@ -671,11 +720,10 @@ async def run_search_pipeline(
     # ============================================================
     # 11) PERSIST TO GLOBAL MEMORY (ASYNC)
     # ============================================================
-    if results_out:
         # Index in background to not block response
-        asyncio.create_task(asyncio.to_thread(index_search_items, results_out[:15]))
+        asyncio.create_task(asyncio.to_thread(index_search_items, [results_out[i] for i in range(len(results_out)) if i < 15]))
 
-    timings["total_s"] = round(time.time() - t0, 3)
+    timings["total_s"] = int(float(time.time() - t0) * 1000) / 1000.0
 
     return {
         "parsed_query": parsed,

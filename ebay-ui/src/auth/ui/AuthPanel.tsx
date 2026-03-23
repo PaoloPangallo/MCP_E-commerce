@@ -28,7 +28,7 @@ function getInitials(email?: string) {
 }
 
 export default function AuthPanel() {
-  const { user, loggedIn, logout, loadingUser } = useAuth()
+  const { user, loggedIn, logout } = useAuth()
   const isCollapsed = useSidebarStore((s: SidebarState) => s.isCollapsed)
 
   const [loginOpen, setLoginOpen] = useState(false)
@@ -236,7 +236,7 @@ export default function AuthPanel() {
               fullWidth
               variant="contained"
               onClick={() => setLoginOpen(true)}
-              disabled={loadingUser}
+
               sx={{
                 textTransform: "none",
                 borderRadius: "10px",
@@ -258,7 +258,7 @@ export default function AuthPanel() {
               fullWidth
               variant="outlined"
               onClick={() => setRegisterOpen(true)}
-              disabled={loadingUser}
+
               sx={{
                 textTransform: "none",
                 borderRadius: "10px",

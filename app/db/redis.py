@@ -3,7 +3,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set, List, Union
 
 from app.config.settings import settings
 
@@ -27,10 +27,11 @@ class _LocalCacheDict:
             item = self._store.get(name)
             if not item:
                 return None
-            if time.time() > item["expires_at"]:
+            expires_at = item.get("expires_at")
+            if isinstance(expires_at, (int, float)) and time.time() > expires_at:
                 del self._store[name]
                 return None
-            return item["val"]
+            return str(item.get("val", ""))
 
     def delete(self, name: str) -> None:
         with self._lock:
@@ -65,6 +66,24 @@ class _LocalCacheDict:
                 return []
             val = item["val"]
             return val if isinstance(val, list) else []
+
+    def sadd(self, name: str, value: str) -> None:
+        with self._lock:
+            if name not in self._store:
+                self._store[name] = {"val": set(), "expires_at": time.time() + 86400}
+            item = self._store[name]
+            if isinstance(item["val"], set):
+                item["val"].add(value)
+
+    def sismember(self, name: str, value: str) -> bool:
+        with self._lock:
+            item = self._store.get(name)
+            if item and isinstance(item["val"], set):
+                if time.time() > item["expires_at"]:
+                    del self._store[name]
+                    return False
+                return value in item["val"]
+            return False
 
 
 class RedisManager:
@@ -146,5 +165,25 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Cache get_user_queries error for {key}: {e}")
             return []
+
+    def set_add(self, key: str, value: str, ttl: int = 86400) -> None:
+        try:
+            if self._redis:
+                self._redis.sadd(key, value)
+                self._redis.expire(key, ttl)
+            else:
+                self._local.sadd(key, value)
+        except Exception as e:
+            logger.error(f"Cache set_add error: {e}")
+
+    def set_is_member(self, key: str, value: str) -> bool:
+        try:
+            if self._redis:
+                return bool(self._redis.sismember(key, value))
+            else:
+                return self._local.sismember(key, value)
+        except Exception as e:
+            logger.error(f"Cache set_is_member error: {e}")
+            return False
 
 redis_client = RedisManager()

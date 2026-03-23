@@ -25,6 +25,7 @@ export interface AgentStep {
   action_input?: Record<string, any>
   observation_summary?: string
   status?: "thinking" | "running" | "ok" | "error" | "final"
+  ebay_query?: string
 }
 
 export interface AgentEvent {

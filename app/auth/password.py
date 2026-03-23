@@ -2,9 +2,15 @@ from passlib.context import CryptContext
 import re
 
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+_executor = ThreadPoolExecutor(max_workers=4)
+
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
+    bcrypt__rounds=12
 )
 
 
@@ -21,6 +27,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     plain_password = plain_password[:72]
 
     return pwd_context.verify(plain_password, hashed_password)
+
+
+async def verify_password_async(plain: str, hashed: str) -> bool:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _executor,
+        verify_password,
+        plain,
+        hashed
+    )
 
 
 def validate_password_strength(password: str) -> None:

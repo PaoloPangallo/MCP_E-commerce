@@ -103,7 +103,7 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
         position: "relative",
         bgcolor: "var(--bg-primary)",
         border: "1px solid var(--border-color)",
-        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05)",
+        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.1)",
         overflow: "hidden",
       }}
     >
@@ -119,7 +119,7 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
         }}
       >
         <WorkspacePremiumIcon sx={{ fontSize: 18 }} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff" }}>
           Miglior Scelta dell'Agente
         </Typography>
       </Box>
@@ -247,10 +247,11 @@ const AlternativesCarousel = React.memo(({ matrix, winner, minPrice, scrollRef, 
           left: -60,
           top: "55%",
           zIndex: 10,
-          bgcolor: "var(--bg-primary)",
-          boxShadow: 2,
-          color: "#7c3aed",
-          "&:hover": { bgcolor: "var(--bg-secondary)" }
+          bgcolor: "var(--bg-secondary)",
+          border: "1px solid var(--border-color)",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          color: "var(--accent-primary)",
+          "&:hover": { bgcolor: "var(--bg-primary)", borderColor: "var(--accent-primary)" }
         }}
       >
         <ChevronLeftIcon />
@@ -393,10 +394,11 @@ const AlternativesCarousel = React.memo(({ matrix, winner, minPrice, scrollRef, 
           right: -60,
           top: "55%",
           zIndex: 10,
-          bgcolor: "var(--bg-primary)",
-          boxShadow: 2,
+          bgcolor: "var(--bg-secondary)",
+          border: "1px solid var(--border-color)",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
           color: "var(--accent-primary)",
-          "&:hover": { bgcolor: "var(--bg-secondary)" }
+          "&:hover": { bgcolor: "var(--bg-primary)", borderColor: "var(--accent-primary)" }
         }}
       >
         <ChevronRightIcon />

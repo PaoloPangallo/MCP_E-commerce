@@ -4,6 +4,11 @@ import type { AuthUser } from "./useAuth"
 
 export interface AuthResponse {
   access_token: string
+  email: string
+  favorite_brands?: string | null
+  price_preference?: string | null
+  custom_instructions?: string | null
+
   token_type: string
   user_id: number
 }

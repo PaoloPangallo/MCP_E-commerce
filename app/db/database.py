@@ -10,7 +10,14 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 SQL_ECHO = os.getenv("SQL_ECHO", "false").strip().lower() in {"true", "1", "yes"}
 
-engine = create_engine(DATABASE_URL, echo=SQL_ECHO)
+engine = create_engine(
+    DATABASE_URL,
+    echo=SQL_ECHO,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    connect_args={"connect_timeout": 5}
+)
 
 SessionLocal = sessionmaker(
     autocommit=False,

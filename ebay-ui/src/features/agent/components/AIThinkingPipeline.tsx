@@ -99,8 +99,9 @@ function StepRow({
 
   // Extract interesting params for badges
   const params = step.action_input || {}
+  const displayQuery = step.ebay_query || params.query
   const badges = [
-    params.query && { label: "Query", value: params.query },
+    displayQuery && { label: "Query", value: displayQuery },
     params.seller_name && { label: "Seller", value: params.seller_name },
     params.ebay_id && { label: "ID", value: params.ebay_id },
     params.product && { label: "Prod", value: params.product }
@@ -186,7 +187,7 @@ function StepRow({
                <Typography sx={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', opacity: 0.7, textTransform: 'uppercase' }}>
                  {b.label}:
                </Typography>
-               <Typography sx={{ fontSize: 10, color: 'var(--text-primary)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+               <Typography sx={{ fontSize: 10, color: 'var(--text-primary)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                  {b.value}
                </Typography>
              </Box>
@@ -273,7 +274,7 @@ function StepRow({
                 position: 'absolute',
                 top: -8,
                 right: 16,
-                bgcolor: '#1a1d21', // Fondo scuro del box chat
+                bgcolor: 'var(--bg-primary)',
                 px: 1,
                 py: 0.2,
                 borderRadius: '4px',

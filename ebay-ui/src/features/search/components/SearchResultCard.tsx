@@ -66,9 +66,9 @@ function AiPill({ score }: { score: number }) {
         px: 1,
         py: "2px",
         borderRadius: "6px",
-        border: "1px solid #ddd6fe",
-        bgcolor: "rgba(124, 58, 237, 0.08)",
-        boxShadow: "0 1px 2px rgba(124, 58, 237, 0.05)",
+        border: "1px solid var(--border-color)",
+        bgcolor: "rgba(124, 58, 237, 0.15)",
+        boxShadow: "0 1px 2px rgba(124, 58, 237, 0.1)",
       }}
     >
       <Typography
@@ -138,8 +138,8 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
           "&:hover": { 
             transform: "scale(1.02)",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-            borderColor: "#e0e0e0"
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            borderColor: "var(--accent-primary)"
           },
         }}
       >
@@ -336,7 +336,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
               bgcolor: "var(--accent-primary)",
               color: "#fff",
               px: 2,
-              "&:hover": { bgcolor: "var(--accent-primary)", opacity: 0.9 }
+              "&:hover": { bgcolor: "var(--accent-primary)", opacity: 0.9, boxShadow: "0 4px 12px var(--accent-primary)" }
             }}
           >
             Dettagli
@@ -357,10 +357,9 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
               borderRadius: "8px",
               fontSize: 12,
               fontWeight: 600,
-              borderColor: "#e5e7eb",
-              color: "#374151",
+              color: "var(--text-primary)",
               px: 2,
-              "&:hover": { borderColor: "#d1d5db", bgcolor: "#f9fafb" }
+              "&:hover": { borderColor: "var(--accent-primary)", bgcolor: "var(--bg-secondary)" }
             }}
           >
             Spedizione
@@ -381,10 +380,9 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
               borderRadius: "8px",
               fontSize: 12,
               fontWeight: 600,
-              borderColor: "#e5e7eb",
-              color: "#374151",
+              color: "var(--text-primary)",
               px: 2,
-              "&:hover": { borderColor: "#d1d5db", bgcolor: "#f9fafb" }
+              "&:hover": { borderColor: "var(--accent-primary)", bgcolor: "var(--bg-secondary)" }
             }}
           >
             Analisi mercato

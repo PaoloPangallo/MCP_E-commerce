@@ -86,8 +86,8 @@ export default function SearchResultList({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          bgcolor: "#fafafa",
-          borderBottom: "1px solid #f0f0f0",
+          bgcolor: "var(--bg-secondary)",
+          borderBottom: "1px solid var(--border-color)",
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -134,8 +134,8 @@ export default function SearchResultList({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            borderTop: "1px solid #f0f0f0",
-            bgcolor: "#fff"
+            borderTop: "1px solid var(--border-color)",
+            bgcolor: "var(--bg-primary)"
           }}
         >
           <Button
@@ -151,9 +151,9 @@ export default function SearchResultList({
               fontWeight: 600,
               py: 1,
               "&:hover": {
-                bgcolor: "#f9fafb",
-                borderColor: "#d1d5db"
-              }
+              bgcolor: "var(--bg-secondary)",
+              borderColor: "var(--border-color)"
+            }
             }}
           >
             Mostra altri {Math.min(remaining, 5)} prodotti ({remaining} rimanenti)

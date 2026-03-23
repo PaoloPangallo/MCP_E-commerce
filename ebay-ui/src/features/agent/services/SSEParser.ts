@@ -104,11 +104,16 @@ export function parseSSEEvent(
 
     case "tool_result": {
       const toolStatus = event.ok ? "ok" : "error"
+      const toolData = (event as any).data
+      const ebayQuery = (event.tool === "search_products" && toolData?.ebay_query_used)
+        ? toolData.ebay_query_used
+        : undefined
       const nextSteps = upsertStep(currentState.steps, {
         step: event.step ?? 1,
         action: event.tool!,
         status: toolStatus,
-        observation_summary: event.summary
+        observation_summary: event.summary,
+        ...(ebayQuery ? { ebay_query: ebayQuery } : {})
       })
 
       if (event.ok && (event as any).data) {
@@ -141,7 +146,7 @@ export function parseSSEEvent(
       const nextSteps = markStepsAsDone(currentState.steps)
       const basePayload = currentState.finalPayload || {
           finalAnswer: streamingAnswer,
-          results: [],
+          results: currentState.results || [],
           analysis: null,
           trace: nextSteps,
           plannedTasks: currentState.plannedTasks
@@ -199,7 +204,10 @@ export function parseSSEEvent(
       return {
         running: false,
         steps: finalTrace,
-        results: finalMerged.results || [],
+        // Priority to finalMerged, but fallback to currentState if final is empty
+        results: (finalMerged.results && finalMerged.results.length > 0) 
+          ? finalMerged.results 
+          : (currentState.results || []),
         finalPayload: finalMerged
       }
     }
