@@ -89,11 +89,10 @@ export function ThinkingPill({
         <Typography 
           sx={{ 
             fontSize: 12, 
-            fontWeight: 800, 
+            fontWeight: 600, 
             color: loading ? "#60a5fa" : "#34d399", 
             lineHeight: 1,
-            letterSpacing: '0.02em',
-            textTransform: 'uppercase',
+            letterSpacing: '0.01em',
             textShadow: loading 
               ? "0 0 12px rgba(59, 130, 246, 0.4)" 
               : "0 0 10px rgba(16, 185, 129, 0.3)"

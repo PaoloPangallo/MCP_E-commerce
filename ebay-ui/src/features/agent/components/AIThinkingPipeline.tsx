@@ -139,9 +139,9 @@ function StepRow({
             sx={{ 
               width: "2px", 
               flex: 1, 
-              background: isDone ? "linear-gradient(to bottom, #10b981, #f0f0f0)" : "#f0f0f0", 
+              background: isDone ? "linear-gradient(to bottom, #10b981, rgba(255,255,255,0.05))" : "rgba(255,255,255,0.05)", 
               mt: 0.5,
-              opacity: 0.6 
+              opacity: 0.4 
             }} 
           />
         )}
@@ -156,15 +156,15 @@ function StepRow({
               display: 'flex', 
               p: 0.5, 
               borderRadius: '6px', 
-              bgcolor: isRunning ? '#eff6ff' : isDone ? '#ecfdf5' : '#f9fafb',
-              color: isRunning ? '#3b82f6' : isDone ? '#059669' : '#9ca3af'
+              bgcolor: isRunning ? 'rgba(59, 130, 246, 0.15)' : isDone ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)',
+              color: isRunning ? '#60a5fa' : isDone ? '#34d399' : '#9ca3af'
             }}
           >
             {getActionIcon(step.action)}
           </Box>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: isDone ? "#111827" : "#4b5563" }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: isDone ? "var(--text-primary)" : "var(--text-secondary)" }}>
             {humanizeToolName(step.action, step.action_input)}
-            <Box component="span" sx={{ ml: 1, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>
+            <Box component="span" sx={{ ml: 1, fontSize: 10, color: 'var(--text-secondary)', opacity: 0.6, fontWeight: 500 }}>
               [{stepNum}/{totalSteps}]
             </Box>
           </Typography>
@@ -176,17 +176,17 @@ function StepRow({
                  px: 0.75, 
                  py: 0.1, 
                  borderRadius: '4px', 
-                 bgcolor: '#f3f4f6', 
-                 border: '1px solid #e5e7eb',
+                 bgcolor: 'rgba(255,255,255,0.03)', 
+                 border: '1px solid rgba(255,255,255,0.08)',
                  display: 'flex',
                  alignItems: 'center',
                  gap: 0.5
                }}
              >
-               <Typography sx={{ fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
+               <Typography sx={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', opacity: 0.7, textTransform: 'uppercase' }}>
                  {b.label}:
                </Typography>
-               <Typography sx={{ fontSize: 10, color: '#374151', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+               <Typography sx={{ fontSize: 10, color: 'var(--text-primary)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                  {b.value}
                </Typography>
              </Box>
@@ -247,11 +247,11 @@ function StepRow({
           <Typography 
             sx={{ 
               fontSize: 12, 
-              color: "#6b7280", 
+              color: "var(--text-secondary)", 
               lineHeight: 1.6, 
               my: 0.75,
               pl: 1,
-              borderLeft: '2px solid #f3f4f6'
+              borderLeft: '2px solid rgba(255,255,255,0.05)'
             }}
           >
             {step.thought}
@@ -262,31 +262,36 @@ function StepRow({
         {step.observation_summary && (
           <Box
             sx={{
-              p: 1.25,
-              bgcolor: "#fafafa",
-              borderRadius: "8px",
-              border: "1px solid #f0f0f0",
-              mt: 0.5,
+              p: 1.5,
+              bgcolor: "rgba(255,255,255,0.02)",
+              borderRadius: "12px",
+              border: "1px solid rgba(255,255,255,0.06)",
+              mt: 1,
               position: 'relative',
               '&:before': {
                 content: '"OBSERVATION"',
                 position: 'absolute',
-                top: -6,
-                right: 12,
-                bgcolor: '#fff',
-                px: 0.5,
+                top: -8,
+                right: 16,
+                bgcolor: '#1a1d21', // Fondo scuro del box chat
+                px: 1,
+                py: 0.2,
+                borderRadius: '4px',
                 fontSize: 8,
-                fontWeight: 800,
-                color: '#9ca3af',
-                letterSpacing: 0.5
+                fontWeight: 900,
+                color: isDone ? '#10b981' : '#60a5fa',
+                letterSpacing: 1,
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
               }
             }}
           >
             <Typography
               sx={{
-                fontSize: 11,
-                color: "#4b5563",
-                lineHeight: 1.5,
+                fontSize: 11.5,
+                color: "var(--text-primary)",
+                opacity: 0.9,
+                lineHeight: 1.6,
                 fontStyle: "italic"
               }}
             >
