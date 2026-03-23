@@ -6,15 +6,16 @@ from typing import Any, Dict, List
 
 import redis
 
+from app.config.settings import settings
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
 # REDIS (SESSION MEMORY)
 # ============================================================
 
-redis_client = redis.Redis(
-    host="localhost",
-    port=6379,
+redis_client = redis.from_url(
+    settings.REDIS_URL,
     decode_responses=True
 )
 

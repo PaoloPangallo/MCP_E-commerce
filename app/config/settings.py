@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     EBAY_MARKETPLACE_ID: str = "EBAY_IT"
     MCP_SERVER_URL: str = "http://127.0.0.1:8050/mcp"
     NGROK_URL: str = ""
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # Search config
     EBAY_PAGE_SIZE: int = 20

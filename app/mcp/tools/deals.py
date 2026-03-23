@@ -37,14 +37,16 @@ async def get_ebay_deals(
             return {
                 "status": "error",
                 "message": "Nessuna offerta trovata per i criteri specificati o errore SerpApi.",
-                "data": None
+                "data": None,
+                "summary": "Nessuna offerta trovata per i criteri specificati."
             }
 
         return {
             "status": "ok",
             "title": result.title,
             "subtitle": result.subtitle,
-            "deals": [item.dict() for item in result.items]
+            "deals": [item.dict() for item in result.items],
+            "summary": f"Offerte speciali recuperate: {result.title} ({len(result.items)} oggetti)."
         }
 
     except Exception as e:
@@ -52,5 +54,6 @@ async def get_ebay_deals(
         return {
             "status": "error",
             "message": str(e),
-            "data": None
+            "data": None,
+            "summary": f"Errore nel recupero delle offerte: {str(e)}"
         }

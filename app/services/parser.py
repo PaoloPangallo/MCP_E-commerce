@@ -92,6 +92,7 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     "original_query": "",
     "semantic_query": "",
     "product": None,
+    "product_type": "Unknown",
     "brands": [],
     "compatibilities": {},
     "constraints": [],
@@ -510,6 +511,10 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
         cleaned = product.strip()
         result["product"] = None if is_vague_product(cleaned) else cleaned
 
+    product_type = data.get("product_type")
+    if product_type in {"Main", "Accessory", "Part", "Service", "Unknown"}:
+        result["product_type"] = product_type
+
     constraints = data.get("constraints", [])
     if isinstance(constraints, list):
         norm_constraints = []
@@ -571,6 +576,7 @@ Schema:
 {{
   "semantic_query": "",
   "product": null,
+  "product_type": "Main" | "Accessory" | "Part" | "Service" | "Unknown",
   "brands": [],
   "compatibilities": {{}},
   "constraints": [],
@@ -595,6 +601,7 @@ Rules:
 - Put ONLY mandatory requirements in constraints.
 - Put optional wishes in preferences.
 - Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
+- 'product_type': If the user wants the device itself (phone, laptop, console), use "Main". If they want a case, cover, charger, use "Accessory". If they want a screen replacement, battery, scocca, use "Part".
 - Do NOT invent brands or products.
 - IMPORTANT: Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
 - If the user says "cercalo", "trovali", "show me more", etc., the 'product' and 'brands' fields must be populated based on the previous topic found in the context.

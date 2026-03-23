@@ -45,7 +45,8 @@ SCORING_WEIGHTS = {
     "rag_product_boost": 0.20,
     "rag_seller_boost": 0.15,
     "rag_sentiment": 0.05,
-    "price_match_constraint": 0.30
+    "price_match_constraint": 0.30,
+    "accessory_score": -0.45  # Strong negative weight for accessories
 }
 
 # ============================================================
@@ -79,34 +80,39 @@ def lexical_score(query: str, title: str) -> float:
 # ============================================================
 
 ACCESSORY_WORDS = [
-    "case",
-    "cover",
-    "charger",
-    "caricatore",
-    "cavo",
-    "cable",
-    "vetro",
-    "pellicola",
-    "screen protector",
-    "glass",
-    "custodia",
-    "adattatore",
-    "adapter",
+    "case", "cover", "charger", "caricatore", "cavo", "cable", "vetro", "pellicola",
+    "screen protector", "glass", "custodia", "adattatore", "adapter", "scocca",
+    "ricambio", "parte", "batteria", "battery", "display", "schermo", "vetrino",
+    "bumper", "stand", "holder", "supporto", "alimentatore", "power", "jack",
+    "keyboard", "tastiera", "mouse", "cuffie", "headphones", "earbuds", "auricolari",
+    "box", "scatola", "confezione", "manuale", "manual", "dummy", "finto", "mostra",
+    "pezzi", "spare", "repair"
 ]
 
 # Non usiamo più POSITIVE_HINTS/NEGATIVE_HINTS ma le label LLM-based ("POSITIVE", "NEGATIVE", "NEUTRAL")
 
 
-def accessory_penalty(query: str, title: str) -> float:
+def accessory_penalty(query: str, title: str, product_type: str = "Unknown") -> float:
     q = (query or "").lower()
     t = (title or "").lower()
 
-    # penalizza accessori se l'utente sembra cercare un device
-    device_terms = ["iphone", "samsung", "galaxy", "pixel", "smartphone", "telefono"]
-    query_has_device_intent = any(term in q for term in device_terms)
+    # Se l'utente ha espresso esplicitamente l'intento per un accessorio, non penalizziamo
+    if product_type in ["Accessory", "Part"]:
+        return 0.0
 
-    if query_has_device_intent and any(w in t for w in ACCESSORY_WORDS):
-        return 0.15
+    # Penalizza se l'utente cerca un "Main device" (o Unknown che assume Main) e il titolo contiene parole da accessorio
+    is_main_intent = product_type in ["Main", "Unknown"]
+    
+    # Check if title has accessory words but query doesn't (important to avoid false positives if user searches "iphone cover")
+    t_words = set(re.findall(r"\w+", t))
+    q_words = set(re.findall(r"\w+", q))
+    
+    acc_in_title = any(w in t_words for w in ACCESSORY_WORDS)
+    acc_in_query = any(w in q_words for w in ACCESSORY_WORDS)
+
+    if is_main_intent and acc_in_title and not acc_in_query:
+        # Se è un telefono/laptop main e il titolo parla di "case" o "batteria" senza che l'utente l'abbia chiesto
+        return 1.0
 
     return 0.0
 
@@ -378,8 +384,13 @@ def rerank_products(
         # ----------------------------------------
         # ACCESSORY PENALTY
         # ----------------------------------------
-
-        acc_penalty = accessory_penalty(query, title)
+        
+        # We try to get product_type from constraints or item metadata if available
+        # In a real scenario, this is passed into rerank_products as a top-level signal
+        # For now, we extract it from item or default to "Unknown"
+        product_type = item.get("intent_product_type", "Unknown")
+        acc_penalty = accessory_penalty(query, title, product_type=product_type)
+        item["_accessory_penalty"] = acc_penalty
 
         # ----------------------------------------
         # TITLE QUALITY

@@ -5,6 +5,8 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
+from app.config.settings import settings
+
 logger = logging.getLogger(__name__)
 
 # Very simple local memory fallback for dict-like interface if Redis is unavailable.
@@ -71,7 +73,7 @@ class RedisManager:
         self._redis = None
         self._local = None
 
-        redis_url = os.getenv("REDIS_URL")
+        redis_url = settings.REDIS_URL
         if redis_url:
             try:
                 import redis

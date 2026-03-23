@@ -3,7 +3,7 @@ from typing import Dict, Any, Annotated
 from pydantic import Field
 
 from app.mcp.core import mcp, _db_context, _build_context, _tool_error
-from app.tools import execute_metadata_tool
+from app.services.ebay_metadata import get_marketplace_metadata as service_get_marketplace_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,43 @@ async def get_marketplace_metadata(
         with _db_context() as db:
             context = _build_context(db=db, session_id=session_id)
             logger.info("MCP TOOL get_marketplace_metadata START | policy_type=%s", policy_type)
-            result = await execute_metadata_tool(
-                {"policy_type": policy_type, "marketplace_id": marketplace_id, "category_id": category_id or None},
-                context
+            raw_result = await service_get_marketplace_metadata(
+                policy_type=policy_type,
+                marketplace_id=marketplace_id,
+                category_id=category_id or None
             )
+
+            has_error = "error" in raw_result and not any(
+                k for k in raw_result if k not in ("error", "detail", "policy_type", "marketplace_id", "category_id")
+            )
+
+            message = ""
+            if not has_error:
+                for list_key in ("itemConditionPolicies", "returnPolicies", "listingStructurePolicies"):
+                    if list_key in raw_result and isinstance(raw_result[list_key], list):
+                        total = len(raw_result[list_key])
+                        if total > 10:
+                            raw_result[list_key] = raw_result[list_key][:10]
+                            message = f"Warning: data truncated (showing 10 of {total} items). Specifying a category_id is recommended for full results."
+
+            result = {
+                "status": "error" if has_error else "ok",
+                "message": message,
+                "policy_type": policy_type,
+                "marketplace_id": raw_result.get("marketplace_id", ""),
+                "category_id": category_id,
+                "results": raw_result,
+                "results_count": len(raw_result) if not has_error else 0,
+            }
             result["_backend"] = "mcp"
+            
+            status = result.get("status")
+            if status != "ok":
+                result["summary"] = f"Errore nel recupero metadata: {result.get('error', 'sconosciuto')}"
+            else:
+                pt = result.get("policy_type", "metadata")
+                result["summary"] = f"Recuperati con successo i metadata eBay ({pt})."
+                
             logger.info("MCP TOOL get_marketplace_metadata END")
             return result
     except Exception as exc:

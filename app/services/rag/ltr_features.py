@@ -67,6 +67,9 @@ def extract_ltr_features(query: str, item: Dict[str, Any], context: Optional[Dic
                 if price < float(val):
                     price_match = 0.0
     features["price_match_constraint"] = price_match
+    
+    # 8. Accessory Detection (High negative weight if undesired)
+    features["accessory_score"] = float(item.get("_accessory_penalty", 0.0))
 
     return features
 
@@ -75,5 +78,5 @@ def get_feature_names() -> List[str]:
         "lexical_sim", "semantic_sim", "trust_score", "seller_rating",
         "log_price", "price_z", "has_image", "is_new", "has_brand",
         "has_model", "num_specs", "rag_product_boost", "rag_seller_boost", 
-        "rag_sentiment", "price_match_constraint"
+        "rag_sentiment", "price_match_constraint", "accessory_score"
     ]

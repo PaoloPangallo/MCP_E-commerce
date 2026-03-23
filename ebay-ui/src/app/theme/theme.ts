@@ -1,6 +1,6 @@
-import type { ThemeOptions } from "@mui/material/styles"
+import { createTheme } from "@mui/material/styles"
 
-export const appTheme: ThemeOptions = {
+export const appTheme = createTheme({
   palette: {
     mode: "light",
     primary: {
@@ -67,4 +67,4 @@ export const appTheme: ThemeOptions = {
     "0 12px 28px rgba(16, 24, 40, 0.10)",
     ...Array(20).fill("0 12px 28px rgba(16, 24, 40, 0.10)")
   ] as any
-}
+})

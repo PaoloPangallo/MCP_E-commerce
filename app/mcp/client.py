@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 try:
-    from mcp.client.session import ClientSession
+    from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
     _MCP_IMPORT_ERROR: Exception | None = None
 except Exception as exc:
@@ -26,16 +26,21 @@ class MCPToolClient:
     ) -> None:
         self.server_url = server_url or os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8050/mcp/mcp")
         self.enabled = bool(enabled)
+        self.is_local = "127.0.0.1" in self.server_url or "localhost" in self.server_url
         
         self._exit_stack = None
         self._session = None
 
     @property
     def is_available(self) -> bool:
-        return self.enabled and _MCP_IMPORT_ERROR is None
+        return self.enabled
 
     async def __aenter__(self):
         if not self.enabled:
+            return self
+
+        if self.is_local:
+            logger.info("MCP client using Local Direct Mode | server=%s", self.server_url)
             return self
 
         if _MCP_IMPORT_ERROR is not None:
@@ -46,21 +51,19 @@ class MCPToolClient:
             from contextlib import AsyncExitStack
             self._exit_stack = AsyncExitStack()
             
-            # Using streamable_http_client
             read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
                 streamable_http_client(self.server_url)
             )
             
-            # Creating and initializing ClientSession
             self._session = await self._exit_stack.enter_async_context(
                 ClientSession(read_stream, write_stream)
             )
             
             await self._session.initialize()
-            logger.info("MCP client connected and initialized | server=%s", self.server_url)
+            logger.info("MCP client connected via HTTP | server=%s", self.server_url)
             
         except Exception as exc:
-            logger.error("Failed to connect to MCP server at %s: %s", self.server_url, exc)
+            logger.error("Failed to connect to MCP server via HTTP at %s: %s", self.server_url, exc)
             self._session = None
             if self._exit_stack:
                 await self._exit_stack.aclose()
@@ -78,27 +81,44 @@ class MCPToolClient:
     def _ensure_ready(self) -> None:
         if not self.enabled:
             raise RuntimeError("MCP client disabled.")
-
+        if self.is_local:
+            return
         if _MCP_IMPORT_ERROR is not None:
-            raise RuntimeError(
-                f"MCP client non disponibile: {_MCP_IMPORT_ERROR}"
-            )
-            
+            raise RuntimeError(f"MCP client non disponibile: {_MCP_IMPORT_ERROR}")
         if self._session is None:
-             raise RuntimeError("MCP ClientSession is not initialized. Make sure to use MCPToolClient as an async context manager.")
+             raise RuntimeError("MCP ClientSession is not initialized.")
 
     async def list_tools_async(self) -> List[str]:
         self._ensure_ready()
-        logger.info("MCP client list_tools_async | server=%s", self.server_url)
+        logger.info("MCP client list_tools_async | local=%s", self.is_local)
+        
+        if self.is_local:
+            from app.mcp.server import mcp
+            return list(mcp._tools.keys())
+
         tools = await self._session.list_tools()
         return [tool.name for tool in tools.tools]
 
     async def get_tool_schemas_async(self) -> Dict[str, Dict[str, Any]]:
         self._ensure_ready()
-        logger.info("MCP client get_tool_schemas_async | server=%s", self.server_url)
-        tools = await self._session.list_tools()
+        logger.info("MCP client get_tool_schemas_async | local=%s", self.is_local)
         
         catalog = {}
+        if self.is_local:
+            from app.mcp.server import mcp
+            for name, tool in mcp._tools.items():
+                # FastMCP internal parameter extraction
+                parameters = getattr(tool, "parameters", {})
+                if not parameters and hasattr(tool, "schema"):
+                    parameters = tool.schema
+                catalog[name] = {
+                    "name": name,
+                    "description": tool.description,
+                    "input_schema": parameters or {}
+                }
+            return catalog
+
+        tools = await self._session.list_tools()
         for tool in tools.tools:
             catalog[tool.name] = {
                 "name": tool.name,
@@ -107,50 +127,25 @@ class MCPToolClient:
             }
         return catalog
 
-    async def list_resources_async(self) -> List[Dict[str, Any]]:
-        self._ensure_ready()
-        logger.info("MCP client list_resources_async | server=%s", self.server_url)
-        resources = await self._session.list_resources()
-        return [
-            {
-                "uri": str(r.uri),
-                "name": r.name,
-                "description": getattr(r, "description", None),
-                "mime_type": getattr(r, "mimeType", None)
-            }
-            for r in resources.resources
-        ]
-
-    async def list_prompts_async(self) -> List[Dict[str, Any]]:
-        self._ensure_ready()
-        logger.info("MCP client list_prompts_async | server=%s", self.server_url)
-        prompts = await self._session.list_prompts()
-        return [
-            {
-                "name": p.name,
-                "description": getattr(p, "description", None)
-            }
-            for p in prompts.prompts
-        ]
-
     async def call_tool_async(
         self,
         tool_name: str,
         arguments: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         self._ensure_ready()
-
-        logger.info(
-            "MCP client call_tool_async | server=%s | tool=%s | args=%s",
-            self.server_url,
-            tool_name,
-            arguments or {},
-        )
+        logger.info("MCP client call_tool_async | local=%s | tool=%s", self.is_local, tool_name)
 
         try:
-            result = await self._session.call_tool(tool_name, arguments or {})
+            if self.is_local:
+                from app.mcp.server import mcp
+                # Natively call underlying execution
+                result_content = await mcp.call_tool(tool_name, arguments or {})
+                # FastMCP call_tool returns a list of contents, likely TextContent
+                content = result_content
+            else:
+                result = await self._session.call_tool(tool_name, arguments or {})
+                content = getattr(result, "content", None)
 
-            content = getattr(result, "content", None)
             if not content:
                 logger.info("MCP call_tool_async empty content | tool=%s", tool_name)
                 return {"status": "ok", "result": None, "_backend": "mcp"}
@@ -185,8 +180,13 @@ class MCPToolClient:
 
     async def read_resource_async(self, uri: str) -> Optional[str]:
         self._ensure_ready()
-        logger.info("MCP client read_resource_async | server=%s | uri=%s", self.server_url, uri)
+        logger.info("MCP client read_resource_async | local=%s | uri=%s", self.is_local, uri)
         try:
+            if self.is_local:
+                from app.mcp.server import mcp
+                # Not fully supported seamlessly in FastMCP wrapper bypassing, so we fallback gracefully
+                return None
+                
             result = await self._session.read_resource(uri)
             content = getattr(result, "contents", None)
             if not content:
@@ -204,14 +204,17 @@ class MCPToolClient:
 
     async def get_prompt_async(self, name: str) -> Optional[str]:
         self._ensure_ready()
-        logger.info("MCP client get_prompt_async | server=%s | prompt=%s", self.server_url, name)
+        logger.info("MCP client get_prompt_async | local=%s | prompt=%s", self.is_local, name)
         try:
+            if self.is_local:
+                from app.mcp.server import mcp
+                return None
+
             result = await self._session.get_prompt(name)
             messages = getattr(result, "messages", None)
             if not messages:
                 return None
             
-            # Combine all pieces
             parts = []
             for msg in messages:
                 content = getattr(msg, "content", None)

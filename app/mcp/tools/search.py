@@ -6,7 +6,8 @@ from app.mcp.core import mcp, _db_context, _build_context, _tool_error
 from app.mcp.normalizers import _normalize_search_output, _normalize_shipping_costs_output
 from app.services.search_pipeline import run_search_pipeline
 from app.services.parser import parse_query_service
-from app.tools import execute_shipping_costs_tool, execute_compare_tool
+from app.services.ebay import get_shipping_costs
+from app.services.compare_pipeline import run_compare_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,12 @@ async def search_products(
                 top_item_id = normalized["top_result"].get("ebay_id")
                 if top_item_id:
                     try:
-                        shipping_raw = await execute_shipping_costs_tool(
-                            {"item_id": top_item_id, "country_code": "IT", "zip_code": ""},
-                            context,
-                        )
+                        shipping_data = await get_shipping_costs(top_item_id, "IT", "")
+                        shipping_raw = {
+                            "status": "ok" if shipping_data else "error",
+                            "data": shipping_data,
+                            "item_id": top_item_id
+                        }
                         shipping_norm = _normalize_shipping_costs_output(shipping_raw)
                         normalized["top_result"]["shipping_info"] = shipping_norm.get("data")
                         normalized["top_result"]["shipping_status"] = shipping_norm.get("status")
@@ -113,7 +116,11 @@ async def compare_products(
         with _db_context() as db:
             context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
             logger.info("MCP TOOL compare_products START | queries=%s", queries)
-            result = await execute_compare_tool({"queries": queries}, context)
+            result = await run_compare_pipeline(
+                queries=sep_queries,
+                db=db,
+                llm_engine=llm_engine
+            )
             result["_backend"] = "mcp"
             logger.info("MCP TOOL compare_products END")
             return result
