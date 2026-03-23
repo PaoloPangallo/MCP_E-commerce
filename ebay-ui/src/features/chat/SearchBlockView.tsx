@@ -155,7 +155,7 @@ const SearchBlockView = memo(function SearchBlockView({
               }
             } as any,
             winner_reason: "Il sistema ha selezionato questo risultato come migliore compromesso considerando aderenza alla ricerca, prezzo e affidabilità del venditore.",
-            comparison_matrix: search.results.slice(0, 4).map(r => ({ 
+            comparison_matrix: search.results.map(r => ({ 
               ...r, 
               query: search.query, 
               scores: {
@@ -188,7 +188,27 @@ const SearchBlockView = memo(function SearchBlockView({
         />
       )}
 
-      {hasComparison && <ComparisonDisplay data={search.comparison!} />}
+      {hasComparison && (
+        <ComparisonDisplay 
+          data={{
+            ...search.comparison!,
+            comparison_matrix: search.results.map(r => {
+              // Ensure we have score structure for all items
+              const existing = search.comparison!.comparison_matrix.find(c => c.ebay_id === r.ebay_id);
+              return {
+                ...r,
+                scores: existing?.scores || (r as any).scores || (r as any)._scores || {
+                  overall: r.ranking_score || 0,
+                  relevance: 0.8,
+                  trust: r.trust_score || 0.9,
+                  price: 0.7,
+                  value: (r as any).value_score || 0
+                }
+              }
+            }) as any[]
+          }} 
+        />
+      )}
 
       {hasResults && (
         <CollapsibleSection 

@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react"
 import {
   Box,
-  Link,
   Table,
   TableBody,
   TableCell,
@@ -13,7 +12,6 @@ import {
   Button,
   IconButton,
 } from "@mui/material"
-import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"
 import LocalShippingIcon from "@mui/icons-material/LocalShipping"
 import WorkspacePremiumIcon from "@mui/icons-material/WorkspacePremium"
@@ -21,6 +19,7 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import SpeedIcon from "@mui/icons-material/Speed"
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
+import SearchResultCard from "./SearchResultCard"
 
 import type { ComparisonData, SearchItem } from "../types"
 
@@ -28,17 +27,8 @@ import type { ComparisonData, SearchItem } from "../types"
 
 function formatPrice(price?: number, currency?: string) {
   if (typeof price !== "number") return "—"
-  return `${price} ${currency ?? ""}`.trim()
-}
-
-function formatDate(dateString?: string) {
-  if (!dateString) return null
-  try {
-    const d = new Date(dateString)
-    return d.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })
-  } catch (e) {
-    return dateString
-  }
+  const formatted = price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${formatted} ${currency ?? ""}`.trim()
 }
 
 // ── Sub-Components (Memoized) ───────────────────────────────────────
@@ -95,7 +85,7 @@ interface WinnerHeroProps {
 
 const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroProps) => {
   const scores = (winner as any).scores || (winner as any)._scores || {}
-  
+
   return (
     <Box
       sx={{
@@ -103,14 +93,14 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
         position: "relative",
         bgcolor: "var(--bg-primary)",
         border: "1px solid var(--border-color)",
-        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.1)",
+        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.05)",
         overflow: "hidden",
       }}
     >
       <Box
         sx={{
-          bgcolor: "var(--accent-primary)",
-          color: "var(--bg-primary)",
+          background: "var(--brand-gradient)",
+          color: "#fff",
           px: 2.5,
           py: 1,
           display: "flex",
@@ -118,7 +108,7 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
           gap: 1,
         }}
       >
-        <WorkspacePremiumIcon sx={{ fontSize: 18 }} />
+        <WorkspacePremiumIcon sx={{ fontSize: 18, color: "#fff" }} />
         <Typography sx={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff" }}>
           Miglior Scelta dell'Agente
         </Typography>
@@ -170,7 +160,7 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
               {formatPrice(winner.price, winner.currency)}
             </Typography>
             {winner.price === minPrice && (
-              <Chip label="Miglior Prezzo" size="small" variant="outlined" color="success" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
+              <Chip label="Miglior Prezzo" size="small" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700, color: 'var(--success)', borderColor: 'var(--success)' }} />
             )}
           </Box>
 
@@ -179,7 +169,7 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
               p: 2,
               borderRadius: 2,
               bgcolor: "var(--bg-secondary)",
-              borderLeft: "4px solid var(--accent-primary)",
+              borderLeft: "4px solid var(--brand-primary)",
               mb: 3
             }}
           >
@@ -189,9 +179,9 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
           </Box>
 
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 3 }}>
-            <ScoreItem label="Match Affinità" score={scores.overall || 0} color="var(--accent-primary)" icon={<TrendingUpIcon sx={{ fontSize: 14 }} />} />
+            <ScoreItem label="Match Affinità" score={scores.overall || 0} color="var(--brand-primary)" icon={<TrendingUpIcon sx={{ fontSize: 14 }} />} />
             <ScoreItem label="Value Score" score={(winner as any).value_score || 0} color="var(--success)" icon={<WorkspacePremiumIcon sx={{ fontSize: 14 }} />} />
-            <ScoreItem label="Prezzo" score={scores.price || 0} color="var(--accent-primary)" icon={<SpeedIcon sx={{ fontSize: 14 }} />} />
+            <ScoreItem label="Prezzo" score={scores.price || 0} color="var(--brand-primary)" icon={<SpeedIcon sx={{ fontSize: 14 }} />} />
           </Box>
 
           <Box sx={{ display: "flex", gap: 2 }}>
@@ -203,13 +193,13 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
                 variant="contained"
                 fullWidth
                 sx={{
-                  bgcolor: "var(--text-primary)",
-                  color: "var(--bg-primary)",
+                  background: "var(--brand-gradient)",
+                  color: "#ffffff",
                   textTransform: "none",
                   fontWeight: 700,
-                  borderRadius: "10px",
+                  borderRadius: "24px", // Rounded as requested
                   py: 1,
-                  "&:hover": { bgcolor: "var(--text-secondary)" }
+                  "&:hover": { opacity: 0.9 }
                 }}
               >
                 Acquista ora su eBay
@@ -233,7 +223,7 @@ interface AlternativesProps {
   onScrollClick: (dir: "left" | "right") => void
 }
 
-const AlternativesCarousel = React.memo(({ matrix, winner, minPrice, scrollRef, showLeft, showRight, onScroll, onScrollClick }: AlternativesProps) => (
+const AlternativesCarousel = React.memo(({ matrix, scrollRef, showLeft, showRight, onScroll, onScrollClick }: AlternativesProps) => (
   <Box sx={{ position: "relative" }}>
     <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.1em", mb: 2, px: 1 }}>
       Tutte le Alternative
@@ -244,14 +234,14 @@ const AlternativesCarousel = React.memo(({ matrix, winner, minPrice, scrollRef, 
         onClick={() => onScrollClick("left")}
         sx={{
           position: "absolute",
-          left: -60,
+          left: -20,
           top: "55%",
           zIndex: 10,
-          bgcolor: "var(--bg-secondary)",
+          bgcolor: "var(--bg-primary)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          color: "var(--accent-primary)",
-          "&:hover": { bgcolor: "var(--bg-primary)", borderColor: "var(--accent-primary)" }
+          boxShadow: "var(--card-shadow)",
+          color: "var(--brand-primary)",
+          "&:hover": { bgcolor: "var(--bg-secondary)", borderColor: "var(--brand-primary)" }
         }}
       >
         <ChevronLeftIcon />
@@ -271,119 +261,14 @@ const AlternativesCarousel = React.memo(({ matrix, winner, minPrice, scrollRef, 
         py: 1
       }}
     >
-      {matrix.map((item, idx) => {
-        const isWinner = item.title === winner.title
-        const itemScores = (item as any).scores || (item as any)._scores || {}
-
-        return (
-          <Box
-            key={idx}
-            sx={{
-              width: { xs: "85vw", sm: "calc(33.33% - 14px)" },
-              minWidth: { xs: "85vw", sm: "calc(33.33% - 14px)" },
-              flexShrink: 0,
-              scrollSnapAlign: "start",
-              borderRadius: "16px",
-              bgcolor: "var(--bg-primary)",
-              border: "1px solid",
-              borderColor: isWinner ? "var(--accent-primary)" : "var(--border-color)",
-              p: 2,
-              display: "flex",
-              flexDirection: "column",
-              transition: "all 0.2s ease",
-              "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 12px 20px -8px rgba(0,0,0,0.1)",
-                borderColor: "var(--accent-primary)"
-              }
-            }}
-          >
-            <Box sx={{ position: "relative", mb: 1.5 }}>
-              <Box
-                sx={{
-                  width: "100%",
-                  aspectRatio: "4/3",
-                  bgcolor: "var(--bg-secondary)",
-                  borderRadius: 2,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  p: 1
-                }}
-              >
-                {item.image_url ? (
-                  <Box component="img" src={item.image_url} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                ) : (
-                  <Typography variant="caption" color="text.disabled">No Img</Typography>
-                )}
-              </Box>
-              {isWinner && (
-                <Chip
-                  label="PICK"
-                  size="small"
-                  sx={{ position: "absolute", top: 8, left: 8, bgcolor: "var(--accent-primary)", color: "var(--bg-primary)", fontSize: 9, fontWeight: 800, height: 18 }}
-                />
-              )}
-            </Box>
-
-            <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", mb: 0.5, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "2.6em" }}>
-              {item.title}
-            </Typography>
-
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-              <Typography sx={{ fontSize: 17, fontWeight: 800, color: "var(--text-primary)" }}>
-                {formatPrice(item.price, item.currency)}
-              </Typography>
-              {item.price === minPrice && (
-                <Typography sx={{ fontSize: 10, fontWeight: 700, color: "var(--success)" }}>TOP DEAL</Typography>
-              )}
-            </Box>
-
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 2 }}>
-              <ScoreItem label="Match" score={itemScores.overall || 0} color="var(--accent-primary)" />
-              <ScoreItem label="Valore" score={itemScores.value || 0} color="var(--success)" />
-            </Box>
-
-            {item.shipping && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2, bgcolor: "var(--bg-secondary)", p: 1, borderRadius: 1.5 }}>
-                <LocalShippingIcon sx={{ fontSize: 14, color: "var(--text-secondary)" }} />
-                <Box>
-                  <Typography sx={{ fontSize: 10, fontWeight: 700, color: item.shipping.free ? "var(--success)" : "var(--text-primary)" }}>
-                    {item.shipping.free ? "Consegna GRATIS" : `Sped. ${item.shipping.cost} ${item.shipping.currency}`}
-                  </Typography>
-                  {item.shipping.max_delivery && (
-                    <Typography sx={{ fontSize: 9, color: "var(--text-secondary)" }}>
-                      Entro il {formatDate(item.shipping.max_delivery)}
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            )}
-
-            <Link
-              href={item.url}
-              target="_blank"
-              underline="none"
-              sx={{
-                mt: "auto",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 0.5,
-                fontSize: 12,
-                fontWeight: 600,
-                color: "var(--text-secondary)",
-                py: 1,
-                border: "1px solid var(--border-color)",
-                borderRadius: 2,
-                "&:hover": { bgcolor: "var(--bg-secondary)", color: "var(--text-primary)", borderColor: "var(--accent-primary)" }
-              }}
-            >
-              Dettagli eBay <OpenInNewIcon sx={{ fontSize: 12 }} />
-            </Link>
-          </Box>
-        )
-      })}
+      {matrix.map((item, idx) => (
+        <SearchResultCard
+          key={idx}
+          item={item}
+          variant="compact"
+          index={idx}
+        />
+      ))}
     </Box>
 
     {showRight && matrix.length > 1 && (
@@ -391,14 +276,14 @@ const AlternativesCarousel = React.memo(({ matrix, winner, minPrice, scrollRef, 
         onClick={() => onScrollClick("right")}
         sx={{
           position: "absolute",
-          right: -60,
+          right: -20,
           top: "55%",
           zIndex: 10,
-          bgcolor: "var(--bg-secondary)",
+          bgcolor: "var(--bg-primary)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          color: "var(--accent-primary)",
-          "&:hover": { bgcolor: "var(--bg-primary)", borderColor: "var(--accent-primary)" }
+          boxShadow: "var(--card-shadow)",
+          color: "var(--brand-primary)",
+          "&:hover": { bgcolor: "var(--bg-secondary)", borderColor: "var(--brand-primary)" }
         }}
       >
         <ChevronRightIcon />
@@ -426,7 +311,7 @@ const ComparisonTable = React.memo(({ matrix, winner, maxOverall, maxValue }: Ta
           <TableRow sx={{ bgcolor: "var(--bg-secondary)" }}>
             <TableCell sx={{ color: "var(--text-secondary)", fontWeight: 700, fontSize: 11, py: 2 }}>FEATURE</TableCell>
             {matrix.slice(0, 4).map((item, i) => (
-              <TableCell key={i} align="center" sx={{ fontWeight: 800, color: item.title === winner.title ? "var(--accent-primary)" : "var(--text-primary)", fontSize: 11 }}>
+              <TableCell key={i} align="center" sx={{ fontWeight: 800, color: item.title === winner.title ? "var(--brand-primary)" : "var(--text-primary)", fontSize: 11 }}>
                 {item.title?.slice(0, 15)}...
               </TableCell>
             ))}
@@ -481,7 +366,7 @@ const ComparisonTable = React.memo(({ matrix, winner, maxOverall, maxValue }: Ta
               const itemScores = (item as any).scores || (item as any)._scores || {}
               return (
                 <TableCell key={i} align="center" sx={{ border: "none" }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 800, color: itemScores.overall === maxOverall && maxOverall > 0 ? "var(--accent-primary)" : "var(--text-secondary)" }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 800, color: itemScores.overall === maxOverall && maxOverall > 0 ? "var(--brand-primary)" : "var(--text-secondary)" }}>
                     {Math.round((itemScores.overall || 0) * 100)}%
                   </Typography>
                 </TableCell>
@@ -513,36 +398,42 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
   const checkScroll = useCallback(() => {
     if (scrollRef.current) {
       const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current
-      setShowLeftScroll(scrollLeft > 0)
+      setShowLeftScroll(scrollLeft > 5)
       setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 5)
     }
   }, [])
 
   useEffect(() => {
     checkScroll()
-    window.addEventListener("resize", checkScroll)
-    return () => window.removeEventListener("resize", checkScroll)
+    const current = scrollRef.current
+    if (current) {
+        current.addEventListener("scroll", checkScroll)
+        window.addEventListener("resize", checkScroll)
+    }
+    return () => {
+        if (current) current.removeEventListener("scroll", checkScroll)
+        window.removeEventListener("resize", checkScroll)
+    }
   }, [checkScroll, comparison_matrix])
 
   const handleScroll = useCallback((direction: "left" | "right") => {
     if (scrollRef.current) {
-      const scrollAmount = scrollRef.current.clientWidth
+      const scrollAmount = scrollRef.current.clientWidth * 0.8
       scrollRef.current.scrollBy({
         left: direction === "left" ? -scrollAmount : scrollAmount,
         behavior: "smooth",
       })
-      setTimeout(checkScroll, 350)
     }
-  }, [checkScroll])
+  }, [])
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 4, py: 1 }}>
       <WinnerHero winner={winner} winner_reason={winner_reason} minPrice={minPrice} />
       
-      <AlternativesCarousel 
-        matrix={comparison_matrix} 
-        winner={winner} 
-        minPrice={minPrice} 
+      <AlternativesCarousel
+        matrix={comparison_matrix}
+        winner={winner}
+        minPrice={minPrice}
         scrollRef={scrollRef}
         showLeft={showLeftScroll}
         showRight={showRightScroll}
@@ -550,11 +441,11 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
         onScrollClick={handleScroll}
       />
 
-      <ComparisonTable 
-        matrix={comparison_matrix} 
-        winner={winner} 
-        maxOverall={maxOverall} 
-        maxValue={maxValue} 
+      <ComparisonTable
+        matrix={comparison_matrix}
+        winner={winner}
+        maxOverall={maxOverall}
+        maxValue={maxValue}
       />
     </Box>
   )

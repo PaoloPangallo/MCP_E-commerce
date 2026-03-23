@@ -6,6 +6,15 @@
   --text-secondary: #6b7280;
   --border-color: #e5e7eb;
   --accent-primary: #111827;
+  
+  /* Brand Colors — purple premium */
+  --brand-primary: #7c3aed;
+  --brand-gradient: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  --brand-soft: rgba(124, 58, 237, 0.1);
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.1);
+  --danger: #ef4444;
+  --glass-bg: rgba(255, 255, 255, 0.8);
 }
 
 body.dark-mode {
@@ -16,6 +25,12 @@ body.dark-mode {
   --text-secondary: #94a3b8;
   --border-color: #334155;
   --accent-primary: #38bdf8;
+  --brand-primary: #38bdf8; /* Light blue (Azzurro) */
+  --brand-gradient: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+  --brand-soft: rgba(56, 189, 248, 0.15);
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.15);
+  --glass-bg: rgba(15, 23, 42, 0.8);
 }
 
 * {
