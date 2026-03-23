@@ -24,7 +24,7 @@ from app.agent.schemas import (
     VisionAnalysisEvent,
 )
 from app.agent.task_decomposer import decompose_query
-from app.agent.tool_registry import ToolContext, analyze_user_query
+from app.agent.tool_registry import analyze_user_query
 from app.mcp.client import MCPToolClient
 from app.llm.client import call_ollama_cloud, call_llm_stream
 
@@ -167,11 +167,11 @@ class EbayReactAgent:
         )
 
         executor = ToolExecutor(
-            context=ToolContext(
-                db=self.db,
-                user=self.user,
-                llm_engine=request.llm_engine,
-            ),
+            context=type("Context", (), {
+                "db": self.db,
+                "user": self.user,
+                "llm_engine": request.llm_engine,
+            })(),
             mcp_client=self.mcp_client,
             prefer_mcp=self.prefer_mcp,
             fallback_to_local=not self.strict_mcp,

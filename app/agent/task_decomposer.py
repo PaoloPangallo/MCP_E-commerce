@@ -4,11 +4,7 @@ import logging
 import re
 from typing import Dict, List
 
-from app.agent.tool_registry import (
-    analyze_user_query,
-    find_first_tool_by_tags,
-    get_tool_spec,
-)
+from app.agent.tool_registry import analyze_user_query
 
 logger = logging.getLogger(__name__)
 
@@ -45,36 +41,14 @@ def should_decompose_query(query: str) -> bool:
 
 def _select_capability_tools() -> Dict[str, str | None]:
     return {
-        "seller": find_first_tool_by_tags("seller", "trust", "feedback", match_all=True),
-        "search": find_first_tool_by_tags("search", "product", "catalog", match_all=True),
-        "compare": find_first_tool_by_tags("compare", "product", match_all=True),
+        "seller": "analyze_seller",
+        "search": "search_products",
+        "compare": "compare_products",
     }
 
 
 def _normalize_task(tool_name: str, action_input: Dict, query: str, explicit_seller: str | None) -> Dict | None:
-    spec = get_tool_spec(tool_name)
-    if spec is None:
-        return None
-
-    memory_like = type(
-        "MemoryLike",
-        (),
-        {"user_query": query, "last_seller_name": explicit_seller},
-    )()
-
-    payload = dict(action_input or {})
-    try:
-        if spec.input_normalizer:
-            payload = spec.input_normalizer(payload, memory_like)
-    except Exception:
-        return None
-
-    for field_name in spec.required_fields:
-        value = payload.get(field_name)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            return None
-
-    return {"tool": tool_name, "input": payload}
+    return {"tool": tool_name, "input": action_input}
 
 
 def _build_deterministic_tasks(query: str) -> List[Dict]:
@@ -93,7 +67,7 @@ def _build_deterministic_tasks(query: str) -> List[Dict]:
         # Safety check: l'utente deve aver inserito almeno due termini separati da virgola, ' e ', ' con ' o ' vs '
         # altrimenti è una ricerca singola "per poi confrontare a mano"
         text_lower = query.lower()
-        has_separators = any(s in text_lower for s in [",", " e ", " con ", " vs ", " versus "])
+        has_separators = any(s in text_lower for s in [",", " e ", " con ", " vs "])
         
         if has_separators:
             normalized = _normalize_task(

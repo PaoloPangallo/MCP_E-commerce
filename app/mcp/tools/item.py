@@ -8,11 +8,7 @@ from app.mcp.normalizers import (
     _normalize_similar_items_output,
     _normalize_shipping_costs_output,
 )
-from app.tools import (
-    execute_item_details_tool,
-    execute_similar_items_tool,
-    execute_shipping_costs_tool,
-)
+from app.services.ebay import get_item_details, get_similar_items, get_shipping_costs
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +24,13 @@ async def get_item_details(
         with _db_context() as db:
             context = _build_context(db=db, session_id=session_id)
             logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
-            result = await execute_item_details_tool({"item_id": item_id}, context)
+            result_data = await get_item_details(item_id)
+            result = {
+                "item_id": item_id,
+                "status": "ok" if result_data else "not_found",
+                "data": result_data,
+                "message": "" if result_data else "Nessun dettaglio trovato o oggetto non esistente."
+            }
             normalized = _normalize_item_details_output(result)
             normalized["_backend"] = "mcp"
             logger.info("MCP TOOL get_item_details END")
@@ -53,10 +55,13 @@ async def get_shipping_costs(
             context = _build_context(db=db, session_id=session_id)
             logger.info("MCP TOOL get_shipping_costs START | item_id=%s", item_id)
             
-            result = await execute_shipping_costs_tool(
-                {"item_id": item_id, "country_code": country_code, "zip_code": zip_code},
-                context
-            )
+            data = await get_shipping_costs(item_id, country_code, zip_code)
+            result = {
+                "status": "ok" if data else "error",
+                "error": "" if data else f"Nessun dato di spedizione trovato per {item_id}",
+                "data": data,
+                "item_id": item_id
+            }
             normalized = _normalize_shipping_costs_output(result)
             normalized["_backend"] = "mcp"
             logger.info("MCP TOOL get_shipping_costs END")
@@ -78,7 +83,13 @@ async def get_similar_items(
         with _db_context() as db:
             context = _build_context(db=db, session_id=session_id)
             logger.info("MCP TOOL get_similar_items START | item_id=%s", item_id)
-            result = await execute_similar_items_tool({"item_id": item_id}, context)
+            items = await get_similar_items(item_id)
+            result = {
+                "status": "ok",
+                "item_id": item_id,
+                "results_count": len(items) if items else 0,
+                "results": items or []
+            }
             normalized = _normalize_similar_items_output(result)
             normalized["_backend"] = "mcp"
             logger.info("MCP TOOL get_similar_items END")

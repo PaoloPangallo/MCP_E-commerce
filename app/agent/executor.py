@@ -9,7 +9,6 @@ from typing import Any, Dict, Iterable, List, Optional
 from app.db.redis import redis_client
 from app.config.cache import TOOL_EXECUTOR_TTL
 from app.agent.schemas import Observation, ObservationQuality, ObservationStatus, ToolCall
-from app.agent.tool_registry import TOOLS, ToolContext, get_tool_spec
 from app.mcp.client import MCPToolClient
 
 logger = logging.getLogger(__name__)
@@ -20,15 +19,13 @@ class ToolExecutor:
 
     def __init__(
         self,
-        context: ToolContext,
         mcp_client: Optional[MCPToolClient] = None,
+        context: Optional[Any] = None, # mantengo la firma per retrocompatibilità momentanea
         prefer_mcp: bool = True,
-        fallback_to_local: bool = True,
+        fallback_to_local: bool = False,
     ) -> None:
         self.context = context
         self.mcp_client = mcp_client
-        self.prefer_mcp = bool(prefer_mcp)
-        self.fallback_to_local = bool(fallback_to_local)
         self._mcp_tools: Optional[set[str]] = None
 
     async def initialize(self) -> None:
@@ -42,129 +39,84 @@ class ToolExecutor:
                 self._mcp_tools = None
 
     async def execute(self, tool_call: ToolCall) -> Observation:
-        spec = TOOLS.get(tool_call.tool)
-        
-        # Inizializziamo la lista dei tool MCP se non ancora presente
         if self._mcp_tools is None and self.mcp_client:
             await self.initialize()
 
-        is_mcp_only = False
-        if spec is None:
-            # Se il tool non è in TOOLS locali, controlliamo se è disponibile su MCP
-            if self._mcp_tools and tool_call.tool in self._mcp_tools:
-                is_mcp_only = True
-                # Creiamo una spec minima sintetica per i tool puramente MCP
-                from app.agent.tool_registry import ToolSpec
-                spec = ToolSpec(
-                    name=tool_call.tool,
-                    description="Tool MCP dinamico",
-                    input_schema={},
-                    executor=lambda x, y: {"status": "error", "message": "unreachable local executor"},
-                    use_cache=False,  # Disabilitiamo cache per tool dinamici per sicurezza
-                    summarizer=lambda res: res.get("message") or res.get("summary") or f"Tool MCP '{tool_call.tool}' eseguito.",
-                    status_resolver=lambda res: "error" if res.get("status") == "error" else ("no_data" if res.get("status") == "no_data" else "ok"),
-                    state_key=tool_call.tool,  # Permettiamo al planner di tracciare questo tool
-                    terminal_resolver=lambda res: res.get("status") in {"ok", "no_data"}
-                )
-                logger.info("ToolExecutor using synthetic spec for MCP-only tool: %s", tool_call.tool)
-            else:
-                logger.warning("Unknown tool requested: %s", tool_call.tool)
-                return Observation(
-                    tool=tool_call.tool,
-                    ok=False,
-                    status="error",
-                    error=f"Unknown tool '{tool_call.tool}'",
-                    summary=f"Tool '{tool_call.tool}' non disponibile.",
-                    retryable=False,
-                    state_key=None,
-                    terminal=False,
-                    quality="empty",
-                )
+        if self._mcp_tools is not None and tool_call.tool not in self._mcp_tools:
+            logger.warning("Unknown MCP tool requested: %s", tool_call.tool)
+            return Observation(
+                tool=tool_call.tool,
+                ok=False,
+                status="error",
+                error=f"Unknown Tool '{tool_call.tool}'",
+                summary=f"Tool '{tool_call.tool}' non trovato nel catalogo MCP.",
+                retryable=False,
+                state_key=tool_call.tool,
+                terminal=False,
+                quality="empty",
+            )
 
         cache_key = self._make_cache_key(tool_call.tool, tool_call.input)
-        if spec.use_cache:
-            cached = self._get_cached_result(cache_key)
-            if cached is not None:
-                logger.info("ToolExecutor cache hit | tool=%s", tool_call.tool)
-                return self._build_observation(
-                    tool_call=tool_call,
-                    spec=spec,
-                    result=dict(cached),
-                    execution_ms=0.0,
-                    cache_hit=True,
-                )
+        cached = self._get_cached_result(cache_key)
+        if cached is not None:
+            logger.info("ToolExecutor cache hit | tool=%s", tool_call.tool)
+            return self._build_observation(
+                tool_call=tool_call,
+                result=dict(cached),
+                execution_ms=0.0,
+                cache_hit=True,
+            )
 
-        attempts = max(1, int(spec.max_retries) + 1)
-        last_error: Exception | None = None
+        start = time.perf_counter()
+        try:
+            logger.info("ToolExecutor using MCP | tool=%s", tool_call.tool)
+            
+            # Inject session_id se presente nel context (utile per logging o persistenza lato tool)
+            if self.context and getattr(self.context, "user", None):
+                user_id = getattr(self.context.user, "id", None)
+                if user_id:
+                    tool_call.input["session_id"] = str(user_id)
 
-        for attempt in range(1, attempts + 1):
-            start = time.perf_counter()
+            if not self.mcp_client:
+                raise RuntimeError("MCP client is not initialized")
 
-            try:
-                result = await self._execute_once(tool_call=tool_call, spec=spec)
+            result = await self.mcp_client.call_tool_async(tool_call.tool, tool_call.input)
+            result = self._normalize_result_payload(result)
+            result.setdefault("_backend", "mcp")
+            
+            execution_ms = round((time.perf_counter() - start) * 1000.0, 2)
+            self._set_cached_result(cache_key, result)
 
-                result = self._normalize_result_payload(result)
-                result["_tool_attempts"] = attempt
+            logger.info(
+                "ToolExecutor MCP success | tool=%s | status=%s | execution_ms=%s",
+                tool_call.tool,
+                result.get("status"),
+                execution_ms,
+            )
 
-                if spec.result_normalizer:
-                    result = spec.result_normalizer(result, tool_call.input)
-                    result = self._normalize_result_payload(result)
-                    result.setdefault("_tool_attempts", attempt)
+            return self._build_observation(
+                tool_call=tool_call,
+                result=result,
+                execution_ms=execution_ms,
+                cache_hit=False,
+            )
 
-                execution_ms = round((time.perf_counter() - start) * 1000.0, 2)
-
-                if spec.use_cache:
-                    self._set_cached_result(cache_key, result)
-
-                logger.info(
-                    "ToolExecutor success | tool=%s | backend=%s | status=%s | execution_ms=%s",
-                    tool_call.tool,
-                    result.get("_backend"),
-                    result.get("status"),
-                    execution_ms,
-                )
-
-                return self._build_observation(
-                    tool_call=tool_call,
-                    spec=spec,
-                    result=result,
-                    execution_ms=execution_ms,
-                    cache_hit=False,
-                )
-
-            except Exception as exc:
-                last_error = exc
-                logger.exception(
-                    "ToolExecutor attempt failed | tool=%s | attempt=%s/%s | error=%s",
-                    tool_call.tool,
-                    attempt,
-                    attempts,
-                    exc,
-                )
-                if attempt >= attempts:
-                    break
-
-        return Observation(
-            tool=tool_call.tool,
-            ok=False,
-            status="error",
-            error=str(last_error) if last_error else "Unknown tool execution error",
-            summary=f"{tool_call.tool} failed: {last_error}" if last_error else f"{tool_call.tool} failed",
-            retryable=False,
-            state_key=spec.state_key or None,
-            terminal=False,
-            quality="empty",
-            data={
-                "_backend": None,
-                "error": str(last_error) if last_error else "Unknown tool execution error",
-            },
-            state_update={
-                "_backend": None,
-                "error": str(last_error) if last_error else "Unknown tool execution error",
-            },
-            execution_ms=None,
-            cache_hit=False,
-        )
+        except Exception as exc:
+            logger.exception("ToolExecutor execution failed | tool=%s | error=%s", tool_call.tool, exc)
+            return Observation(
+                tool=tool_call.tool,
+                ok=False,
+                status="error",
+                error=str(exc),
+                summary=f"{tool_call.tool} failed: {exc}",
+                retryable=False,
+                state_key=tool_call.tool,
+                terminal=False,
+                quality="empty",
+                data={"error": str(exc)},
+                execution_ms=None,
+                cache_hit=False,
+            )
 
     async def execute_many(self, tool_calls: Iterable[ToolCall], parallel: bool = False) -> List[Observation]:
         calls = list(tool_calls)
@@ -178,77 +130,8 @@ class ToolExecutor:
             return results
 
         logger.info("ToolExecutor execute_many | parallel=%s | count=%s", parallel, len(calls))
-
         tasks = [self.execute(call) for call in calls]
         return list(await asyncio.gather(*tasks, return_exceptions=False))
-
-    async def _execute_once(self, tool_call: ToolCall, spec: Any) -> Dict[str, Any]:
-        if self.context.user:
-            user_id = getattr(self.context.user, "id", None)
-            if user_id:
-                tool_call.input["session_id"] = str(user_id)
-
-        if self._should_use_mcp(tool_call.tool):
-            try:
-                logger.info(
-                    "ToolExecutor using MCP | tool=%s | input=%s",
-                    tool_call.tool,
-                    tool_call.input,
-                )
-                assert self.mcp_client is not None  # noqa: S101 – controllato da _should_use_mcp
-                if self.mcp_client is None:
-                    raise RuntimeError("MCP client is None nonostante _should_use_mcp() == True")
-                result = await self.mcp_client.call_tool_async(tool_call.tool, tool_call.input)
-                result = self._normalize_result_payload(result)
-                result.setdefault("_backend", "mcp")
-                logger.info("ToolExecutor MCP success | tool=%s", tool_call.tool)
-                return result
-
-            except Exception as exc:
-                logger.exception(
-                    "ToolExecutor MCP failed | tool=%s | error=%s",
-                    tool_call.tool,
-                    exc,
-                )
-                if not self.fallback_to_local:
-                    raise
-
-                logger.warning("ToolExecutor fallback to local | tool=%s", tool_call.tool)
-
-        logger.info(
-            "ToolExecutor using LOCAL backend | tool=%s | input=%s",
-            tool_call.tool,
-            tool_call.input,
-        )
-        if asyncio.iscoroutinefunction(spec.executor):
-            result = await spec.executor(tool_call.input, self.context)
-        else:
-            result = await asyncio.to_thread(spec.executor, tool_call.input, self.context)
-
-        result = self._normalize_result_payload(result)
-        result.setdefault("_backend", "local")
-        logger.info("ToolExecutor LOCAL success | tool=%s", tool_call.tool)
-        return result
-
-    def _should_use_mcp(self, tool_name: str, check_list: bool = True) -> bool:
-        if not self.prefer_mcp:
-            return False
-
-        if self.mcp_client is None:
-            return False
-
-        is_available = getattr(self.mcp_client, "is_available", True)
-        if not is_available:
-            return False
-
-        # Se la lista è stata già scoperta via list_tools_async, usala
-        if check_list and self._mcp_tools is not None:
-            return tool_name in self._mcp_tools
-
-        # Lista non ancora scoperta: assume che tutti i tool siano disponibili su MCP
-        # (verrà confermato/fallito alla prima chiamata reale).
-        # initialize() di norma viene chiamato dal ToolExecutor prima di execute().
-        return True
 
     @classmethod
     def _get_cached_result(cls, cache_key: str) -> Optional[Dict[str, Any]]:
@@ -258,12 +141,10 @@ class ToolExecutor:
     def _set_cached_result(cls, cache_key: str, result: Dict[str, Any]) -> None:
         redis_client.set_json(cache_key, result, ttl_seconds=int(cls._CACHE_TTL))
 
-    # Campi che non devono contribuire alla cache key (non semantici)
     _CACHE_EXCLUDE_KEYS: frozenset = frozenset({"session_id", "conversation_history", "context_info"})
 
     @classmethod
     def _make_cache_key(cls, tool_name: str, action_input: Dict[str, Any]) -> str:
-        # Filtra i campi non semantici per permettere cache sharing tra utenti
         semantic_input = {
             k: v for k, v in (action_input or {}).items()
             if k not in cls._CACHE_EXCLUDE_KEYS
@@ -274,7 +155,6 @@ class ToolExecutor:
     def _normalize_result_payload(result: Any) -> Dict[str, Any]:
         if isinstance(result, dict):
             return result
-
         if isinstance(result, str):
             try:
                 parsed = json.loads(result)
@@ -283,30 +163,21 @@ class ToolExecutor:
                 return {"result": parsed}
             except Exception:
                 return {"result": result}
-
         return {"result": result}
 
     @staticmethod
     def _build_observation(
         tool_call: ToolCall,
-        spec: Any,
         result: Dict[str, Any],
         execution_ms: float,
         cache_hit: bool,
     ) -> Observation:
-        status: ObservationStatus = "ok"
-        if spec.status_resolver:
-            status = spec.status_resolver(result)
+        
+        status = result.get("status", "ok")
+        quality = "good" if status in {"ok", "no_data"} else "empty"
+        terminal = status in {"ok", "no_data"}
+        summary = result.get("summary", f"Tool {tool_call.tool} completato con status {status}.")
 
-        quality: ObservationQuality = "good"
-        if spec.quality_resolver:
-            quality = spec.quality_resolver(result)
-
-        terminal = False
-        if spec.terminal_resolver:
-            terminal = spec.terminal_resolver(result)
-
-        summary = spec.summarizer(result) if spec.summarizer else "Tool eseguito."
         if cache_hit:
             summary = f"[cache] {summary}"
 
@@ -318,7 +189,7 @@ class ToolExecutor:
             summary=summary,
             error=result.get("error"),
             retryable=False,
-            state_key=spec.state_key or None,
+            state_key=tool_call.tool,
             state_update=result,
             terminal=terminal,
             quality=quality,

@@ -10,13 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.agent.memory import AgentMemory
 from app.agent.prompts import build_planner_prompt
 from app.agent.schemas import PlannerOutput, ToolCall
-from app.agent.tool_registry import (
-    TOOLS,
-    extract_explicit_seller,
-    find_first_tool_by_tags,
-    get_tool_catalog,
-    get_tool_spec,
-)
+from app.agent.tool_registry import extract_explicit_seller
 from app.llm.client import call_llm
 from app.services.parser import extract_first_json_object
 
@@ -362,7 +356,8 @@ class ReactPlanner:
             return None
 
         tool = str(task.get("tool") or "").strip()
-        if tool not in TOOLS:
+        if self._cached_mcp_catalog is not None and tool not in self._cached_mcp_catalog:
+            logger.warning("Skipping queued task for tool=%s because it is not in MCP catalog.", tool)
             memory.pop_task()
             return None
 
@@ -436,20 +431,11 @@ class ReactPlanner:
                 action_input = data.get("action_input") or data.get("parameters")
 
                 if action and action not in {"finish", "stop"}:
-                    # VALIDATION CHECK AGAINST DYNAMIC OR STATIC CATALOG
                     valid = False
-                    if self.mcp_client and self.mcp_client.is_available and self._cached_mcp_catalog is not None:
-                        if action in self._cached_mcp_catalog:
-                           valid = True
-                        else:
-                           # Fallback search in static TOOLS list
-                           if action in TOOLS:
-                               valid = True
-                    else:
-                        if action in TOOLS:
-                            valid = True
+                    if self._cached_mcp_catalog and action in self._cached_mcp_catalog:
+                        valid = True
 
-                    if not valid:
+                    if not valid and self._cached_mcp_catalog:
                         logger.warning("LLM hallucinated invalid tool: %s. Falling back.", action)
                         return None
 
@@ -567,45 +553,43 @@ class ReactPlanner:
             action_input: Dict[str, Any],
             memory: AgentMemory,
     ) -> Optional[Dict[str, Any]]:
-        # If we have an MCP catalog and the tool is dynamically found,
-        # we bypass local python normalization because FastMCP handles it on the server side!
-        if getattr(self, "_cached_mcp_catalog", None) and action in self._cached_mcp_catalog:
-            # ---> DETERMINISTIC PARAMS EXTRACTION FOR MCP TOOLS <---
-            # Se siamo nel percorso deterministico, l'input originale potrebbe essere vuoto.
-            # Proviamo ad autopopolare i parametri più comuni per get_ebay_deals.
-            if action == "get_ebay_deals" and not action_input.get("category_id") and not action_input.get("query"):
-                q = memory.user_query.lower()
-                # Cerchiamo un ID categoria esplicito (es: (ID: 111422) o ID: 111422)
-                cat_match = re.search(r"\b(?:id[:\s]+)?(\d{4,8})\b", q)
-                if cat_match:
-                    action_input["category_id"] = cat_match.group(1)
-                    logger.info("Auto-extracted category_id for get_ebay_deals: %s", action_input["category_id"])
-                
-                # Se non c'è ID, proviamo a estrarre una query pulita se mancano segnali forti di categoria
-                # (Ma per ora l'ID è prioritario per la richiesta dell'utente)
+        # Without local registries, we rely entirely on the MCP server (and Pydantic logic inside tools) for validation.
+        # However, the deterministic path (and safe fallback) calls this method with an empty action_input={}.
+        # We must therefore infer the required arguments from the user query here.
+        
+        q = memory.user_query or ""
+        text = q.strip()
+        lowered = text.lower()
+        
+        if action == "search_products" and not action_input.get("query"):
+            # A basic normalizer for search
+            from app.mcp.normalizers import clean_search_query
+            action_input["query"] = clean_search_query(text) or text
 
-            return action_input
+        elif action == "analyze_seller" and not action_input.get("seller_name"):
+            from app.agent.tool_registry import extract_explicit_seller
+            seller = extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
+            if not seller:
+                return None # Indispensabile per analyze_seller
+            action_input["seller_name"] = seller
 
-        spec = get_tool_spec(action)
-        if spec is None:
-            return None
+        elif action == "compare_products" and not action_input.get("queries"):
+            action_input["queries"] = text
 
-        clean = dict(action_input or {})
+        elif action == "market_trends" and not action_input.get("query"):
+            action_input["query"] = text
 
-        try:
-            if spec.input_normalizer:
-                clean = spec.input_normalizer(clean, memory)
-        except Exception as exc:
-            logger.warning(f"Normalizer for {action} failed: {exc}")
-            return None
+        elif action == "conversation" and not action_input.get("query"):
+            action_input["query"] = text
+            # Potremmo passare conversation_history as well but we rely on MCP side if needed
 
-        for field_name in spec.required_fields:
-            value = clean.get(field_name)
-            if value is None or (isinstance(value, str) and not value.strip()):
-                logger.info(f"Tool {action} missing required field {field_name}")
-                return None
-
-        return clean
+        elif action == "get_ebay_deals" and not action_input.get("category_id") and not action_input.get("query"):
+            cat_match = re.search(r"\b(?:id[:\s]+)?(\d{4,8})\b", lowered)
+            if cat_match:
+                action_input["category_id"] = cat_match.group(1)
+                logger.info("Auto-extracted category_id for get_ebay_deals: %s", action_input["category_id"])
+        
+        return action_input
 
     def _intent_is_satisfied(self, memory: AgentMemory, intent: str) -> bool:
         if intent == "conversation":
@@ -620,19 +604,10 @@ class ReactPlanner:
 
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
-    def _search_tool_name(self) -> Optional[str]:
-        return find_first_tool_by_tags("search", "product", "catalog", match_all=True)
-
-    def _seller_tool_name(self) -> Optional[str]:
-        return find_first_tool_by_tags("seller", "trust", "feedback", match_all=True)
-
-    def _compare_tool_name(self) -> Optional[str]:
-        return find_first_tool_by_tags("compare", "product", match_all=True)
-
     def _ordered_tools_for_intent(self, intent: str, memory: Optional[AgentMemory] = None) -> list[str]:
-        seller_tool = self._seller_tool_name()
-        search_tool = self._search_tool_name()
-        compare_tool = self._compare_tool_name()
+        seller_tool = "analyze_seller"
+        search_tool = "search_products"
+        compare_tool = "compare_products"
         
         explicit_id = False
         if memory and memory.user_query:
@@ -640,56 +615,36 @@ class ReactPlanner:
                 explicit_id = True
 
         if intent == "comparison":
-            return [tool for tool in [compare_tool] if tool]
-
+            return [compare_tool]
         if intent == "seller_analysis":
-            return [tool for tool in [seller_tool] if tool]
-
+            return [seller_tool]
         if intent == "product_search":
-            return [tool for tool in [search_tool] if tool]
-
+            return [search_tool]
         if intent == "item_details":
-            if explicit_id:
-                return ["get_item_details"]
-            return [tool for tool in [search_tool, "get_item_details"] if tool]
-
+            return ["get_item_details"] if explicit_id else [search_tool, "get_item_details"]
         if intent == "shipping":
-            if explicit_id:
-                return ["get_shipping_costs"]
-            return [tool for tool in [search_tool, "get_shipping_costs"] if tool]
-
+            return ["get_shipping_costs"] if explicit_id else [search_tool, "get_shipping_costs"]
         if intent == "metadata":
             return ["get_marketplace_metadata"]
-
         if intent == "hybrid":
-            ordered = [tool for tool in [search_tool, seller_tool, "get_item_details", "get_shipping_costs"] if tool]
-            seen: set[str] = set()
-            unique: list[str] = []
-            for tool in ordered:
-                if tool not in seen:
-                    seen.add(tool)
-                    unique.append(tool)
-            return unique
-
+            ordered = [search_tool, seller_tool, "get_item_details", "get_shipping_costs"]
+            return ordered
         if intent == "market_trends":
             return ["market_trends"]
-
         if intent == "deals":
             return ["get_ebay_deals"]
-
         return []
 
     def _tool_state_is_terminal(self, memory: AgentMemory, tool_name: str) -> bool:
-        spec = get_tool_spec(tool_name)
-        if spec is None or not spec.state_key:
-            return False
-        return memory.has_terminal_state(spec.state_key)
+        return memory.has_terminal_state(tool_name)
 
     def _tool_matches_any_tag(self, tool_name: str, tags: set[str]) -> bool:
-        spec = get_tool_spec(tool_name)
-        if spec is None:
+        # Retrocompatibilità per infer intent_with_confidence su task pendenti
+        if not self._cached_mcp_catalog:
             return False
-        return bool({tag.lower() for tag in spec.tags} & tags)
+        schema = self._cached_mcp_catalog.get(tool_name, {})
+        desc_lower = str(schema.get("description", "")).lower()
+        return any(tag in desc_lower for tag in tags)
 
     def _infer_intent(self, memory: AgentMemory) -> str:
         return self._infer_intent_with_confidence(memory)[0]

@@ -13,6 +13,7 @@ import app.mcp.tools.item
 import app.mcp.tools.metadata
 import app.mcp.tools.conversation
 import app.mcp.tools.deals
+import app.mcp.tools.trends
 import app.mcp.resources
 
 __all__ = ["mcp", "configure_mcp"]
