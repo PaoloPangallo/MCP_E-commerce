@@ -29,7 +29,6 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import SearchIcon from "@mui/icons-material/Search"
 import ShareIcon from "@mui/icons-material/Share"
-import ModeEditIcon from "@mui/icons-material/ModeEdit"
 import DarkModeIcon from "@mui/icons-material/DarkMode"
 import LightModeIcon from "@mui/icons-material/LightMode"
 
@@ -221,10 +220,6 @@ export default function ChatLayout({
     setSnackbarOpen(true)
   }
 
-  const handleEditTitle = () => {
-    setSnackbarMsg("Funzione di modifica titolo in arrivo!")
-    setSnackbarOpen(true)
-  }
 
   const handleThemeToggle = (mode: 'light' | 'dark') => {
     if (mode === 'dark') {
@@ -548,11 +543,6 @@ export default function ChatLayout({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Modifica">
-              <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={handleEditTitle}>
-                <ModeEditIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
           </Box>
         </Box>
 

@@ -53,8 +53,8 @@ export default function RegisterDialog({
       return
     }
 
-    if (password.length < 6) {
-      setError("La password deve contenere almeno 6 caratteri.")
+    if (password.length < 8) {
+      setError("La password deve contenere almeno 8 caratteri.")
       return
     }
 
@@ -85,10 +85,13 @@ export default function RegisterDialog({
         sx: {
           width: "100%",
           maxWidth: 420,
-border: "1px solid #e5e5e5",
-          boxShadow: "0 4px 32px rgba(0,0,0,0.10)",
+          border: "1px solid var(--border-color)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
           overflow: "hidden",
-          p: 0
+          bgcolor: "var(--bg-primary)",
+          backgroundImage: "none",
+          p: 0,
+          borderRadius: "20px"
         }
       }}
     >
@@ -102,8 +105,8 @@ border: "1px solid #e5e5e5",
             position: "absolute",
             top: 16,
             right: 16,
-            color: "#999",
-            "&:hover": { bgcolor: "#f5f5f5" }
+            color: "var(--text-secondary)",
+            "&:hover": { bgcolor: "var(--bg-secondary)" }
           }}
         >
           <CloseIcon fontSize="small" />
@@ -112,10 +115,10 @@ border: "1px solid #e5e5e5",
         {/* Logo wordmark */}
         <Typography
           sx={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#202123",
-            letterSpacing: "0.04em",
+            fontSize: 12,
+            fontWeight: 700,
+            color: "var(--accent-primary)",
+            letterSpacing: "0.08em",
             textTransform: "uppercase",
             mb: 3
           }}
@@ -125,12 +128,12 @@ border: "1px solid #e5e5e5",
 
         <Typography
           sx={{
-            fontSize: 28,
-            fontWeight: 700,
-            color: "#0d0d0d",
+            fontSize: 26,
+            fontWeight: 800,
+            color: "var(--text-primary)",
             lineHeight: 1.2,
             letterSpacing: "-0.02em",
-            mb: 0.75
+            mb: 1
           }}
         >
           Crea il tuo account
@@ -139,7 +142,7 @@ border: "1px solid #e5e5e5",
         <Typography
           sx={{
             fontSize: 14,
-            color: "#6e6e80",
+            color: "var(--text-secondary)",
             lineHeight: 1.5,
             mb: 3
           }}
@@ -149,11 +152,18 @@ border: "1px solid #e5e5e5",
       </Box>
 
       <DialogContent sx={{ px: 4, pt: 0, pb: 4 }}>
-        <Stack spacing={2}>
+        <Stack spacing={2.5}>
           {error && (
             <Alert
               severity="error"
-              sx={{ borderRadius: "10px", fontSize: 13 }}
+              sx={{ 
+                borderRadius: "12px", 
+                fontSize: 13,
+                bgcolor: "rgba(239, 68, 68, 0.08)",
+                color: "#ef4444",
+                border: "1px solid rgba(239, 68, 68, 0.15)",
+                "& .MuiAlert-icon": { color: "#ef4444" }
+              }}
             >
               {error}
             </Alert>
@@ -171,14 +181,19 @@ border: "1px solid #e5e5e5",
             variant="outlined"
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: "10px",
-                bgcolor: "#fff",
+                borderRadius: "12px",
+                bgcolor: "var(--bg-secondary)",
                 fontSize: 14,
-                "& fieldset": { borderColor: "#d9d9e3" },
-                "&:hover fieldset": { borderColor: "#b0b0bc" },
-                "&.Mui-focused fieldset": { borderColor: "#202123", borderWidth: 1.5 }
+                color: "var(--text-primary)",
+                "& fieldset": { borderColor: "var(--border-color)" },
+                "&:hover fieldset": { borderColor: "var(--text-secondary)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--accent-primary)", borderWidth: 2 }
               },
-              "& .MuiInputLabel-root": { fontSize: 14 }
+              "& .MuiInputLabel-root": { 
+                fontSize: 14, 
+                color: "var(--text-secondary)",
+                "&.Mui-focused": { color: "var(--accent-primary)" }
+              }
             }}
           />
 
@@ -193,14 +208,19 @@ border: "1px solid #e5e5e5",
             variant="outlined"
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: "10px",
-                bgcolor: "#fff",
+                borderRadius: "12px",
+                bgcolor: "var(--bg-secondary)",
                 fontSize: 14,
-                "& fieldset": { borderColor: "#d9d9e3" },
-                "&:hover fieldset": { borderColor: "#b0b0bc" },
-                "&.Mui-focused fieldset": { borderColor: "#202123", borderWidth: 1.5 }
+                color: "var(--text-primary)",
+                "& fieldset": { borderColor: "var(--border-color)" },
+                "&:hover fieldset": { borderColor: "var(--text-secondary)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--accent-primary)", borderWidth: 2 }
               },
-              "& .MuiInputLabel-root": { fontSize: 14 }
+              "& .MuiInputLabel-root": { 
+                fontSize: 14, 
+                color: "var(--text-secondary)",
+                "&.Mui-focused": { color: "var(--accent-primary)" }
+              }
             }}
             InputProps={{
               endAdornment: (
@@ -209,7 +229,7 @@ border: "1px solid #e5e5e5",
                     edge="end"
                     onClick={() => setShowPassword((prev) => !prev)}
                     disabled={loading}
-                    sx={{ color: "#aaa" }}
+                    sx={{ color: "var(--text-secondary)" }}
                   >
                     {showPassword ? <VisibilityOffIcon sx={{ fontSize: 18 }} /> : <VisibilityIcon sx={{ fontSize: 18 }} />}
                   </IconButton>
@@ -232,14 +252,19 @@ border: "1px solid #e5e5e5",
             }}
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: "10px",
-                bgcolor: "#fff",
+                borderRadius: "12px",
+                bgcolor: "var(--bg-secondary)",
                 fontSize: 14,
-                "& fieldset": { borderColor: "#d9d9e3" },
-                "&:hover fieldset": { borderColor: "#b0b0bc" },
-                "&.Mui-focused fieldset": { borderColor: "#202123", borderWidth: 1.5 }
+                color: "var(--text-primary)",
+                "& fieldset": { borderColor: "var(--border-color)" },
+                "&:hover fieldset": { borderColor: "var(--text-secondary)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--accent-primary)", borderWidth: 2 }
               },
-              "& .MuiInputLabel-root": { fontSize: 14 }
+              "& .MuiInputLabel-root": { 
+                fontSize: 14, 
+                color: "var(--text-secondary)",
+                "&.Mui-focused": { color: "var(--accent-primary)" }
+              }
             }}
           />
 
@@ -249,18 +274,22 @@ border: "1px solid #e5e5e5",
             onClick={handleRegister}
             disabled={loading}
             sx={{
-              mt: 0.5,
+              mt: 1,
               textTransform: "none",
-              borderRadius: "10px",
-              py: 1.4,
-              fontWeight: 600,
+              borderRadius: "12px",
+              py: 1.5,
+              fontWeight: 700,
               fontSize: 14,
-              bgcolor: "#202123",
-              color: "#fff",
-              boxShadow: "none",
+              bgcolor: "var(--text-primary)",
+              color: "var(--bg-primary)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
               letterSpacing: "0.01em",
-              "&:hover": { bgcolor: "#111214", boxShadow: "none" },
-              "&:disabled": { bgcolor: "rgba(32,33,35,0.4)", color: "#fff" }
+              "&:hover": { 
+                bgcolor: "var(--text-primary)", 
+                opacity: 0.9,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.2)" 
+              },
+              "&:disabled": { bgcolor: "var(--border-color)", color: "var(--text-secondary)" }
             }}
           >
             {loading ? (
@@ -271,10 +300,15 @@ border: "1px solid #e5e5e5",
             ) : "Continua"}
           </Button>
 
-          <Divider sx={{ fontSize: 12, color: "#c5c5d2", my: 0.5 }}>oppure</Divider>
+          <Divider sx={{ 
+            fontSize: 11, 
+            color: "var(--text-secondary)", 
+            my: 1,
+            "&::before, &::after": { borderColor: "var(--border-color)" }
+          }}>oppure</Divider>
 
           <Box sx={{ textAlign: "center" }}>
-            <Typography sx={{ fontSize: 13, color: "#6e6e80", display: "inline" }}>
+            <Typography sx={{ fontSize: 13, color: "var(--text-secondary)", display: "inline" }}>
               Hai già un account?{" "}
             </Typography>
             <Button
@@ -284,9 +318,9 @@ border: "1px solid #e5e5e5",
                 p: 0,
                 minWidth: 0,
                 textTransform: "none",
-                fontWeight: 600,
+                fontWeight: 700,
                 fontSize: 13,
-                color: "#202123",
+                color: "var(--text-primary)",
                 display: "inline",
                 verticalAlign: "baseline",
                 "&:hover": { bgcolor: "transparent", textDecoration: "underline" }
@@ -296,7 +330,7 @@ border: "1px solid #e5e5e5",
             </Button>
           </Box>
 
-          <Typography sx={{ fontSize: 11, color: "#b0b0bc", textAlign: "center", lineHeight: 1.5 }}>
+          <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", opacity: 0.7, textAlign: "center", lineHeight: 1.5 }}>
             Creando un account, abiliti un'esperienza più personalizzata nella piattaforma.
           </Typography>
         </Stack>

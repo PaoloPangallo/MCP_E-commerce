@@ -56,3 +56,9 @@ export async function updateCustomInstructions(instructions: string): Promise<{ 
     body: JSON.stringify({ custom_instructions: instructions })
   })
 }
+export async function recoverPassword(email: string): Promise<{ status: string, message: string, password?: string }> {
+  return apiFetch<{ status: string, message: string, password?: string }>('/auth/recover-password', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  })
+}
