@@ -1,14 +1,17 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 
-
-import type {
-  ChatEntry,
-  Message,
-  SearchBlock
-} from "../../../types/searchTypes.ts"
-import {getToken} from "../../../auth/authStore.ts";
+import type { SearchBlock } from "../../../features/search/types.ts"
+import type { AgentMessage, FinalPayload } from "../../agent/types" 
+import { getToken } from "../../../auth/authStore.ts";
 import { API_BASE } from "../../../api/apiClient.ts"
+import { mapPayloadToSearchBlock } from "../../search/utils/searchMapper"
+
+export type Message = AgentMessage
+
+export type ChatEntry =
+  | { type: "message"; msg: Message }
+  | { type: "search"; search: SearchBlock }
 
 export type ChatSession = {
   id: string
@@ -44,13 +47,14 @@ type ChatStore = {
   clearMemory: () => Promise<void> // Clears MCP redis memory and resets current session
 
   setLoadingQuery: (query: string | null) => void
-  appendMessage: (msg: Message) => void
+  appendMessage: (msg: AgentMessage) => void
   appendAssistantMessage: (content: string) => void
   appendSearchBlock: (search: SearchBlock) => void
   setCachedSearch: (key: string, value: SearchBlock) => void
+  saveAgentResponse: (query: string, payload: FinalPayload) => void
 }
 
-const createNewSession = (title: string = "Nuova Ricerca"): ChatSession => ({
+const createNewSession = (title: string = "Nuova chat"): ChatSession => ({
   id: crypto.randomUUID(),
   title,
   chat: [getWelcomeMessage()],
@@ -98,7 +102,7 @@ export const useChatStore = create<ChatStore>()(
 
         return {
           sessions: state.sessions.map(s =>
-            s.id === sid ? { ...s, chat: [getWelcomeMessage()], title: "Nuova Ricerca" } : s
+            s.id === sid ? { ...s, chat: [getWelcomeMessage()], title: "Nuova chat" } : s
           )
         }
       }),
@@ -119,7 +123,7 @@ export const useChatStore = create<ChatStore>()(
 
           return {
             sessions: state.sessions.map(s =>
-              s.id === sid ? { ...s, chat: [getWelcomeMessage({ memoryCleared: true })], title: "Nuova Ricerca" } : s
+              s.id === sid ? { ...s, chat: [getWelcomeMessage({ memoryCleared: true })], title: "Nuova chat" } : s
             )
           }
         })
@@ -170,7 +174,58 @@ export const useChatStore = create<ChatStore>()(
       setCachedSearch: (key, value) =>
         set((state) => ({
           cache: { ...state.cache, [key]: value }
-        }))
+        })),
+
+      saveAgentResponse: (query, payload) => set((state) => {
+        const sid = state.activeSessionId || (state.sessions[0]?.id)
+        if (!sid) return state
+
+        const cacheKey = query.toLowerCase()
+        const newSearch = mapPayloadToSearchBlock(query, payload)
+
+        const hasStructuredBlock =
+          newSearch.results.length > 0 ||
+          !!newSearch.seller_summary?.seller_name ||
+          !!newSearch.analysis ||
+          !!newSearch.agent_trace?.length ||
+          !!newSearch.errors?.length ||
+          !!newSearch.comparison ||
+          !!newSearch.item_details ||
+          !!newSearch.shipping_costs ||
+          !!newSearch.vision_analysis ||
+          !!newSearch.market_trends ||
+          !!newSearch.deals ||
+          !!payload.plannedTasks?.length ||
+          (!!payload.toolStates && Object.keys(payload.toolStates).length > 0)
+
+        const nextCache = { ...state.cache, [cacheKey]: newSearch }
+
+        return {
+          cache: nextCache,
+          loadingQuery: null,
+          sessions: state.sessions.map(s => {
+            if (s.id !== sid) return s
+
+            const nextChat = [...s.chat]
+            
+            // Safety check against processing the same payload multiple times
+            if (nextChat.some(entry => entry.type === "search" && entry.search?.query === query && entry.search?.analysis === payload.analysis)) {
+              return s
+            }
+
+            if (hasStructuredBlock) {
+              nextChat.push({ type: "search", search: newSearch })
+              if (newSearch.final_answer && newSearch.final_answer !== "Ho completato l’analisi della richiesta.") {
+                nextChat.push({ type: "message", msg: { role: "assistant", content: newSearch.final_answer } })
+              }
+            } else {
+              nextChat.push({ type: "message", msg: { role: "assistant", content: newSearch.final_answer ?? "Ho completato l’analisi della richiesta." } })
+            }
+
+            return { ...s, chat: nextChat }
+          })
+        }
+      })
     }),
     {
       name: "ebay-gpt-sessions",

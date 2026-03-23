@@ -33,8 +33,8 @@ export default function MetadataCard({ data }: MetadataProps) {
       sx={{
         width: "100%",
         borderRadius: 4,
-        border: "1px solid #e2e8f0",
-        bgcolor: "#ffffff",
+        border: "1px solid var(--border-color)",
+        bgcolor: "var(--bg-primary)",
         overflow: "hidden",
         mb: 2,
         boxShadow: "0 2px 4px -1px rgb(0 0 0 / 0.05)",
@@ -50,8 +50,8 @@ export default function MetadataCard({ data }: MetadataProps) {
               width: 32,
               height: 32,
               borderRadius: "10px",
-              bgcolor: "#f1f5f9",
-              color: "#475569",
+              bgcolor: "var(--bg-secondary)",
+              color: "var(--text-secondary)",
             }}
           >
             {policyType === "item_conditions" && <GavelIcon sx={{ fontSize: 18 }} />}
@@ -59,12 +59,12 @@ export default function MetadataCard({ data }: MetadataProps) {
             {policyType === "listing_structure" && <LayersIcon sx={{ fontSize: 18 }} />}
           </Box>
           <Box>
-            <Typography variant="subtitle2" fontWeight={700} color="#1e293b">
+            <Typography variant="subtitle2" fontWeight={700} color="var(--text-primary)">
               {policyType === "item_conditions" && "Condizioni Ammesse"}
               {policyType === "return_policies" && "Politiche di Reso"}
               {policyType === "listing_structure" && "Struttura Inserzioni"}
             </Typography>
-            <Typography variant="caption" color="#64748b">
+            <Typography variant="caption" color="var(--text-secondary)">
               Marketplace: {data.marketplace_id} {data.category_id ? `| Categoria: ${data.category_id}` : ""}
             </Typography>
           </Box>
@@ -78,13 +78,13 @@ export default function MetadataCard({ data }: MetadataProps) {
               gap: 1,
               p: 1.5,
               mb: 2.5,
-              bgcolor: "#fffbeb",
-              border: "1px solid #fef3c7",
+              bgcolor: "var(--bg-secondary)",
+              border: "1px solid var(--border-color)",
               borderRadius: 2,
             }}
           >
-            <InfoOutlinedIcon sx={{ fontSize: 16, color: "#d97706" }} />
-            <Typography sx={{ fontSize: 11, color: "#92400e", fontWeight: 500 }}>
+            <InfoOutlinedIcon sx={{ fontSize: 16, color: "var(--accent-primary)" }} />
+            <Typography sx={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 500 }}>
               {message}
             </Typography>
           </Box>
@@ -95,7 +95,7 @@ export default function MetadataCard({ data }: MetadataProps) {
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {results.itemConditionPolicies.map((policy: any, idx: number) => (
               <Box key={idx}>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, mb: 1, display: "block" }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: 0.5, mb: 1, display: "block" }}>
                   Categoria {policy.categoryId || "Globale"}
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
@@ -108,15 +108,15 @@ export default function MetadataCard({ data }: MetadataProps) {
                       sx={{
                         fontSize: "11px",
                         fontWeight: 500,
-                        color: "#334155",
-                        borderColor: "#e2e8f0",
-                        bgcolor: "#f8fafc",
-                        "&:hover": { bgcolor: "#f1f5f9" }
+                        color: "var(--text-primary)",
+                        borderColor: "var(--border-color)",
+                        bgcolor: "var(--bg-secondary)",
+                        "&:hover": { bgcolor: "var(--bg-primary)" }
                       }}
                     />
                   ))}
                 </Box>
-                {idx < results.itemConditionPolicies.length - 1 && <Divider sx={{ mt: 2.5 }} />}
+                {idx < results.itemConditionPolicies.length - 1 && <Divider sx={{ mt: 2.5, borderColor: "var(--border-color)" }} />}
               </Box>
             ))}
           </Box>
@@ -128,10 +128,10 @@ export default function MetadataCard({ data }: MetadataProps) {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Categoria</TableCell>
-                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Reso</TableCell>
-                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Periodo</TableCell>
-                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Spese</TableCell>
+                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>Categoria</TableCell>
+                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>Reso</TableCell>
+                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>Periodo</TableCell>
+                  <TableCell sx={{ fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>Spese</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -152,7 +152,7 @@ export default function MetadataCard({ data }: MetadataProps) {
                     <TableCell sx={{ fontSize: 12 }}>
                       {policy.returnPeriod?.value ? `${policy.returnPeriod.value} ${policy.returnPeriod.unit}` : "-"}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 11, color: "#64748b" }}>
+                    <TableCell sx={{ fontSize: 11, color: "var(--text-secondary)" }}>
                       {policy.returnShippingCostPayer === "BUYER" ? "Acquirente" : "Venditore"}
                     </TableCell>
                   </TableRow>
@@ -166,8 +166,8 @@ export default function MetadataCard({ data }: MetadataProps) {
         {policyType === "listing_structure" && results.listingStructurePolicies && (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {results.listingStructurePolicies.map((policy: any, idx: number) => (
-              <Box key={idx} p={1.5} borderRadius={2} bgcolor="#f8fafc" border="1px solid #f1f5f9">
-                <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 1 }}>
+              <Box key={idx} p={1.5} borderRadius={2} bgcolor="var(--bg-secondary)" border="1px solid var(--border-color)">
+                <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 1, color: "var(--text-primary)" }}>
                   Categoria: {policy.categoryId || "Globale"}
                 </Typography>
                 <Box display="flex" alignItems="center" gap={1}>
@@ -175,8 +175,8 @@ export default function MetadataCard({ data }: MetadataProps) {
                     label={policy.variationsSupported ? "Variazioni Supportate" : "Singola Inserzione"}
                     size="small"
                     sx={{
-                      bgcolor: policy.variationsSupported ? "#e0f2fe" : "#f1f5f9",
-                      color: policy.variationsSupported ? "#0369a1" : "#64748b",
+                      bgcolor: policy.variationsSupported ? "var(--bg-primary)" : "var(--bg-secondary)",
+                      color: policy.variationsSupported ? "var(--accent-primary)" : "var(--text-secondary)",
                       fontWeight: 600, fontSize: 11
                     }}
                   />

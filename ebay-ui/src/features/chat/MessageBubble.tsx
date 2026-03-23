@@ -39,24 +39,24 @@ function TypingIndicator() {
 const markdownSx = {
   fontSize: "0.9375rem",
   lineHeight: 1.7,
-  color: "#111827",
+  color: "var(--text-primary)",
   "& h1, & h2, & h3": {
     mt: 3,
     mb: 1.25,
     fontWeight: 700,
-    color: "#111827",
+    color: "var(--text-primary)",
     lineHeight: 1.3
   },
   "& h1": { fontSize: "1.45rem" },
-  "& h2": { fontSize: "1.2rem", borderBottom: "1px solid #f0f0f0", pb: 0.75 },
+  "& h2": { fontSize: "1.2rem", borderBottom: "1px solid var(--border-color)", pb: 0.75 },
   "& h3": { fontSize: "1.05rem" },
   "& p": { my: 1 },
   "& ul, & ol": { pl: 2.5, my: 1 },
   "& li": { mb: 0.5 },
   "& li + li": { mt: 0.25 },
-  "& strong": { fontWeight: 600, color: "#111827" },
+  "& strong": { fontWeight: 600, color: "var(--text-primary)" },
   "& code": {
-    bgcolor: "rgba(0,0,0,0.06)",
+    bgcolor: "var(--bg-secondary)",
     px: 0.75,
     py: 0.2,
     borderRadius: 1,
@@ -64,7 +64,7 @@ const markdownSx = {
     fontFamily: "'Fira Code', 'Roboto Mono', monospace"
   },
   "& pre": {
-    bgcolor: "#1e293b",
+    bgcolor: "#1e293b", // Keep dark for code blocks as standard
     p: 2,
     borderRadius: 2,
     overflowX: "auto",
@@ -72,14 +72,14 @@ const markdownSx = {
     "& code": { bgcolor: "transparent", color: "#f8fafc", p: 0, fontSize: "13px" }
   },
   "& blockquote": {
-    borderLeft: "3px solid #e5e7eb",
+    borderLeft: "3px solid var(--border-color)",
     pl: 2,
     py: 0.25,
     my: 2,
-    color: "#6b7280",
+    color: "var(--text-secondary)",
     fontStyle: "italic"
   },
-  "& hr": { border: 0, borderTop: "1px solid #f0f0f0", my: 2.5 },
+  "& hr": { border: 0, borderTop: "1px solid var(--border-color)", my: 2.5 },
   "& table": {
     width: "100%",
     borderCollapse: "separate",
@@ -88,36 +88,36 @@ const markdownSx = {
     fontSize: "0.8125rem",
     borderRadius: "12px",
     overflow: "hidden",
-    border: "1px solid #f1f5f9",
+    border: "1px solid var(--border-color)",
     boxShadow: "0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.06)",
-    bgcolor: "#fff"
+    bgcolor: "var(--bg-primary)"
   },
   "& th": { 
-    bgcolor: "#f8fafc", 
+    bgcolor: "var(--bg-secondary)", 
     fontWeight: 600, 
-    color: "#475569", 
+    color: "var(--text-secondary)", 
     fontSize: "11px",
     textTransform: "uppercase",
     letterSpacing: "0.03em",
     p: 2,
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom: "1px solid var(--border-color)",
     textAlign: "left"
   },
   "& td": { 
     p: 2, 
     textAlign: "left", 
-    borderBottom: "1px solid #f1f5f9",
-    color: "#334155",
+    borderBottom: "1px solid var(--border-color)",
+    color: "var(--text-primary)",
     verticalAlign: "middle"
   },
   "& tr:last-child td": {
     borderBottom: 0
   },
   "& tr:hover td": {
-    bgcolor: "#fcfdfe"
+    bgcolor: "var(--bg-secondary)"
   },
   "& a": {
-    color: "#2563eb",
+    color: "var(--accent-primary)",
     textDecoration: "none",
     fontWeight: 500,
     "&:hover": { textDecoration: "underline" }
@@ -261,12 +261,12 @@ export default function MessageBubble({
                         component="th"
                         {...props}
                         sx={{
-                          bgcolor: "#f8fafc",
+                          bgcolor: "var(--bg-secondary)",
                           p: 2,
-                          borderBottom: "2px solid #f1f5f9",
+                          borderBottom: "2px solid var(--border-color)",
                           textAlign: "left",
                           fontWeight: 700,
-                          color: "#64748b",
+                          color: "var(--text-secondary)",
                           fontSize: "11px",
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
@@ -275,7 +275,7 @@ export default function MessageBubble({
                       />
                     ),
                     td: ({ node, children, ...props }) => {
-                      const text = String(children);
+                      const text = String(children || "");
                       const isTrust = text.includes("%") && /\d+/.test(text.trim());
                       const isPrice = text.includes("€") || text.includes("$") || (text.includes(",") && /\d/.test(text));
                       const isCondition = text.toLowerCase().includes("nuovo") || text.toLowerCase().includes("usato");
@@ -287,12 +287,12 @@ export default function MessageBubble({
 
                       if (isTrust && !isLink) {
                         const val = parseInt(text.replace(/[^0-9]/g, '')) || 0;
-                        const color = val >= 85 ? "#10b981" : val >= 70 ? "#f59e0b" : "#ef4444";
+                        const color = val >= 85 ? "var(--success)" : val >= 70 ? "var(--warning)" : "var(--error)";
                         renderedContent = (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box sx={{ 
-                              px: 1, py: 0.35, borderRadius: '6px', bgcolor: `${color}15`, 
-                              color: color, fontWeight: 700, fontSize: '11px', border: `1px solid ${color}25`,
+                              px: 1, py: 0.35, borderRadius: '6px', bgcolor: `var(--bg-secondary)`, 
+                              color: color, fontWeight: 700, fontSize: '11px', border: `1px solid var(--border-color)`,
                               minWidth: '42px', textAlign: 'center'
                             }}>
                               {text}
@@ -301,19 +301,19 @@ export default function MessageBubble({
                         );
                       } else if (isPrice && !isLink) {
                         renderedContent = (
-                          <Box sx={{ fontWeight: 700, color: "#0f172a", fontSize: "0.9375rem" }}>
+                          <Box sx={{ fontWeight: 700, color: "var(--text-primary)", fontSize: "0.9375rem" }}>
                             {text}
                           </Box>
                         );
                       } else if (isCondition && !isLink) {
                         const isNew = text.toLowerCase().includes("nuovo");
-                        const color = isNew ? "#10b981" : "#3b82f6";
+                        const color = isNew ? "var(--success)" : "var(--accent-primary)";
                         renderedContent = (
                           <Box sx={{ 
                             display: 'inline-flex', px: 1, py: 0.25, borderRadius: '4px', 
-                            bgcolor: `${color}10`, color: color, fontSize: '10px', 
+                            bgcolor: "var(--bg-secondary)", color: color, fontSize: '10px', 
                             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em',
-                            border: `1px solid ${color}20`
+                            border: `1px solid var(--border-color)`
                           }}>
                             {text}
                           </Box>
@@ -326,10 +326,11 @@ export default function MessageBubble({
                           {...props}
                           sx={{
                             p: 2,
-                            borderBottom: "1px solid #f1f5f9",
+                            borderBottom: "1px solid var(--border-color)",
                             textAlign: "left",
                             verticalAlign: "middle",
-                            "&:first-of-type": { fontWeight: 600, color: "#1e293b", minWidth: "150px" }
+                            color: "var(--text-primary)",
+                            "&:first-of-type": { fontWeight: 600, color: "var(--text-primary)", minWidth: "150px" }
                           }}
                         >
                           {renderedContent}
@@ -348,8 +349,8 @@ export default function MessageBubble({
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            bgcolor: '#111827',
-                            color: '#fff !important',
+                            bgcolor: 'var(--text-primary)',
+                            color: 'var(--bg-primary) !important',
                             px: 2,
                             py: 0.75,
                             borderRadius: '8px',
@@ -358,12 +359,12 @@ export default function MessageBubble({
                             textDecoration: 'none !important',
                             transition: 'all 0.2s',
                             '&:hover': {
-                              bgcolor: '#374151',
+                              opacity: 0.9,
                               transform: 'translateY(-1px)',
                               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                             }
                           } : {
-                            color: "#2563eb",
+                            color: "var(--accent-primary)",
                             textDecoration: "none",
                             "&:hover": { textDecoration: "underline" }
                           }}

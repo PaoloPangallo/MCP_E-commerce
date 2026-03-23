@@ -41,16 +41,15 @@ export function ThinkingPill({ steps, loading, query, plannedTasks, defaultOpen 
           px: 1.75,
           py: 0.75,
           mb: open ? 1 : 0,
-          border: "1px solid #e567eb", // Subtle magenta hint for agent? No, let's stick to blue/gray
-          borderColor: loading ? "#bfdbfe" : "#e5e7eb",
+          border: "1px solid var(--border-color)",
           borderRadius: "24px",
           cursor: "pointer",
-          bgcolor: loading ? "#f0f7ff" : "#fff",
+          bgcolor: loading ? "var(--bg-secondary)" : "var(--bg-primary)",
           boxShadow: loading ? "0 2px 8px rgba(59, 130, 246, 0.08)" : "0 1px 3px rgba(0,0,0,0.02)",
           transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           "&:hover": { 
-            bgcolor: loading ? "#eff6ff" : "#f9fafb", 
-            borderColor: loading ? "#3b82f6" : "#d1d5db",
+            bgcolor: "var(--bg-secondary)", 
+            borderColor: "var(--text-secondary)",
             transform: "translateY(-1px)"
           },
           userSelect: "none"
@@ -61,7 +60,7 @@ export function ThinkingPill({ steps, loading, query, plannedTasks, defaultOpen 
             width: 8,
             height: 8,
             borderRadius: "50%",
-            bgcolor: loading ? "#3b82f6" : "#10b981",
+            bgcolor: loading ? "var(--accent-primary)" : "#10b981",
             animation: loading ? "dotPulse 1.8s infinite ease-in-out" : "none",
             boxShadow: loading ? "0 0 6px rgba(59, 130, 246, 0.4)" : "none",
             "@keyframes dotPulse": {
@@ -74,7 +73,7 @@ export function ThinkingPill({ steps, loading, query, plannedTasks, defaultOpen 
           sx={{ 
             fontSize: 12, 
             fontWeight: 600, 
-            color: loading ? "#1e40af" : "#4b5563", 
+            color: "var(--text-primary)", 
             lineHeight: 1,
             letterSpacing: '-0.01em'
           }}
@@ -84,7 +83,7 @@ export function ThinkingPill({ steps, loading, query, plannedTasks, defaultOpen 
         <KeyboardArrowDownIcon
           sx={{
             fontSize: 16,
-            color: "#9ca3af",
+            color: "var(--text-secondary)",
             transform: open ? "rotate(180deg)" : "none",
             transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
           }}
@@ -96,9 +95,8 @@ export function ThinkingPill({ steps, loading, query, plannedTasks, defaultOpen 
           elevation={0}
           sx={{ 
             p: 2.5, 
-            borderRadius: "16px", 
-            border: "1px solid #f0f0f0", 
-            bgcolor: "#fff",
+            border: "1px solid var(--border-color)", 
+            bgcolor: "var(--bg-primary)",
             boxShadow: "0 4px 15px rgba(0,0,0,0.03)"
           }}
         >

@@ -9,7 +9,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Divider,
 } from "@mui/material"
 import LocalShippingIcon from "@mui/icons-material/LocalShipping"
 import LocationOnIcon from "@mui/icons-material/LocationOn"

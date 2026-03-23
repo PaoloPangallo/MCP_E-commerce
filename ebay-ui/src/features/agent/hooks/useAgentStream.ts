@@ -1,354 +1,147 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useReducer } from "react"
 import { streamAgent } from "../api/stream"
-
+import { parseSSEEvent, type AgentState } from "../services/SSEParser"
 import type {
   AgentEvent,
-  AgentStep,
-  FinalPayload,
-  PlannedTask,
-  ToolStatePayload
+  FinalPayload
 } from "../types"
 
-function upsertStep(
-  previous: AgentStep[],
-  incoming: Partial<AgentStep> & { step: number }
-): AgentStep[] {
-  const index = previous.findIndex((s) => s.step === incoming.step)
+// ── RAF throttle helper ─────────────────────────────────────────────
+// Coalesces multiple SSE chunks into a single React render per frame.
+function createRAFThrottle() {
+  let rafId: number | null = null
+  let pending: (() => void) | null = null
 
-  if (index === -1) {
-    return [
-      ...previous,
-      {
-        step: incoming.step,
-        thought: incoming.thought ?? "",
-        action: incoming.action,
-        action_input: incoming.action_input,
-        observation_summary: incoming.observation_summary,
-        status: incoming.status ?? "thinking"
-      }
-    ]
-  }
-
-  const current = previous[index]
-
-  const updated: AgentStep = {
-    ...current,
-    ...incoming,
-    thought: incoming.thought ?? current.thought,
-    action: incoming.action ?? current.action,
-    action_input: incoming.action_input ?? current.action_input,
-    observation_summary:
-      incoming.observation_summary ?? current.observation_summary,
-    status: incoming.status ?? current.status
-  }
-
-  const next = [...previous]
-  next[index] = updated
-  return next
-}
-
-function normalizeFinalTrace(trace: AgentStep[] | undefined, fallback: AgentStep[]) {
-  if (Array.isArray(trace) && trace.length > 0) return trace
-  return fallback
-}
-
-function markStepsAsDone(prev: AgentStep[]): AgentStep[] {
-  if (prev.length === 0) return []
-  let changed = false
-  const next = prev.map(s => {
-    if (s.status === "thinking" || s.status === "running") {
-      changed = true
-      return { ...s, status: "ok" as const, thought: s.thought || "Pianificazione completata." }
+  function schedule(fn: () => void) {
+    pending = fn
+    if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        pending?.()
+        pending = null
+      })
     }
-    return s
-  })
-  return changed ? next : prev
+  }
+
+  function cancel() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId)
+      rafId = null
+    }
+    pending?.()
+    pending = null
+  }
+
+  return { schedule, cancel }
+}
+
+type AgentAction = 
+  | { type: 'RESET' }
+  | { type: 'UPDATE', payload: Partial<AgentState> }
+
+const initialState: AgentState = {
+  steps: [],
+  results: [],
+  running: false,
+  finalPayload: null,
+  plannedTasks: []
+}
+
+function agentReducer(state: AgentState, action: AgentAction): AgentState {
+  switch (action.type) {
+    case 'RESET':
+      return initialState
+    case 'UPDATE':
+      return { ...state, ...action.payload }
+    default:
+      return state
+  }
 }
 
 export function useAgentStream(options?: {
   sessionId?: string | null
   onDone?: (payload: FinalPayload, originalQuery: string) => void
 }) {
+  const [state, dispatch] = useReducer(agentReducer, initialState)
+  
+  // We use a Ref to track the current state because SSE events arrive asynchronously
+  // and frequently, and we need the LATEST state for the parser to perform correct upserts.
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
   const sourceRef = useRef<{ close: () => void } | null>(null)
   const runIdRef = useRef(0)
   const sessionIdRef = useRef<string | null>(options?.sessionId || null)
+  const answerThrottle = useRef(createRAFThrottle())
 
-  const [steps, setSteps] = useState<AgentStep[]>([])
-  const [results, setResults] = useState<import("../../search/types").SearchItem[]>([])
-  const [running, setRunning] = useState(false)
-  const [finalPayload, setFinalPayload] = useState<FinalPayload | null>(null)
-  const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>([])
-
-  // Tracking di disconnessioni se l'ID sessione cambia
+  // Cleanup on unmount or session change
   useEffect(() => {
     if (options?.sessionId !== sessionIdRef.current) {
       if (sourceRef.current) {
         sourceRef.current.close()
         sourceRef.current = null
       }
-      setRunning(false)
+      dispatch({ type: 'UPDATE', payload: { running: false } })
       sessionIdRef.current = options?.sessionId || null
     }
   }, [options?.sessionId])
 
-
   const reset = useCallback(() => {
     runIdRef.current += 1
-
     if (sourceRef.current) {
       sourceRef.current.close()
       sourceRef.current = null
     }
-
-    setSteps([])
-    setResults([])
-    setFinalPayload(null)
-    setPlannedTasks([])
-    setRunning(false)
+    dispatch({ type: 'RESET' })
   }, [])
 
   const run = useCallback((query: string, image?: string) => {
     if (!query.trim() && !image) return
 
     reset()
-    setRunning(true)
+    dispatch({ type: 'UPDATE', payload: { running: true } })
 
     const currentRunId = runIdRef.current
-    let localTrace: AgentStep[] = []
-    let localPlannedTasks: PlannedTask[] = []
     let streamingAnswer: string = ""
 
     const nextSource = streamAgent(query, image, (event: AgentEvent) => {
-      // Abort se il run è superato o la sessione è cambiata
+      // Abort if the run is outdated
       if (currentRunId !== runIdRef.current) return
       if (options?.sessionId && options.sessionId !== sessionIdRef.current) return
 
       if (event.type === "heartbeat") return
 
-      if (event.type === "start") {
-        localPlannedTasks = Array.isArray(event.planned_tasks)
-          ? event.planned_tasks
-          : []
-        setPlannedTasks(localPlannedTasks)
-        return
-      }
-
-      if (event.type === "error") {
-        setRunning(false)
-        const errorPayload: FinalPayload = {
-          finalAnswer:
-            event.message || "Si è verificato un errore nello stream agentico.",
-          results: [],
-          analysis: null,
-          sellerSummary: null,
-          trace: localTrace,
-          errors: [event.message || "Unknown stream error"],
-          plannedTasks: localPlannedTasks,
-          pendingTasks: [],
-          toolStates: {},
-          toolCalls: {},
-          finalData: null
-        }
-        setFinalPayload(errorPayload)
-
-        if (options?.sessionId === sessionIdRef.current) {
-          options?.onDone?.(errorPayload, query)
-        }
-
-        if (sourceRef.current) {
-          sourceRef.current.close()
-          sourceRef.current = null
-        }
-        return
-      }
-
-      if (event.type === "thinking") {
-        const nextStep = {
-          step: event.step ?? 1,
-          thought: event.thought ?? event.message ?? "",
-          action: event.action,
-          status: "thinking" as const
-        }
-
-        localTrace = upsertStep(localTrace, nextStep)
-        setSteps(localTrace)
-        return
-      }
-
-      if (event.type === "tool_start") {
-        const nextStep = {
-          step: event.step ?? 1,
-          action: event.tool,
-          action_input: event.input,
-          status: "running" as const
-        }
-
-        localTrace = upsertStep(localTrace, nextStep)
-        setSteps(localTrace)
-        return
-      }
-
-      if (event.type === "tool_result") {
-        const nextStep = {
-          step: event.step ?? 1,
-          action: event.tool,
-          observation_summary: event.summary,
-          status: event.ok ? ("ok" as const) : ("error" as const)
-        }
-
-        localTrace = upsertStep(localTrace, nextStep)
-        setSteps(localTrace)
-
-        // AGGIORNAMENTO DINAMICO: Se il tool ha restituito dati strutturati, popoliamo subito il finalPayload
-        // per permettere alla UI di mostrare i blocchi tecnici prima che il LLM finisca answer_chunk.
-        if (event.ok && (event as any).data) {
-          const toolData = (event as any).data;
-          setFinalPayload((prev) => {
-            const base = prev || {
-              finalAnswer: null,
-              results: [],
-              analysis: null,
-              trace: localTrace,
-              plannedTasks: localPlannedTasks
-            };
-
-            const next = { ...base };
-            
-            // Logica di mappatura identica a quella dell'evento 'final'
-            if (event.tool === "get_ebay_deals") {
-               next.deals = toolData.deals || toolData.items || toolData;
-            } else if (event.tool === "search_products") {
-               next.results = toolData.results || [];
-               next.analysis = toolData.analysis || null;
-               next.metrics = toolData.metrics || toolData.ir_metrics;
-               next.ragContext = toolData.rag_context;
-            } else if (event.tool === "analyze_seller") {
-               next.sellerSummary = toolData;
-            } else if (event.tool === "compare_products") {
-               next.comparison = toolData;
-            } else if (event.tool === "get_item_details") {
-               next.itemDetails = toolData.data || toolData;
-            } else if (event.tool === "get_shipping_costs") {
-               next.shippingCosts = toolData.data || toolData;
-            } else if (event.tool === "market_trends") {
-               next.marketTrends = toolData;
-            } else if (event.tool === "get_marketplace_metadata") {
-               next.metadata = toolData;
-            }
-
-            return next as any;
-          });
-        }
-        return
-      }
-
+      // Accumulate text stream
       if (event.type === "answer_chunk") {
         streamingAnswer += (typeof event.chunk === "string" ? event.chunk : "")
-
-        setSteps(prev => markStepsAsDone(prev))
-
-        setFinalPayload((prev) => {
-          if (!prev) {
-            return {
-              finalAnswer: streamingAnswer,
-              results: [],
-              analysis: null,
-              trace: markStepsAsDone(localTrace),
-              plannedTasks: localPlannedTasks
-            } as any
-          }
-          const nextTrace = markStepsAsDone(prev.trace || [])
-
-          if (prev.finalAnswer === streamingAnswer && prev.trace === nextTrace) return prev
-
-          return {
-            ...prev,
-            finalAnswer: streamingAnswer,
-            trace: nextTrace
-          }
-        })
-        return
       }
 
-      if (event.type === "vision_analysis") {
-        setFinalPayload((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            visionAnalysis: {
-              description: event.description ?? "",
-              tags: event.tags ?? [],
-              confidence: event.confidence ?? 1.0
-            }
-          }
-        })
-        return
+      // Delegate parsing to pure service
+      const patch = parseSSEEvent(event, stateRef.current, streamingAnswer)
+      
+      if (patch) {
+        if (event.type === "answer_chunk") {
+          // Throttled update for text chunks to preserve frame rate
+          answerThrottle.current.schedule(() => {
+             dispatch({ type: 'UPDATE', payload: patch })
+          })
+        } else {
+          // Immediate update for technical tool steps/results
+          dispatch({ type: 'UPDATE', payload: patch })
+        }
       }
 
+      // Special handling for the onDone callback when final event arrives
       if (event.type === "final") {
-        const finalData = event.final_data || {}
-        const search = finalData.search || {}
-        const seller = finalData.seller || null
-        const finalResults = Array.isArray(search.results) ? search.results : []
-
-        const fallbackTrace = localTrace.map(s =>
-          (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
-        )
-        const mappedAgentTrace = (event.agent_trace || []).map((s: any) =>
-          (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
-        )
-        const finalTrace = normalizeFinalTrace(mappedAgentTrace, fallbackTrace)
-
-        const toolStates = finalData.tool_states || {}
-        const toolCalls = finalData.tool_calls || {}
-        const pendingTasks = Array.isArray(finalData.pending_tasks)
-          ? finalData.pending_tasks
-          : []
-
-        const payload: FinalPayload = {
-          finalAnswer: event.final_answer || streamingAnswer || null,
-          results: finalResults,
-          analysis: search.analysis || finalData.search_analysis || null,
-          metrics: search.metrics || finalData.metrics,
-          ragContext: search.rag_context,
-          sellerSummary: seller,
-          comparison: finalData.compare || null,
-          itemDetails: finalData.item_details || null,
-          shippingCosts: finalData.shipping_costs || finalData.shippingCosts || null,
-          metadata: finalData.metadata || null,
-          marketTrends: finalData.market_trends || finalData.marketTrends || null,
-          deals: finalData.deals || null,
-          trace: finalTrace,
-          errors: Array.isArray(finalData.errors) ? finalData.errors : [],
-          plannedTasks: localPlannedTasks,
-          pendingTasks,
-          toolStates: toolStates as Record<string, ToolStatePayload>,
-          toolCalls,
-          finalData
-        }
-
-        setResults(finalResults)
-        setFinalPayload(payload)
-
-        if (options?.sessionId === sessionIdRef.current) {
-          options?.onDone?.(payload, query)
-        }
-
-        setSteps(finalTrace)
-        setRunning(false)
-
-        if (sourceRef.current) {
-          sourceRef.current.close()
-          sourceRef.current = null
-        }
-        return
-      }
-
-      if (event.type === "done") {
-        setRunning(false)
-        if (sourceRef.current) {
-          sourceRef.current.close()
-          sourceRef.current = null
+        const finalMerged = patch?.finalPayload
+        if (finalMerged && options?.onDone) {
+           // We use setTimeout to ensure the React render cycle (dispatch) finishes 
+           // before the callback (which might trigger external state changes) runs.
+           setTimeout(() => {
+             options.onDone?.(finalMerged, query)
+           }, 0)
         }
       }
     })
@@ -358,6 +151,7 @@ export function useAgentStream(options?: {
 
   useEffect(() => {
     return () => {
+      answerThrottle.current.cancel()
       if (sourceRef.current) {
         sourceRef.current.close()
         sourceRef.current = null
@@ -366,11 +160,7 @@ export function useAgentStream(options?: {
   }, [])
 
   return {
-    steps,
-    results,
-    running,
-    finalPayload,
-    plannedTasks,
+    ...state,
     run,
     reset
   }

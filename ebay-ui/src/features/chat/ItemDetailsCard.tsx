@@ -15,6 +15,7 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined"
 import ImageIcon from "@mui/icons-material/Image"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
+import DOMPurify from "dompurify"
 import type { ItemDetailsData } from "../search/types"
 
 interface ItemDetailsCardProps {
@@ -48,30 +49,30 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
             elevation={0}
             sx={{
                 width: "100%",
-                borderRadius: 4,
-                border: "1px solid #e2e8f0",
-                bgcolor: "#ffffff",
+                borderRadius: "16px",
+                border: "1px solid var(--border-color)",
+                bgcolor: "var(--bg-primary)",
                 overflow: "hidden",
                 mt: 1,
                 mb: 2,
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                boxShadow: "0 4px 6px -1px var(--bg-secondary)"
             }}
         >
             <Box p={3}>
                 {/* Header with Title & Price */}
                 <Box mb={3}>
-                    <Typography variant="h6" fontWeight={700} sx={{ color: "#1e293b", mb: 1, lineHeight: 1.2 }}>
+                    <Typography variant="h6" fontWeight={700} sx={{ color: "var(--text-primary)", mb: 1, lineHeight: 1.2 }}>
                         {title || "Dettagli Prodotto"}
                     </Typography>
                     <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
-                        <Typography variant="h5" fontWeight={800} color="primary.main">
+                        <Typography variant="h5" fontWeight={800} color="var(--accent-primary)">
                             {priceValue}
                         </Typography>
                         {condition && (
                             <Chip
                                 label={condition}
                                 size="small"
-                                sx={{ bgcolor: "#eff6ff", color: "#2563eb", fontWeight: 600, border: "1px solid #dbeafe" }}
+                                sx={{ bgcolor: "var(--bg-secondary)", color: "var(--text-primary)", fontWeight: 600, border: "1px solid var(--border-color)" }}
                             />
                         )}
                         {brand && <Chip label={brand} size="small" variant="outlined" sx={{ fontWeight: 500 }} />}
@@ -89,8 +90,8 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                 maxHeight: 300,
                                 objectFit: "contain",
                                 borderRadius: 3,
-                                bgcolor: "#f8fafc",
-                                border: "1px solid #f1f5f9"
+                                bgcolor: "var(--bg-secondary)",
+                                border: "1px solid var(--border-color)"
                             }}
                         />
                         {allImages.length > 1 && (
@@ -105,7 +106,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                             height: 60,
                                             borderRadius: 2,
                                             objectFit: "cover",
-                                            border: "1px solid #e2e8f0",
+                                            border: "1px solid var(--border-color)",
                                             flexShrink: 0
                                         }}
                                     />
@@ -129,7 +130,8 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                             fontWeight: 700,
                             textTransform: "none",
                             boxShadow: "none",
-                            "&:hover": { boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }
+                            bgcolor: "var(--accent-primary)",
+                            "&:hover": { bgcolor: "var(--accent-primary)", opacity: 0.9, boxShadow: "0 10px 15px -3px var(--bg-secondary)" }
                         }}
                     >
                         Vedi e Acquista su eBay
@@ -146,16 +148,16 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                         defaultExpanded={specifics.length < 8}
                         sx={{
                             "&:before": { display: "none" },
-                            bgcolor: "#f8fafc",
+                            bgcolor: "var(--bg-secondary)",
                             borderRadius: "16px !important",
-                            border: "1px solid #f1f5f9",
+                            border: "1px solid var(--border-color)",
                             mb: 2
                         }}
                     >
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Box display="flex" alignItems="center" gap={1}>
-                                <ListIcon sx={{ color: "#64748b" }} />
-                                <Typography variant="subtitle2" fontWeight={700} color="#334155">
+                                <ListIcon sx={{ color: "var(--text-secondary)" }} />
+                                <Typography variant="subtitle2" fontWeight={700} color="var(--text-primary)">
                                     Specifiche Tecniche
                                 </Typography>
                             </Box>
@@ -170,10 +172,10 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                             >
                                 {specifics.map((spec, idx) => (
                                     <Box key={idx}>
-                                        <Typography variant="caption" sx={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                                        <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
                                             {spec.name}
                                         </Typography>
-                                        <Typography variant="body2" sx={{ color: "#1e293b", fontWeight: 500 }}>
+                                        <Typography variant="body2" sx={{ color: "var(--text-primary)", fontWeight: 500 }}>
                                             {spec.value}
                                         </Typography>
                                     </Box>
@@ -190,16 +192,16 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                         disableGutters
                         sx={{
                             "&:before": { display: "none" },
-                            bgcolor: "#ffffff",
+                            bgcolor: "var(--bg-primary)",
                             borderRadius: "16px !important",
-                            border: "1px solid #e2e8f0",
+                            border: "1px solid var(--border-color)",
                             mb: 2
                         }}
                     >
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Box display="flex" alignItems="center" gap={1}>
-                                <DescriptionIcon sx={{ color: "#64748b" }} />
-                                <Typography variant="subtitle2" fontWeight={700} color="#334155">
+                                <DescriptionIcon sx={{ color: "var(--text-secondary)" }} />
+                                <Typography variant="subtitle2" fontWeight={700} color="var(--text-primary)">
                                     Descrizione Completa
                                 </Typography>
                             </Box>
@@ -208,7 +210,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                             <Box
                                 sx={{
                                     fontSize: 14,
-                                    color: "#475569",
+                                    color: "var(--text-primary)",
                                     lineHeight: 1.6,
                                     "& *": {
                                         maxWidth: "100% !important",
@@ -218,9 +220,9 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                     },
                                     "& img": { height: "auto !important", borderRadius: 2 },
                                     "& table": { width: "100% !important", borderCollapse: "collapse", my: 1 },
-                                    "& td, & th": { border: "1px solid #e2e8f0", p: 1 }
+                                    "& td, & th": { border: "1px solid var(--border-color)", p: 1 }
                                 }}
-                                dangerouslySetInnerHTML={{ __html: description }}
+                                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(description) }}
                             />
                         </AccordionDetails>
                     </Accordion>
@@ -233,17 +235,17 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                         alignItems="flex-start"
                         gap={1.5}
                         mt={1}
-                        bgcolor="#eff6ff"
+                        bgcolor="var(--bg-secondary)"
                         p={2}
                         borderRadius={3}
-                        border="1px solid #dbeafe"
+                        border="1px solid var(--border-color)"
                     >
-                        <VerifiedUserOutlinedIcon sx={{ color: "#2563eb", mt: 0.2 }} />
+                        <VerifiedUserOutlinedIcon sx={{ color: "var(--success)", mt: 0.2 }} />
                         <Box>
-                            <Typography variant="subtitle2" fontWeight={700} color="#1e40af">
+                            <Typography variant="subtitle2" fontWeight={700} color="var(--text-primary)">
                                 Politica dei Resi
                             </Typography>
-                            <Typography variant="caption" sx={{ color: "#60a5fa", display: "block", mt: 0.5, lineHeight: 1.4 }}>
+                            <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block", mt: 0.5, lineHeight: 1.4 }}>
                                 {return_terms.returnsAccepted ? "Reso accettato" : "Reso non accettato"}
                                 {return_terms.returnPeriod?.value && ` entro ${return_terms.returnPeriod.value} ${return_terms.returnPeriod.unit}`}.
                                 {return_terms.returnShippingCostPayer && ` Spese a carico del ${return_terms.returnShippingCostPayer === "BUYER" ? "acquirente" : "venditore"}.`}
@@ -257,19 +259,19 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                 <Accordion
                     elevation={0}
                     sx={{
-                        borderTop: "1px solid #f1f5f9",
+                        borderTop: "1px solid var(--border-color)",
                         "&:before": { display: "none" }
                     }}
                 >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            <Typography sx={{ fontWeight: 600, fontSize: 13, color: "#64748b" }}>
+                            <Typography sx={{ fontWeight: 600, fontSize: 13, color: "var(--text-secondary)" }}>
                                 PRODOTTI SIMILI
                             </Typography>
                             <Chip
                                 label={data.similar_items.length}
                                 size="small"
-                                sx={{ height: 18, fontSize: 10, bgcolor: "#f1f5f9" }}
+                                sx={{ height: 18, fontSize: 10, bgcolor: "var(--bg-secondary)" }}
                             />
                         </Box>
                     </AccordionSummary>
@@ -281,7 +283,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                 overflowX: "auto",
                                 pb: 1,
                                 "&::-webkit-scrollbar": { height: 6 },
-                                "&::-webkit-scrollbar-thumb": { bgcolor: "#e2e8f0", borderRadius: 3 }
+                                "&::-webkit-scrollbar-thumb": { bgcolor: "var(--border-color)", borderRadius: 3 }
                             }}
                         >
                             {data.similar_items.map((item, idx) => (
@@ -297,7 +299,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                         maxWidth: 160,
                                         p: 1.5,
                                         borderRadius: 3,
-                                        border: "1px solid #f1f5f9",
+                                        border: "1px solid var(--border-color)",
                                         textDecoration: "none",
                                         transition: "transform 0.2s, box-shadow 0.2s",
                                         "&:hover": {
@@ -307,18 +309,18 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                         }
                                     }}
                                 >
-                                    <Box sx={{ width: "100%", height: 100, mb: 1.5, borderRadius: 2, overflow: "hidden", bgcolor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <Box sx={{ width: "100%", height: 100, mb: 1.5, borderRadius: 2, overflow: "hidden", bgcolor: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         {item.image_url ? (
                                             <Box component="img" src={item.image_url} alt={item.title} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
                                         ) : (
-                                            <ImageIcon sx={{ color: "#cbd5e1", fontSize: 32 }} />
+                                            <ImageIcon sx={{ color: "var(--text-secondary)", fontSize: 32, opacity: 0.3 }} />
                                         )}
                                     </Box>
                                     <Typography
                                         sx={{
                                             fontSize: 12,
                                             fontWeight: 600,
-                                            color: "#1e293b",
+                                            color: "var(--text-primary)",
                                             lineHeight: 1.3,
                                             mb: 1,
                                             display: "-webkit-box",
@@ -330,7 +332,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                     >
                                         {item.title}
                                     </Typography>
-                                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#10a37f" }}>
+                                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--success)" }}>
                                         {item.price} {item.currency}
                                     </Typography>
                                 </Paper>

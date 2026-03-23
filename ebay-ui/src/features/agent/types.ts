@@ -1,3 +1,9 @@
+export interface AgentMessage {
+  role: "user" | "assistant"
+  content: string
+  image?: string
+}
+
 export interface PlannedTask {
   tool: string
   input: Record<string, any>

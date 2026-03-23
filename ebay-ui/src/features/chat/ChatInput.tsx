@@ -104,10 +104,11 @@ export default function ChatInput({
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         PaperProps={{
           sx: {
-            borderRadius: '16px',
-            mt: -1,
+mt: -1,
             boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-            border: '1px solid #f1f5f9',
+            border: '1px solid var(--border-color)',
+            bgcolor: 'var(--bg-primary)',
+            color: 'var(--text-primary)',
             minWidth: 180,
             overflow: 'hidden'
           }
@@ -119,7 +120,7 @@ export default function ChatInput({
           </ListItemIcon>
           <ListItemText 
             primary="Aggiungi foto e file" 
-            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#334155' }} 
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: 'inherit' }} 
           />
         </MenuItem>
         
@@ -129,7 +130,7 @@ export default function ChatInput({
           </ListItemIcon>
           <ListItemText 
             primary="eBay Deals" 
-            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#334155' }} 
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }} 
           />
         </MenuItem>
       </Menu>
@@ -180,12 +181,12 @@ export default function ChatInput({
           px: 1.5,
           py: 1,
           borderRadius: "24px",
-          bgcolor: "#ffffff",
-          border: "1px solid #e2e8f0",
+          bgcolor: "var(--bg-primary)",
+          border: "1px solid var(--border-color)",
           boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
           transition: "all 0.2s ease",
           "&:focus-within": {
-            borderColor: "#111827",
+            borderColor: "var(--text-primary)",
             boxShadow: "0 8px 30px rgba(0, 0, 0, 0.08)"
           }
         }}
@@ -195,9 +196,9 @@ export default function ChatInput({
           disabled={disabled || isProcessing}
           sx={{
             mb: 0.25,
-            color: "#64748b",
-            bgcolor: openMenu ? "#f1f5f9" : "transparent",
-            "&:hover": { color: "#111827", bgcolor: "#f1f5f9" }
+            color: "var(--text-secondary)",
+            bgcolor: openMenu ? "var(--bg-secondary)" : "transparent",
+            "&:hover": { color: "var(--text-primary)", bgcolor: "var(--bg-secondary)" }
           }}
         >
           {isProcessing ? <CircularProgress size={16} color="inherit" /> : <AddIcon sx={{ fontSize: 24 }} />}
@@ -218,9 +219,9 @@ export default function ChatInput({
             alignItems: "flex-start",
             fontSize: 14,
             lineHeight: 1.65,
-            color: "#111827",
+            color: "var(--text-primary)",
             "& textarea": { resize: "none" },
-            "& textarea::placeholder": { color: "#9ca3af" }
+            "& textarea::placeholder": { color: "var(--text-secondary)", opacity: 0.5 }
           }}
         />
 
@@ -233,15 +234,17 @@ export default function ChatInput({
             height: 34,
             mb: 0.25,
             flexShrink: 0,
-            bgcolor: canSend ? "#111827" : "#f3f4f6",
-            color: canSend ? "#ffffff" : "#d1d5db",
+            bgcolor: canSend ? "var(--text-primary)" : "var(--bg-secondary)",
+            color: canSend ? "var(--bg-primary)" : "var(--text-secondary)",
             transition: "all 0.15s ease",
             "&:hover": {
-              bgcolor: canSend ? "#1f2937" : "#f3f4f6"
+              bgcolor: canSend ? "var(--text-primary)" : "var(--bg-secondary)",
+              opacity: canSend ? 0.9 : 1
             },
             "&.Mui-disabled": {
-              bgcolor: "#f3f4f6",
-              color: "#d1d5db"
+              bgcolor: "var(--bg-secondary)",
+              color: "var(--text-secondary)",
+              opacity: 0.5
             }
           }}
         >
@@ -254,7 +257,8 @@ export default function ChatInput({
           mt: 0.75,
           px: 1.75,
           fontSize: 11,
-          color: "#c0c4cc",
+          color: "var(--text-secondary)",
+          opacity: 0.5,
           userSelect: "none"
         }}
       >

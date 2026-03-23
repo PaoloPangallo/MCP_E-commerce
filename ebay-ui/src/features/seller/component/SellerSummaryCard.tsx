@@ -8,7 +8,7 @@ import StarsIcon from '@mui/icons-material/Stars';
 
 import SellerTrustGauge from "./SellerTrustGauge.tsx"
 import SellerFeedbackList from "../SellerFeedbackList.tsx"
-import type { Feedback } from "../../../types"
+import type { Feedback } from "../types"
 import { API_BASE } from "../../../api/apiClient.ts"
 
 interface ApiResponse {
@@ -193,8 +193,7 @@ export default function SellerSummaryCard(props: Props) {
             mt: 1.5,
             p: 3,
             border: "1px solid #f0f0f0",
-            borderRadius: "16px",
-            bgcolor: "#fff",
+bgcolor: "#fff",
             display: "flex",
             flexDirection: "column",
             gap: 2.5,

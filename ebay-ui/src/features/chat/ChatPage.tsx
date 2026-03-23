@@ -10,6 +10,7 @@ import SearchBlockView from "./SearchBlockView.tsx"
 import WelcomePanel from "./WelcomePanel.tsx"
 import ErrorBoundary from "./ErrorBoundary.tsx"
 import VisionAnalysisCard from "./VisionAnalysisCard.tsx"
+import { useScrollContainer } from "./ScrollContainerContext.ts"
 import type { AgentStep, PlannedTask } from "../agent/types"
 
 
@@ -27,12 +28,13 @@ export default function ChatPage() {
   } = useChatSession()
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const scrollContainerRef = useScrollContainer()
   const isAtBottomRef = useRef(true)
   const isAutoScrollingRef = useRef(false)
 
   // Aggiorna se siamo vicini al fondo durante lo scroll dell'utente
   useEffect(() => {
-    const container = document.getElementById("chat-scroll-container")
+    const container = scrollContainerRef.current
     if (!container) return
 
     const handleScroll = () => {
@@ -51,7 +53,7 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
-    const container = document.getElementById("chat-scroll-container")
+    const container = scrollContainerRef.current
     if (!container) return
 
     // Se l'utente ha scrollato in su, non forziamo l'aggancio in basso per non disturbarlo

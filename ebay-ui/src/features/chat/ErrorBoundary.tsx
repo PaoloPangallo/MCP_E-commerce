@@ -42,8 +42,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             textAlign: "center",
             gap: 2,
             bgcolor: "#fff5f5",
-            borderRadius: 4,
-            border: "1px solid #feb2b2"
+border: "1px solid #feb2b2"
           }}
         >
           <ErrorOutlineIcon sx={{ fontSize: 48, color: "#f56565" }} />

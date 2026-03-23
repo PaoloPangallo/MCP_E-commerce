@@ -72,8 +72,7 @@ export default function LoginDialog({
         sx: {
           width: "100%",
           maxWidth: 420,
-          borderRadius: "16px",
-          border: "1px solid #e5e5e5",
+border: "1px solid #e5e5e5",
           boxShadow: "0 4px 32px rgba(0,0,0,0.10)",
           overflow: "hidden",
           p: 0

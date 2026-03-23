@@ -39,8 +39,14 @@ export function useAuth() {
       try {
         setLoadingUser(true)
         const data = await getCurrentUser()
-        setUser(data)
+        if (data) {
+          setUser(data)
+        } else {
+          logout()
+          setUser(null)
+        }
       } catch {
+        logout()
         setUser(null)
       } finally {
         setLoadingUser(false)

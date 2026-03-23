@@ -1,7 +1,7 @@
 import { getToken } from "../auth/authStore"
 
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8050"
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8050"
 
 type ApiOptions = RequestInit & {
   timeout?: number
@@ -51,6 +51,11 @@ export async function apiFetch<T = unknown>(
         message = data?.detail || data?.message || message
       } catch {
         // ignore non-json body
+      }
+
+      // Bypass early debugger pause for /auth/me 401 (not logged in)
+      if (response.status === 401 && path === "/auth/me") {
+        return null as unknown as T
       }
 
       throw new Error(message)

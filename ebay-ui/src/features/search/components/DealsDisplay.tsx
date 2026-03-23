@@ -59,8 +59,7 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
         sx={{ 
           mb: 4, 
           p: 3, 
-          borderRadius: 4, 
-          background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
+background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
           color: "#fff",
           boxShadow: "0 10px 25px -5px rgba(239, 68, 68, 0.3)",
           position: "relative",
@@ -96,15 +95,15 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
       {/* Interactive Category Selector (Top Bar) */}
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#475569", display: "flex", alignItems: "center", gap: 1 }}>
-            <TrendingDownIcon sx={{ fontSize: 18, color: "#ef4444" }} />
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 1 }}>
+            <TrendingDownIcon sx={{ fontSize: 18, color: "var(--danger)" }} />
             {hasDeals ? "Filtra per categoria:" : "Scegli una categoria per iniziare:"}
           </Typography>
           <Button 
             size="small" 
             startIcon={showTable ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
             onClick={() => setShowTable(!showTable)}
-            sx={{ fontWeight: 700, color: "#64748b", textTransform: "none" }}
+            sx={{ fontWeight: 700, color: "var(--text-secondary)", textTransform: "none" }}
           >
             {showTable ? "Mostra chip" : "Tutte le categorie"}
           </Button>
@@ -118,7 +117,7 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
               overflowX: "auto", 
               pb: 2,
               "&::-webkit-scrollbar": { height: 4 },
-              "&::-webkit-scrollbar-thumb": { bgcolor: "#e2e8f0", borderRadius: 4 }
+              "&::-webkit-scrollbar-thumb": { bgcolor: "var(--border-color)", borderRadius: 4 }
             }}
           >
             {EBAY_CATEGORIES.map((cat) => (
@@ -131,16 +130,16 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                   py: 2.2,
                   flexShrink: 0,
                   borderRadius: 3,
-                  border: "1px solid #e2e8f0",
-                  bgcolor: "#fff",
+                  border: "1px solid var(--border-color)",
+                  bgcolor: "var(--bg-primary)",
                   fontWeight: 700,
-                  color: "#1e293b",
+                  color: "var(--text-primary)",
                   fontSize: 13,
                   transition: "all 0.2s",
                   "&:hover": {
-                    bgcolor: "#f8fafc",
-                    borderColor: "#ef4444",
-                    color: "#ef4444",
+                    bgcolor: "var(--bg-secondary)",
+                    borderColor: "var(--accent-primary)",
+                    color: "var(--accent-primary)",
                     transform: "translateY(-2px)"
                   }
                 }}
@@ -150,13 +149,13 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
         </Collapse>
 
         <Collapse in={showTable}>
-          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid #f1f5f9", borderRadius: 4, mb: 0 }}>
+          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid var(--border-color)", borderRadius: "16px", mb: 0, bgcolor: "var(--bg-primary)" }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: "#f8fafc" }}>
-                  <TableCell sx={{ fontWeight: 800, fontSize: 11, color: "#94a3b8", textTransform: "uppercase" }}>Categoria</TableCell>
-                  <TableCell sx={{ fontWeight: 800, fontSize: 11, color: "#94a3b8", textTransform: "uppercase" }}>Descrizione</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 800, fontSize: 11, color: "#94a3b8", textTransform: "uppercase" }}>Azione</TableCell>
+                <TableRow sx={{ bgcolor: "var(--bg-secondary)" }}>
+                  <TableCell sx={{ fontWeight: 800, fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase" }}>Categoria</TableCell>
+                  <TableCell sx={{ fontWeight: 800, fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase" }}>Descrizione</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 800, fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase" }}>Azione</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -170,12 +169,12 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                     <TableCell sx={{ py: 1.5 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                         <Typography sx={{ fontSize: 20 }}>{cat.icon}</Typography>
-                        <Typography sx={{ fontWeight: 700, color: "#334155", fontSize: 14 }}>{cat.name}</Typography>
+                        <Typography sx={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 14 }}>{cat.name}</Typography>
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ color: "#64748b", fontSize: 13 }}>{cat.desc}</TableCell>
+                    <TableCell sx={{ color: "var(--text-secondary)", fontSize: 13 }}>{cat.desc}</TableCell>
                     <TableCell align="right">
-                      <IconButton size="small" sx={{ bgcolor: "#f1f5f9", color: "#334155" }}>
+                      <IconButton size="small" sx={{ bgcolor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
                         <FlashOnIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </TableCell>
@@ -194,9 +193,8 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
           sx={{
             p: 6,
             textAlign: "center",
-            borderRadius: 5,
-            border: "2px dashed #e2e8f0",
-            bgcolor: "#f8fafc"
+            border: "2px dashed var(--border-color)",
+            bgcolor: "var(--bg-secondary)"
           }}
         >
           <Avatar sx={{ bgcolor: "#f1f5f9", width: 64, height: 64, mx: "auto", mb: 2 }}>
@@ -232,9 +230,8 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
-                borderRadius: 5,
-                border: "1px solid #f1f5f9",
-                bgcolor: "#fff",
+                border: "1px solid var(--border-color)",
+                bgcolor: "var(--bg-primary)",
                 position: "relative",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
@@ -274,9 +271,9 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: "#f8fafc",
-                  borderTopLeftRadius: 20,
-                  borderTopRightRadius: 20,
+                  bgcolor: "var(--bg-secondary)",
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
                   overflow: "hidden",
                   display: "flex",
                   alignItems: "center",
@@ -298,7 +295,7 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                     }}
                   />
                 ) : (
-                  <Box sx={{ color: "#cbd5e1", textAlign: "center" }}>
+                  <Box sx={{ color: "var(--text-secondary)", textAlign: "center" }}>
                     <SellIcon sx={{ fontSize: 40, mb: 1 }} />
                     <Typography variant="caption">Nessuna immagine</Typography>
                   </Box>
@@ -311,7 +308,7 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                   sx={{
                     fontSize: 15,
                     fontWeight: 700,
-                    color: "#1e293b",
+                    color: "var(--text-primary)",
                     mb: 1.5,
                     display: "-webkit-box",
                     WebkitLineClamp: 2,
@@ -344,21 +341,21 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                       label={ext}
                       size="small"
                       variant="outlined"
-                      sx={{ fontSize: 10, color: "#64748b", borderColor: "#e2e8f0" }}
+                      sx={{ fontSize: 10, color: "var(--text-secondary)", borderColor: "var(--border-color)" }}
                     />
                   ))}
                 </Box>
 
                 <Box sx={{ mt: "auto", mb: 3 }}>
                   <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-                    <Typography sx={{ fontSize: 24, fontWeight: 900, color: "#0f172a" }}>
+                    <Typography sx={{ fontSize: 24, fontWeight: 900, color: "var(--text-primary)" }}>
                       {deal.price.raw}
                     </Typography>
                     {deal.old_price && (
                       <Typography
                         sx={{
                           fontSize: 14,
-                          color: "#94a3b8",
+                          color: "var(--text-secondary)",
                           textDecoration: "line-through",
                           fontWeight: 500,
                         }}
@@ -382,8 +379,8 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                     fontWeight: 800,
                     borderRadius: 3,
                     py: 1.2,
-                    borderColor: "#e2e8f0",
-                    color: "#475569",
+                    borderColor: "var(--border-color)",
+                    color: "var(--text-secondary)",
                     transition: "all 0.2s ease"
                   }}
                 >

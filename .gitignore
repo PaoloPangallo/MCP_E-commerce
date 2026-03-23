@@ -1,48 +1,56 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.db
-.env
-
-*.dat
-
-# Virtual environment
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
-.env/
 .venv/
+env/
+.env
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# PyCharm / IDEs
+# Databases & Storage
+qdrant_storage/
+postgres_data/
+*.faiss
+*.pkl
+*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+.bundle/
+.vite/
+.eslintcache
+
+# FAISS / RAG index
+*.index
+*.dat
+*.json
+*.info
+
+# IDEs
 .idea/
 .vscode/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Data, Logs & Cache
-*.dat
-*.mmap
-*.index
-*.log
-*.sqlite
-.pytest_cache/
-tmp/
-
-# Data JSONs (excluding frontend and config files)
-*.json
-!package.json
-!package-lock.json
-!tsconfig.json
-!tsconfig.*.json
-!alembic.ini
-!docker-compose.yaml
-!*.ts
-!*.py
-
-qdrant_storage/
-
-*.pkl
-*.faiss
-debug/

@@ -35,7 +35,19 @@ export const appComponents: Components<Theme> = {
     styleOverrides: {
       root: {
         backgroundImage: "none",
-        border: "1px solid #e5e7eb"
+        border: "1px solid #e5e7eb",
+        borderRadius: 32
+      }
+    }
+  },
+
+  MuiCard: {
+    styleOverrides: {
+      root: {
+        borderRadius: 32,
+        backgroundImage: "none",
+        border: "1px solid #e5e7eb",
+        boxShadow: "none"
       }
     }
   },

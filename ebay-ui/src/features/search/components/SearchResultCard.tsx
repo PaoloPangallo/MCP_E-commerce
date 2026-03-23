@@ -34,8 +34,8 @@ function TrustPill({ score }: { score: number }) {
         py: "2px",
         borderRadius: "6px",
         border: "1px solid",
-        borderColor: good ? "#bbf7d0" : "#e5e7eb",
-        bgcolor: good ? "#f0fdf4" : "#fafafa",
+        borderColor: good ? "#bbf7d0" : "var(--border-color)",
+        bgcolor: good ? "#f0fdf4" : "var(--bg-secondary)",
         boxShadow: good ? "0 1px 2px rgba(22, 163, 74, 0.05)" : "none",
       }}
     >
@@ -45,7 +45,7 @@ function TrustPill({ score }: { score: number }) {
         sx={{
           fontSize: 11,
           fontWeight: 600,
-          color: good ? "#15803d" : "#6b7280",
+          color: good ? "#15803d" : "var(--text-secondary)",
           letterSpacing: "0.01em"
         }}
       >
@@ -67,7 +67,7 @@ function AiPill({ score }: { score: number }) {
         py: "2px",
         borderRadius: "6px",
         border: "1px solid #ddd6fe",
-        bgcolor: "#f5f3ff",
+        bgcolor: "rgba(124, 58, 237, 0.08)",
         boxShadow: "0 1px 2px rgba(124, 58, 237, 0.05)",
       }}
     >
@@ -110,7 +110,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
         alignItems: "flex-start",
         gap: 1.5,
         py: 1.75,
-        borderBottom: "1px solid #f5f5f5",
+        borderBottom: "1px solid var(--border-color)",
         "&:last-child":    { borderBottom: "none" },
         "&:first-of-type": { pt: 0.5 },
       }}
@@ -126,8 +126,8 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           height: 88,
           borderRadius: "12px",
           overflow: "hidden",
-          bgcolor: "#fff",
-          border: "1px solid #f0f0f0",
+          bgcolor: "var(--bg-primary)",
+          border: "1px solid var(--border-color)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
@@ -153,7 +153,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
             sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
           />
         ) : (
-          <Box sx={{ width: 32, height: 32, bgcolor: "#f3f4f6", borderRadius: "8px", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ width: 32, height: 32, bgcolor: "var(--bg-secondary)", borderRadius: "8px", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
              <Typography variant="caption" color="text.disabled">No img</Typography>
           </Box>
         )}
@@ -173,7 +173,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
               sx={{
                 fontSize: 15,
                 fontWeight: 600,
-                color: "#111827",
+                color: "var(--text-primary)",
                 lineHeight: 1.3,
                 display: "-webkit-box",
                 WebkitLineClamp: 2,
@@ -187,7 +187,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
           ) : (
             <Typography
               sx={{
-                fontSize: 15, fontWeight: 600, color: "#111827",
+                fontSize: 15, fontWeight: 600, color: "var(--text-primary)",
                 lineHeight: 1.3,
                 display: "-webkit-box",
                 WebkitLineClamp: 2,
@@ -209,12 +209,12 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
                 {(item.ner_attributes?.brand || item.ner_attributes?.model) && (
                     <Box 
                         sx={{ 
-                            px: 1, py: 0.25, borderRadius: '4px', bgcolor: '#f1f5f9', border: '1px solid #e2e8f0',
+                            px: 1, py: 0.25, borderRadius: '4px', bgcolor: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
                             display: 'flex', alignItems: 'center', gap: 0.5
                         }}
                     >
-                        <SettingsSuggestIcon sx={{ fontSize: 12, color: '#64748b' }} />
-                        <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                        <SettingsSuggestIcon sx={{ fontSize: 12, color: 'var(--text-secondary)' }} />
+                        <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                             {item.ner_attributes?.brand} {item.ner_attributes?.model}
                         </Typography>
                     </Box>
@@ -227,7 +227,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
                             size="small" 
                             variant="outlined"
                             sx={{ 
-                                height: 20, fontSize: 10, fontWeight: 600, color: '#6b7280', borderColor: '#f3f4f6', bgcolor: '#fafafa',
+                                height: 20, fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', borderColor: 'var(--border-color)', bgcolor: 'var(--bg-secondary)',
                                 '& .MuiChip-label': { px: 1 }
                             }} 
                         />
@@ -238,7 +238,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
 
         {/* ── Meta row: price · condition · pills ───────────────────────── */}
         <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 0.75 }}>
-          <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#111827", letterSpacing: "-0.02em" }}>
+          <Typography sx={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
             {formatPrice(item.price, item.currency)}
           </Typography>
           
@@ -249,12 +249,12 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
                   px: 1,
                   py: 0.25,
                   borderRadius: "4px",
-                  bgcolor: (item.condition || "").toLowerCase().includes("nuovo") ? "#eff6ff" : "#f1f5f9",
+                  bgcolor: (item.condition || "").toLowerCase().includes("nuovo") ? "rgba(37, 99, 235, 0.08)" : "var(--bg-secondary)",
                   border: "1px solid",
-                  borderColor: (item.condition || "").toLowerCase().includes("nuovo") ? "#dbeafe" : "#e2e8f0",
+                  borderColor: (item.condition || "").toLowerCase().includes("nuovo") ? "rgba(37, 99, 235, 0.2)" : "var(--border-color)",
                 }}
               >
-                <Typography sx={{ fontSize: 10, fontWeight: 700, color: (item.condition || "").toLowerCase().includes("nuovo") ? "#2563eb" : "#475569", textTransform: 'uppercase' }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, color: (item.condition || "").toLowerCase().includes("nuovo") ? "#2563eb" : "var(--text-secondary)", textTransform: 'uppercase' }}>
                   {item.condition}
                 </Typography>
               </Box>
@@ -265,16 +265,16 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
                   px: 1,
                   py: 0.25,
                   borderRadius: "4px",
-                  bgcolor: item.shipping.free ? "#dcfce7" : "#f1f5f9",
+                  bgcolor: item.shipping.free ? "rgba(22, 163, 74, 0.08)" : "var(--bg-secondary)",
                   border: "1px solid",
-                  borderColor: item.shipping.free ? "#bbf7d0" : "#e2e8f0",
+                  borderColor: item.shipping.free ? "rgba(22, 163, 74, 0.2)" : "var(--border-color)",
                   display: 'flex',
                   alignItems: 'center',
                   gap: 0.5
                 }}
               >
-                <LocalShippingIcon sx={{ fontSize: 12, color: item.shipping.free ? "#166534" : "#64748b" }} />
-                <Typography sx={{ fontSize: 10, fontWeight: 800, color: item.shipping.free ? "#166534" : "#475569", textTransform: 'uppercase' }}>
+                <LocalShippingIcon sx={{ fontSize: 12, color: item.shipping.free ? "#16a34a" : "var(--text-secondary)" }} />
+                <Typography sx={{ fontSize: 10, fontWeight: 800, color: item.shipping.free ? "#16a34a" : "var(--text-secondary)", textTransform: 'uppercase' }}>
                   {item.shipping.free ? "FREE SHIP" : `+ ${item.shipping.cost} ${item.shipping.currency || '€'}`}
                 </Typography>
               </Box>
@@ -308,7 +308,7 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
         {ragPreviews.length > 0 && (
           <Box sx={{ mb: 0.75 }}>
             {ragPreviews.map((text, i) => (
-              <Typography key={i} sx={{ fontSize: 11.5, color: "#b0b0b0", fontStyle: "italic", lineHeight: 1.55 }}>
+              <Typography key={i} sx={{ fontSize: 11.5, color: "var(--text-secondary)", fontStyle: "italic", lineHeight: 1.55 }}>
                 "{text}"
               </Typography>
             ))}
@@ -333,10 +333,10 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
               borderRadius: "8px",
               fontSize: 12,
               fontWeight: 600,
-              bgcolor: "#111827",
+              bgcolor: "var(--accent-primary)",
               color: "#fff",
               px: 2,
-              "&:hover": { bgcolor: "#374151" }
+              "&:hover": { bgcolor: "var(--accent-primary)", opacity: 0.9 }
             }}
           >
             Dettagli
@@ -408,8 +408,8 @@ export default function SearchResultCard({ item }: { item: SearchItem }) {
                 textTransform: "none",
                 fontSize: 12,
                 fontWeight: 600,
-                color: "#6b7280",
-                "&:hover": { color: "#111827", bgcolor: "transparent" }
+                color: "var(--text-secondary)",
+                "&:hover": { color: "var(--text-primary)", bgcolor: "transparent" }
               }}
             >
               Seller
