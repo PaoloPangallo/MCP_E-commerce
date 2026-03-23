@@ -94,7 +94,8 @@ class MCPToolClient:
         
         if self.is_local:
             from app.mcp.server import mcp
-            return list(mcp._tools.keys())
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
         tools = await self._session.list_tools()
         return [tool.name for tool in tools.tools]
@@ -106,13 +107,15 @@ class MCPToolClient:
         catalog = {}
         if self.is_local:
             from app.mcp.server import mcp
-            for name, tool in mcp._tools.items():
-                # FastMCP internal parameter extraction
-                parameters = getattr(tool, "parameters", {})
-                if not parameters and hasattr(tool, "schema"):
-                    parameters = tool.schema
-                catalog[name] = {
-                    "name": name,
+            mcp_tools = await mcp.list_tools()
+            for tool in mcp_tools:
+                # Standard MCP Tool object attributes
+                parameters = getattr(tool, "inputSchema", {})
+                if hasattr(parameters, "model_dump"):
+                    parameters = parameters.model_dump()
+                
+                catalog[tool.name] = {
+                    "name": tool.name,
                     "description": tool.description,
                     "input_schema": parameters or {}
                 }

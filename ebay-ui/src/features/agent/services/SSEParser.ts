@@ -103,29 +103,38 @@ export function parseSSEEvent(
       }
 
     case "tool_result": {
+      const toolStatus = event.ok ? "ok" : "error"
       const nextSteps = upsertStep(currentState.steps, {
-          step: event.step ?? 1,
-          action: event.tool,
-          observation_summary: event.summary,
-          status: event.ok ? "ok" : "error"
+        step: event.step ?? 1,
+        action: event.tool!,
+        status: toolStatus,
+        observation_summary: event.summary
       })
-      
-      let patch: Partial<AgentState> = { steps: nextSteps }
 
       if (event.ok && (event as any).data) {
         const toolDataPatch = mapToolData(event.tool!, (event as any).data)
-        if (Object.keys(toolDataPatch).length > 0) {
-          const basePayload = currentState.finalPayload || {
-            finalAnswer: null,
-            results: [],
-            analysis: null,
-            trace: nextSteps,
-            plannedTasks: currentState.plannedTasks
-          }
-          patch.finalPayload = { ...basePayload, ...toolDataPatch }
+        const basePayload = currentState.finalPayload || {
+          finalAnswer: null,
+          results: currentState.results || [],
+          analysis: null,
+          trace: nextSteps,
+          plannedTasks: currentState.plannedTasks
         }
+
+        const patch: Partial<AgentState> = {
+          steps: nextSteps,
+          finalPayload: { ...basePayload, ...toolDataPatch }
+        }
+
+        // Sync top-level results if it's a search_products tool
+        if (event.tool === "search_products" && toolDataPatch.results) {
+          patch.results = toolDataPatch.results
+        }
+
+        return patch
       }
-      return patch
+
+      return { steps: nextSteps }
     }
 
     case "answer_chunk": {

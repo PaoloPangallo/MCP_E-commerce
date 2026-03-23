@@ -125,53 +125,56 @@ export default function ChatPage() {
           )}
 
           {running && (
-            <Box sx={{ ml: { md: "44px" } }}>
-              {finalPayload?.visionAnalysis && (
-                <VisionAnalysisCard
-                  description={finalPayload.visionAnalysis.description}
-                  tags={finalPayload.visionAnalysis.tags}
-                />
-              )}
-              <ThinkingPill
-                steps={typedSteps}
-                loading={!finalPayload?.finalAnswer}
-                query={loadingQuery ?? undefined}
-                plannedTasks={typedPlannedTasks}
-              />
-
-              {/* BLOCCO RISULTATI LIVE: Mostriamo i dati tecnici (deals, search, etc.) 
-                  appena arrivano, anche se l'agente sta ancora scrivendo la risposta. */}
-              {finalPayload && (
-                <Box sx={{ mt: 2 }}>
-                  <SearchBlockView 
-                    search={{
-                      query: loadingQuery || "",
-                      results: finalPayload.results || [],
-                      analysis: finalPayload.analysis,
-                      metrics: finalPayload.metrics,
-                      rag_context: finalPayload.ragContext,
-                      agent_trace: typedSteps,
-                      seller_summary: finalPayload.sellerSummary,
-                      comparison: finalPayload.comparison,
-                      item_details: finalPayload.itemDetails,
-                      shipping_costs: finalPayload.shippingCosts,
-                      metadata: finalPayload.metadata,
-                      deals: finalPayload.deals,
-                      market_trends: finalPayload.marketTrends,
-                      vision_analysis: finalPayload.visionAnalysis,
-                      errors: finalPayload.errors,
-                      mode: "hybrid" // Default per il live view
-                    }} 
+            <>
+              <Box sx={{ ml: { md: "44px" } }}>
+                {finalPayload?.visionAnalysis && (
+                  <VisionAnalysisCard
+                    description={finalPayload.visionAnalysis.description}
+                    tags={finalPayload.visionAnalysis.tags}
                   />
-                </Box>
-              )}
+                )}
+                <ThinkingPill
+                  steps={typedSteps}
+                  loading={!finalPayload?.finalAnswer}
+                  query={loadingQuery ?? undefined}
+                  plannedTasks={typedPlannedTasks}
+                />
+
+                {/* BLOCCO RISULTATI LIVE: Mostriamo i dati tecnici (deals, search, etc.) 
+                    appena arrivano, anche se l'agente sta ancora scrivendo la risposta. */}
+                {finalPayload && (
+                  <Box sx={{ mt: 2 }}>
+                    <SearchBlockView 
+                      hideTrace={true}
+                      search={{
+                        query: loadingQuery || "",
+                        results: finalPayload.results || [],
+                        analysis: finalPayload.analysis,
+                        metrics: finalPayload.metrics,
+                        rag_context: finalPayload.ragContext,
+                        agent_trace: typedSteps,
+                        seller_summary: finalPayload.sellerSummary,
+                        comparison: finalPayload.comparison,
+                        item_details: finalPayload.itemDetails,
+                        shipping_costs: finalPayload.shippingCosts,
+                        metadata: finalPayload.metadata,
+                        deals: finalPayload.deals,
+                        market_trends: finalPayload.marketTrends,
+                        vision_analysis: finalPayload.visionAnalysis,
+                        errors: finalPayload.errors,
+                        mode: "hybrid"
+                      }} 
+                    />
+                  </Box>
+                )}
+              </Box>
 
               {finalPayload?.finalAnswer && (
                 <MessageBubble role="assistant">
                   {finalPayload.finalAnswer}
                 </MessageBubble>
               )}
-            </Box>
+            </>
           )}
 
           <div ref={bottomRef} />

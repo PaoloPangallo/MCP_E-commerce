@@ -35,25 +35,31 @@ export function useAuth() {
       return
     }
 
+    let isMounted = true
     async function loadUser() {
+      setLoadingUser(true)
       try {
-        setLoadingUser(true)
         const data = await getCurrentUser()
-        if (data) {
-          setUser(data)
-        } else {
-          logout()
-          setUser(null)
+        if (isMounted) {
+          if (data) {
+            setUser(data)
+          } else {
+            handleLogout()
+          }
         }
-      } catch {
-        logout()
-        setUser(null)
+      } catch (err) {
+        if (isMounted) {
+          handleLogout()
+        }
       } finally {
-        setLoadingUser(false)
+        if (isMounted) {
+          setLoadingUser(false)
+        }
       }
     }
 
     loadUser()
+    return () => { isMounted = false }
   }, [token])
 
   async function handleLogin(email: string, password: string) {

@@ -7,6 +7,7 @@ import ItemDetailsCard from "./ItemDetailsCard.tsx"
 import ShippingCostsCard from "./ShippingCostsCard.tsx"
 import MarketTrendsCard from "./MarketTrendsCard.tsx"
 import ComparisonDisplay from "../search/components/ComparisonDisplay.tsx"
+import SearchResultList from "../search/components/SearchResultList.tsx"
 import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
 import MetadataCard from "./MetadataCard.tsx"
 import DealsDisplay from "../search/components/DealsDisplay.tsx"
@@ -90,7 +91,13 @@ function CollapsibleSection({
   )
 }
 
-const SearchBlockView = memo(function SearchBlockView({ search }: { search: SearchBlock }) {
+const SearchBlockView = memo(function SearchBlockView({ 
+  search,
+  hideTrace = false
+}: { 
+  search: SearchBlock,
+  hideTrace?: boolean 
+}) {
   const hasSeller = !!search.seller_summary?.seller_name
   const hasResults = Array.isArray(search.results) && search.results.length > 0
   const hasComparison =
@@ -113,7 +120,7 @@ const SearchBlockView = memo(function SearchBlockView({ search }: { search: Sear
   return (
     <Box sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 1.5 }}>
 
-      {hasTrace && (
+      {hasTrace && !hideTrace && (
         <ThinkingPill steps={agentTrace} loading={false} query={search.query} />
       )}
 
@@ -136,9 +143,29 @@ const SearchBlockView = memo(function SearchBlockView({ search }: { search: Sear
             status: "ok",
             queries_compared: 1,
             candidates_found: search.results.length,
-            winner: { ...search.results[0], query: search.query, scores: (search.results[0] as any).scores || search.results[0]._scores } as any,
+            winner: { 
+              ...search.results[0], 
+              query: search.query, 
+              scores: {
+                overall: search.results[0].ranking_score || (search.results[0] as any)._scores?.overall || 0,
+                relevance: (search.results[0] as any)._scores?.relevance || 0.8,
+                trust: search.results[0].trust_score || 0.9,
+                price: (search.results[0] as any)._scores?.price || 0.7,
+                condition: 1.0
+              }
+            } as any,
             winner_reason: "Il sistema ha selezionato questo risultato come migliore compromesso considerando aderenza alla ricerca, prezzo e affidabilità del venditore.",
-            comparison_matrix: search.results.map(r => ({ ...r, query: search.query, scores: (r as any).scores || r._scores })) as any[]
+            comparison_matrix: search.results.slice(0, 4).map(r => ({ 
+              ...r, 
+              query: search.query, 
+              scores: {
+                overall: r.ranking_score || (r as any)._scores?.overall || 0,
+                relevance: (r as any)._scores?.relevance || 0.8,
+                trust: r.trust_score || 0.9,
+                price: (r as any)._scores?.price || 0.7,
+                condition: 1.0
+              }
+            })) as any[]
           }}
         />
       )}
@@ -162,6 +189,18 @@ const SearchBlockView = memo(function SearchBlockView({ search }: { search: Sear
       )}
 
       {hasComparison && <ComparisonDisplay data={search.comparison!} />}
+
+      {hasResults && (
+        <CollapsibleSection 
+          label={hasComparison ? "Tutti i risultati" : "Risultati della ricerca"} 
+          count={search.results.length} 
+          defaultOpen={!hasComparison}
+        >
+          <Box sx={{ p: 2 }}>
+            <SearchResultList results={search.results} />
+          </Box>
+        </CollapsibleSection>
+      )}
 
       {search.item_details && <ItemDetailsCard data={search.item_details} />}
 

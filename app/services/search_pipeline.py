@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL = SEARCH_PIPELINE_TTL
 
-MAX_RESULTS_FROM_EBAY = 20
+MAX_RESULTS_FROM_EBAY = 15
 MAX_SELLERS_FOR_TRUST = 5
 MAX_FEEDBACK_PER_SELLER = 40
 FEEDBACK_WORKERS = 6
@@ -572,8 +572,8 @@ async def run_search_pipeline(
     logger.info("PIPELINE STEP 6.5: ner_extraction")
     t = time.time()
     if items:
-        # Extract attributes for top 10 items only for performance
-        top_n = 10
+        # Extract attributes for top few items only for performance
+        top_n = 6
         top_titles = [it.get("title", "") for it in items[:top_n]]
         try:
             ner_results = await extract_attributes_batch(top_titles)
@@ -633,7 +633,7 @@ async def run_search_pipeline(
     analysis = None
     if results_out:
         try:
-            analysis = await asyncio.to_thread(explain_results, query, results_out[:5])
+            analysis = await asyncio.to_thread(explain_results, query, results_out[:3])
         except Exception:
             pass
     timings["explain_s"] = round(time.time() - t, 3)

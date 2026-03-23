@@ -58,10 +58,21 @@ _allowed_origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 ]
+
+# Support multiple URLs in FRONTEND_URLS (comma separated)
+_frontend_urls = os.getenv("FRONTEND_URLS", "")
+if _frontend_urls:
+    for url in _frontend_urls.split(","):
+        clean_url = url.strip()
+        if clean_url and clean_url not in _allowed_origins:
+            _allowed_origins.append(clean_url)
+            logger.info("CORS: Added additional frontend origin: %s", clean_url)
+
 _ngrok_url = settings.NGROK_URL
 if _ngrok_url:
-    _allowed_origins.append(_ngrok_url)
-    logger.info("CORS: Added ngrok origin: %s", _ngrok_url)
+    if _ngrok_url not in _allowed_origins:
+        _allowed_origins.append(_ngrok_url)
+        logger.info("CORS: Added ngrok origin: %s", _ngrok_url)
 
 
 app = FastAPI(

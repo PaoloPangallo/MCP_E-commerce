@@ -391,17 +391,17 @@ class ReactPlanner:
             return None
 
         # DYMANIC MCP CATALOG FETCH
+        tool_catalog = {}
         if self.mcp_client and self.mcp_client.is_available:
             try:
                 tool_catalog = await self.mcp_client.get_tool_schemas_async()
                 self._cached_mcp_catalog = tool_catalog
             except Exception as e:
-                logger.warning("Failed to fetch dynamic MCP catalog: %s", e)
-                tool_catalog = get_tool_catalog()
+                logger.error("CRITICAL: Failed to fetch dynamic MCP catalog: %s", e)
                 self._cached_mcp_catalog = None
-        else:
-            tool_catalog = get_tool_catalog()
-            self._cached_mcp_catalog = None
+        
+        if not tool_catalog:
+            logger.warning("Agent operating with empty or missing tool catalog.")
 
         prompt = build_planner_prompt(
             user_query=memory.user_query,

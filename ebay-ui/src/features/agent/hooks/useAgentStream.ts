@@ -123,13 +123,15 @@ export function useAgentStream(options?: {
       
       if (patch) {
         if (event.type === "answer_chunk") {
-          // Throttled update for text chunks to preserve frame rate
           answerThrottle.current.schedule(() => {
-             dispatch({ type: 'UPDATE', payload: patch })
-          })
+             const nextState = { ...stateRef.current, ...patch };
+             stateRef.current = nextState;
+             dispatch({ type: 'UPDATE', payload: patch });
+          });
         } else {
-          // Immediate update for technical tool steps/results
-          dispatch({ type: 'UPDATE', payload: patch })
+          const nextState = { ...stateRef.current, ...patch };
+          stateRef.current = nextState;
+          dispatch({ type: 'UPDATE', payload: patch });
         }
       }
 
