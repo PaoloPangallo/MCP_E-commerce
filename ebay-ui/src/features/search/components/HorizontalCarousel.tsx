@@ -48,16 +48,11 @@ export default function HorizontalCarousel({ children, title, count }: CarouselP
 
   return (
     <Box sx={{ position: "relative", width: "100%", my: 3 }}>
-      {(title || count !== undefined) && (
+      {(title) && (
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2, px: 1 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             {title}
           </Typography>
-          {count !== undefined && (
-            <Typography sx={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", opacity: 0.7 }}>
-              {count} Risultati
-            </Typography>
-          )}
         </Box>
       )}
 

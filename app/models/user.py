@@ -50,6 +50,20 @@ class User(Base):
         nullable=True
     )
 
+    theme = Column(
+        String(20),
+        default="light",
+        server_default="light",
+        nullable=False
+    )
+
+    conversation_tone = Column(
+        String(50),
+        default="neutral",
+        server_default="neutral",
+        nullable=False
+    )
+
     # -------------------------
     # Metadata
     # -------------------------

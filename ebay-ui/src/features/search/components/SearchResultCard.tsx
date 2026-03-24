@@ -4,6 +4,12 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import LocalShippingIcon from "@mui/icons-material/LocalShipping"
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import Inventory2Icon from '@mui/icons-material/Inventory2'
+import AnalyticsIcon from '@mui/icons-material/Analytics'
+import PersonSearchIcon from '@mui/icons-material/PersonSearch'
+import { Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
@@ -53,6 +59,57 @@ export default function SearchResultCard({
 
   const isCompact = variant === 'compact'
 
+  const handleMenuClick: MenuProps['onClick'] = (e) => {
+    e.domEvent.stopPropagation();
+    let actionText = "";
+    if (e.key === 'market') {
+      actionText = `Fai un'analisi di mercato per l'oggetto ${item.title}`;
+    } else if (e.key === 'seller') {
+      actionText = `Analizza il venditore ${item.seller_name} per l'oggetto ${item.title}`;
+    } else if (e.key === 'details') {
+      actionText = `Dettagli per ${item.title} (ID: ${item.ebay_id})`;
+    }
+
+    if (actionText) {
+      window.dispatchEvent(
+        new CustomEvent("send-chat", {
+          detail: actionText,
+        })
+      );
+    }
+  };
+
+  const actionItems: MenuProps['items'] = [
+    { 
+      key: 'market', 
+      label: (
+        <span>
+          <AnalyticsIcon className="menu-icon" sx={{ color: 'var(--brand-primary)' }} />
+          Analisi di mercato
+        </span>
+      )
+    },
+    { 
+      key: 'details', 
+      label: (
+        <span>
+          <Inventory2Icon className="menu-icon" sx={{ color: 'var(--text-secondary)' }} />
+          Dettagli prodotto
+        </span>
+      )
+    },
+    { 
+      key: 'seller', 
+      label: (
+        <span>
+          <PersonSearchIcon className="menu-icon" sx={{ color: 'var(--text-secondary)' }} />
+          Analisi venditore
+        </span>
+      ), 
+      disabled: !item.seller_name 
+    },
+  ];
+
   if (isCompact) {
     return (
       <Box
@@ -87,8 +144,32 @@ export default function SearchResultCard({
               sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
             />
           ) : (
-             <Typography variant="caption" color="text.disabled">No Image</Typography>
+              <Typography variant="caption" color="text.disabled">No Image</Typography>
           )}
+
+          <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }} onClick={(e) => e.stopPropagation()}>
+            <Dropdown 
+              menu={{ items: actionItems, onClick: handleMenuClick }} 
+              trigger={['click']} 
+              placement="bottomRight"
+              overlayClassName="premium-dropdown"
+            >
+              <Box
+                sx={{
+                  bgcolor: 'rgba(255,255,255,0.9)',
+                  borderRadius: '50%',
+                  width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  '&:hover': { bgcolor: '#fff' }
+                }}
+              >
+                <MoreVertIcon sx={{ fontSize: 18, color: 'var(--text-primary)' }} />
+              </Box>
+            </Dropdown>
+          </Box>
+
           {index < 2 && rankingPct && rankingPct > 0.6 && (
             <Chip
               label="PICK"
@@ -229,46 +310,56 @@ export default function SearchResultCard({
              <Typography variant="caption" color="text.disabled">No img</Typography>
           </Box>
         )}
-        {index < 2 && rankingPct && rankingPct > 0.6 && (
-           <Chip
-             label="PICK"
-             size="small"
-             sx={{
-               position: "absolute",
-               top: 4,
-               left: 4,
-               bgcolor: "var(--brand-primary)",
-               color: "#fff",
-               fontWeight: 800,
-               fontSize: 8,
-               height: 16
-             }}
-           />
-        )}
       </Box>
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, mb: 0.5 }}>
-          <Link
-            href={item.url}
-            target="_blank"
-            rel="noreferrer"
-            underline="none"
-            sx={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: "var(--text-primary)",
-              lineHeight: 1.3,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              "&:hover": { color: "var(--brand-primary)" },
-            }}
-          >
-            {item.title || "Titolo non disponibile"}
-          </Link>
-          {item.url && <OpenInNewIcon sx={{ fontSize: 13, color: "#9ca3af", flexShrink: 0, mt: 0.4 }} />}
+        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 0.5 }}>
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
+            <Link
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              underline="none"
+              sx={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                lineHeight: 1.3,
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                "&:hover": { color: "var(--brand-primary)" },
+              }}
+            >
+              {item.title || "Titolo non disponibile"}
+            </Link>
+            {item.url && <OpenInNewIcon sx={{ fontSize: 13, color: "#9ca3af", flexShrink: 0, mt: 0.4 }} />}
+          </Box>
+          <Box onClick={(e) => e.stopPropagation()}>
+            <Dropdown 
+              menu={{ items: actionItems, onClick: handleMenuClick }} 
+              trigger={['click']} 
+              placement="bottomRight"
+              overlayClassName="premium-dropdown"
+            >
+               <Button 
+                variant="outlined" 
+                size="small" 
+                sx={{ 
+                  minWidth: '32px', 
+                  width: '32px', 
+                  height: '32px', 
+                  p: 0, 
+                  borderRadius: '8px',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-secondary)' 
+                }}
+              >
+                <KeyboardArrowDownIcon />
+               </Button>
+            </Dropdown>
+          </Box>
         </Box>
 
         {hasNer && (

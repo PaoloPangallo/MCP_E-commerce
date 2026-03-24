@@ -18,8 +18,9 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:8050',
+        target: 'http://127.0.0.1:8050',
         changeOrigin: true,
+        secure: false,
       },
     },
   },

@@ -14,7 +14,6 @@ import {
   Snackbar,
   Alert,
   Divider,
-  Switch,
 } from "@mui/material"
 import { useTheme, styled } from "@mui/material/styles"
 import { useCallback, useMemo, useState } from "react"
@@ -29,13 +28,14 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import SearchIcon from "@mui/icons-material/Search"
 import ShareIcon from "@mui/icons-material/Share"
-import DarkModeIcon from "@mui/icons-material/DarkMode"
-import LightModeIcon from "@mui/icons-material/LightMode"
+import SettingsIcon from "@mui/icons-material/Settings"
 
 import { useChatStore } from "./store/chatStore"
 import { useSidebarStore, type SidebarState } from "./store/sidebarStore"
+import { useSettingsStore } from "./store/settingsStore"
 import { useScrollContainerProvider } from "./ScrollContainerContext"
 import AuthPanel from "../../auth/ui/AuthPanel"
+import SettingsModal from "./SettingsModal"
 
 interface Props {
   children: React.ReactNode
@@ -186,11 +186,12 @@ export default function ChatLayout({
   const width = useSidebarStore((s: SidebarState) => s.width)
   const setWidth = useSidebarStore((s: SidebarState) => s.setWidth)
 
+  const setSettingsOpen = useSettingsStore((s) => s.setOpen)
+  
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [snackbarOpen, setSnackbarOpen] = useState(false)
   const [snackbarMsg, setSnackbarMsg] = useState("")
-  const [isDarkMode, setIsDarkMode] = useState(() => document.body.classList.contains('dark-mode'))
 
   const filteredSessions = useMemo(() => {
     if (!searchQuery) return sessions
@@ -224,11 +225,9 @@ export default function ChatLayout({
   const handleThemeToggle = (mode: 'light' | 'dark') => {
     if (mode === 'dark') {
       document.body.classList.add('dark-mode')
-      setIsDarkMode(true)
       setSnackbarMsg("Modalità scura attivata")
     } else {
       document.body.classList.remove('dark-mode')
-      setIsDarkMode(false)
       setSnackbarMsg("Modalità chiara attivata")
     }
     setSnackbarOpen(true)
@@ -526,16 +525,12 @@ export default function ChatLayout({
 
           {/* Right — actions */}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <LightModeIcon sx={{ fontSize: 16, color: !isDarkMode ? "var(--text-primary)" : "var(--text-secondary)" }} />
-              <Switch
-                size="small"
-                checked={isDarkMode}
-                onChange={(e) => handleThemeToggle(e.target.checked ? 'dark' : 'light')}
-                color="default"
-              />
-              <DarkModeIcon sx={{ fontSize: 16, color: isDarkMode ? "var(--text-primary)" : "var(--text-secondary)" }} />
-            </Box>
+
+            <Tooltip title="Impostazioni">
+              <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={() => setSettingsOpen(true)}>
+                <SettingsIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
 
             <Tooltip title="Condividi">
               <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={handleShare}>
@@ -719,6 +714,8 @@ export default function ChatLayout({
           {snackbarMsg}
         </Alert>
       </Snackbar>
+
+      <SettingsModal />
     </Box>
   )
 }

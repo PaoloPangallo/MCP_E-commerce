@@ -60,6 +60,8 @@ class RegisterRequest(BaseModel):
 
     favorite_brands: Optional[List[str]] = None
     price_preference: Optional[str] = None
+    theme: Optional[str] = "light"
+    conversation_tone: Optional[str] = "neutral"
 
 
 class LoginRequest(BaseModel):
@@ -77,6 +79,8 @@ class AuthResponse(BaseModel):
     favorite_brands: Optional[str] = None
     price_preference: Optional[str] = None
     custom_instructions: Optional[str] = None
+    theme: Optional[str] = "light"
+    conversation_tone: Optional[str] = "neutral"
 
 
 # ---------------------------------------------------
@@ -107,6 +111,8 @@ async def register(
         password_hash=hash_password(request.password),
         favorite_brands=",".join(request.favorite_brands) if request.favorite_brands else None,
         price_preference=request.price_preference,
+        theme=request.theme,
+        conversation_tone=request.conversation_tone,
     )
 
     db.add(user)
@@ -121,7 +127,9 @@ async def register(
         email=user.email,
         favorite_brands=user.favorite_brands,
         price_preference=user.price_preference,
-        custom_instructions=user.custom_instructions
+        custom_instructions=user.custom_instructions,
+        theme=user.theme,
+        conversation_tone=user.conversation_tone,
     )
 
 
@@ -175,7 +183,9 @@ async def login(
         email=user.email,
         favorite_brands=user.favorite_brands,
         price_preference=user.price_preference,
-        custom_instructions=user.custom_instructions
+        custom_instructions=user.custom_instructions,
+        theme=user.theme,
+        conversation_tone=user.conversation_tone,
     )
 
 
@@ -217,7 +227,9 @@ async def token(
         email=user.email,
         favorite_brands=user.favorite_brands,
         price_preference=user.price_preference,
-        custom_instructions=user.custom_instructions
+        custom_instructions=user.custom_instructions,
+        theme=user.theme,
+        conversation_tone=user.conversation_tone,
     )
 
 
@@ -225,33 +237,33 @@ async def token(
 # ME / PREFERENCES
 # ---------------------------------------------------
 
-class CustomInstructionsUpdate(BaseModel):
+class UserPreferencesUpdate(BaseModel):
+    theme: Optional[str] = None
+    conversation_tone: Optional[str] = None
     custom_instructions: Optional[str] = None
 
-
-@router.get("/me")
-def get_me(user=Depends(get_current_user)):
-
-    return {
-        "id": user.id,
-        "email": user.email,
-        "favorite_brands": user.favorite_brands,
-        "price_preference": user.price_preference,
-        "custom_instructions": user.custom_instructions
-    }
-
-
-@router.patch("/me/instructions")
-def update_instructions(
-    request: CustomInstructionsUpdate,
+@router.patch("/me/preferences")
+def update_preferences(
+    request: UserPreferencesUpdate,
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     try:
-        user.custom_instructions = request.custom_instructions
+        if request.theme is not None:
+            user.theme = request.theme
+        if request.conversation_tone is not None:
+            user.conversation_tone = request.conversation_tone
+        if request.custom_instructions is not None:
+            user.custom_instructions = request.custom_instructions
+        
         db.commit()
         db.refresh(user)
-        return {"status": "success", "custom_instructions": user.custom_instructions}
+        return {
+            "status": "success", 
+            "theme": user.theme,
+            "conversation_tone": user.conversation_tone,
+            "custom_instructions": user.custom_instructions
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

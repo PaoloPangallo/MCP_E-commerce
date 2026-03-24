@@ -10,12 +10,15 @@ import {
   register as authServiceRegister,
   getCurrentUser
 } from "./authService"
+import { useSettingsStore } from "../features/chat/store/settingsStore"
 
 export interface AuthUser {
   email: string
   favorite_brands?: string | null
   price_preference?: string | null
   custom_instructions?: string | null
+  theme?: string | null
+  conversation_tone?: string | null
 }
 
 export function useAuth() {
@@ -58,6 +61,12 @@ export function useAuth() {
       if (isMounted) {
         if (data) {
           setUser(data)
+          // Sincronizza lo store delle impostazioni
+          useSettingsStore.getState().loadSettingsFromAuth(
+            (data as any).theme,
+            (data as any).conversation_tone,
+            (data as any).custom_instructions
+          )
         } else {
           handleLogout()
         }
@@ -82,20 +91,23 @@ export function useAuth() {
   const login = async (email: string, pass: string) => {
     setLoadingUser(true)
     try {
-      // 15s safety timeout for login request
-      const loginPromise = authServiceLogin(email, pass)
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout access: il server non risponde.")), 15000)
-      )
-
-      const res = await Promise.race([loginPromise, timeoutPromise]) as any
+      const res = await authServiceLogin(email, pass)
       setToken(res.access_token)
       setUser({
         email: res.email,
         favorite_brands: res.favorite_brands,
         price_preference: res.price_preference,
-        custom_instructions: res.custom_instructions
+        custom_instructions: res.custom_instructions,
+        theme: (res as any).theme,
+        conversation_tone: (res as any).conversation_tone
       })
+
+      useSettingsStore.getState().loadSettingsFromAuth(
+        (res as any).theme,
+        (res as any).conversation_tone,
+        (res as any).custom_instructions
+      )
+
       setLoadingUser(false)
     } catch (err: any) {
       setLoadingUser(false)
@@ -112,8 +124,17 @@ export function useAuth() {
         email: res.email,
         favorite_brands: res.favorite_brands,
         price_preference: res.price_preference,
-        custom_instructions: res.custom_instructions
+        custom_instructions: res.custom_instructions,
+        theme: (res as any).theme,
+        conversation_tone: (res as any).conversation_tone
       })
+
+      useSettingsStore.getState().loadSettingsFromAuth(
+        (res as any).theme,
+        (res as any).conversation_tone,
+        (res as any).custom_instructions
+      )
+
       setLoadingUser(false)
     } catch (err: any) {
       setLoadingUser(false)
@@ -130,4 +151,4 @@ export function useAuth() {
     register,
     logout: handleLogout
   }
-}
+}
