@@ -1,3 +1,38 @@
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-sidebar: #f8fafc;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+  --accent-primary: #111827;
+  
+  /* Brand Colors — purple premium */
+  --brand-primary: #7c3aed;
+  --brand-gradient: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  --brand-soft: rgba(124, 58, 237, 0.1);
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.1);
+  --danger: #ef4444;
+  --glass-bg: rgba(255, 255, 255, 0.8);
+}
+
+body.dark-mode {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-sidebar: #0f172a;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border-color: #334155;
+  --accent-primary: #38bdf8;
+  --brand-primary: #38bdf8; /* Light blue (Azzurro) */
+  --brand-gradient: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+  --brand-soft: rgba(56, 189, 248, 0.15);
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.15);
+  --glass-bg: rgba(15, 23, 42, 0.8);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -7,4 +42,7 @@ body {
   padding: 0;
   overflow-x: hidden;
   font-family: Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.2s, color 0.2s;
 }

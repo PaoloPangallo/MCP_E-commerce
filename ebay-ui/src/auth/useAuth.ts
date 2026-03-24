@@ -1,14 +1,13 @@
-import { useEffect, useState } from "react"
-
+import { useEffect, useState, useCallback, useRef } from "react"
 import {
   getToken,
-  subscribe
+  subscribe,
+  setToken
 } from "./authStore"
-
 import {
-  login,
-  logout,
-  register,
+  login as authServiceLogin,
+  logout as authServiceLogout,
+  register as authServiceRegister,
   getCurrentUser
 } from "./authService"
 
@@ -20,50 +19,106 @@ export interface AuthUser {
 }
 
 export function useAuth() {
-  const [token, setToken] = useState<string | null>(getToken())
+  const [token, setTokenState] = useState<string | null>(getToken())
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [loadingUser, setLoadingUser] = useState(false)
+  const [loadingUser, setLoadingUser] = useState(true) // Start true to check session
+  const loadingRef = useRef(false)
 
   useEffect(() => {
-    return subscribe(setToken)
+    return subscribe(setTokenState)
   }, [])
 
-  useEffect(() => {
-    if (!token) {
-      setUser(null)
-      setLoadingUser(false)
+  const handleLogout = useCallback(() => {
+    authServiceLogout()
+    setToken(null)
+    setUser(null)
+    setLoadingUser(false)
+  }, [])
+
+  const loadUser = useCallback(async () => {
+    if (!token || loadingRef.current) {
+      if (!token) {
+        setUser(null)
+        setLoadingUser(false)
+      }
       return
     }
 
-    async function loadUser() {
-      try {
-        setLoadingUser(true)
-        const data = await getCurrentUser()
-        setUser(data)
-      } catch {
-        setUser(null)
-      } finally {
+    loadingRef.current = true
+    setLoadingUser(true)
+    let isMounted = true
+    
+    // Safety timeout for loadUser
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) setLoadingUser(false);
+    }, 8000);
+
+    try {
+      const data = await getCurrentUser()
+      if (isMounted) {
+        if (data) {
+          setUser(data)
+        } else {
+          handleLogout()
+        }
+      }
+    } catch (err) {
+      if (isMounted) handleLogout()
+    } finally {
+      if (isMounted) {
         setLoadingUser(false)
+        clearTimeout(safetyTimeout)
+        loadingRef.current = false
+      } else {
+        loadingRef.current = false
       }
     }
+  }, [token, handleLogout])
 
+  useEffect(() => {
     loadUser()
-  }, [token])
+  }, [loadUser])
 
-  async function handleLogin(email: string, password: string) {
-    const data = await login(email, password)
-    setToken(data.access_token)
+  const login = async (email: string, pass: string) => {
+    setLoadingUser(true)
+    try {
+      // 15s safety timeout for login request
+      const loginPromise = authServiceLogin(email, pass)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout access: il server non risponde.")), 15000)
+      )
+
+      const res = await Promise.race([loginPromise, timeoutPromise]) as any
+      setToken(res.access_token)
+      setUser({
+        email: res.email,
+        favorite_brands: res.favorite_brands,
+        price_preference: res.price_preference,
+        custom_instructions: res.custom_instructions
+      })
+      setLoadingUser(false)
+    } catch (err: any) {
+      setLoadingUser(false)
+      throw err
+    }
   }
 
-  async function handleRegister(email: string, password: string) {
-    const data = await register(email, password)
-    setToken(data.access_token)
-  }
-
-  function handleLogout() {
-    logout()
-    setToken(null)
-    setUser(null)
+  const register = async (email: string, pass: string) => {
+    setLoadingUser(true)
+    try {
+      const res = await authServiceRegister(email, pass)
+      setToken(res.access_token)
+      setUser({
+        email: res.email,
+        favorite_brands: res.favorite_brands,
+        price_preference: res.price_preference,
+        custom_instructions: res.custom_instructions
+      })
+      setLoadingUser(false)
+    } catch (err: any) {
+      setLoadingUser(false)
+      throw err
+    }
   }
 
   return {
@@ -71,8 +126,8 @@ export function useAuth() {
     loggedIn: !!token,
     user,
     loadingUser,
-    login: handleLogin,
-    register: handleRegister,
+    login,
+    register,
     logout: handleLogout
   }
 }

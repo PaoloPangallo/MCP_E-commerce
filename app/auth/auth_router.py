@@ -13,6 +13,7 @@ from app.models.user import User
 from app.auth.password import (
     hash_password,
     verify_password,
+    verify_password_async,
     validate_password_strength,
 )
 
@@ -72,6 +73,10 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user_id: int
+    email: str
+    favorite_brands: Optional[str] = None
+    price_preference: Optional[str] = None
+    custom_instructions: Optional[str] = None
 
 
 # ---------------------------------------------------
@@ -79,7 +84,7 @@ class AuthResponse(BaseModel):
 # ---------------------------------------------------
 
 @router.post("/register", response_model=AuthResponse)
-def register(
+async def register(
     request: RegisterRequest,
     db: Session = Depends(get_db)
 ):
@@ -112,7 +117,11 @@ def register(
 
     return AuthResponse(
         access_token=token,
-        user_id=user.id
+        user_id=user.id,
+        email=user.email,
+        favorite_brands=user.favorite_brands,
+        price_preference=user.price_preference,
+        custom_instructions=user.custom_instructions
     )
 
 
@@ -121,7 +130,7 @@ def register(
 # ---------------------------------------------------
 
 @router.post("/login", response_model=AuthResponse)
-def login(
+async def login(
     request: LoginRequest,
     db: Session = Depends(get_db)
 ):
@@ -129,7 +138,10 @@ def login(
     email = request.email.lower().strip()
     _check_rate_limit(f"login:{email}")
 
+    t0 = time.perf_counter()
     user = db.query(User).filter(User.email == email).first()
+    t1 = time.perf_counter()
+    print(f"[LOGIN] DB query: {t1-t0:.3f}s")
 
     if not user:
         raise HTTPException(
@@ -137,20 +149,33 @@ def login(
             detail="Invalid credentials"
         )
 
-    if not verify_password(
+    t2 = time.perf_counter()
+    valid = await verify_password_async(
         request.password,
         user.password_hash
-    ):
+    )
+    t3 = time.perf_counter()
+    print(f"[LOGIN] bcrypt verify: {t3-t2:.3f}s")
+
+    if not valid:
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
         )
 
+    t4 = time.perf_counter()
     token = create_access_token(user.id)
+    t5 = time.perf_counter()
+    print(f"[LOGIN] JWT create: {t5-t4:.3f}s")
+    print(f"[LOGIN] TOTAL: {t5-t0:.3f}s")
 
     return AuthResponse(
         access_token=token,
-        user_id=user.id
+        user_id=user.id,
+        email=user.email,
+        favorite_brands=user.favorite_brands,
+        price_preference=user.price_preference,
+        custom_instructions=user.custom_instructions
     )
 
 
@@ -159,7 +184,7 @@ def login(
 # ---------------------------------------------------
 
 @router.post("/token", response_model=AuthResponse)
-def token(
+async def token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -175,7 +200,7 @@ def token(
             detail="Invalid credentials"
         )
 
-    if not verify_password(
+    if not await verify_password_async(
         form_data.password,
         user.password_hash
     ):
@@ -188,7 +213,11 @@ def token(
 
     return AuthResponse(
         access_token=token,
-        user_id=user.id
+        user_id=user.id,
+        email=user.email,
+        favorite_brands=user.favorite_brands,
+        price_preference=user.price_preference,
+        custom_instructions=user.custom_instructions
     )
 
 

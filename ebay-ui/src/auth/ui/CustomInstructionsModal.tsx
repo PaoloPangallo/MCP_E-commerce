@@ -58,8 +58,7 @@ export function CustomInstructionsModal({ open, onClose }: CustomInstructionsMod
         sx: {
           width: "100%",
           maxWidth: 480,
-          borderRadius: "16px",
-          border: "1px solid #e5e5e5",
+border: "1px solid #e5e5e5",
           boxShadow: "0 4px 32px rgba(0,0,0,0.10)",
           p: 0
         }

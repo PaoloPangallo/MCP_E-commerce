@@ -9,9 +9,15 @@ import {
   ListItemText,
   Typography,
   useMediaQuery,
-  Tooltip
+  Tooltip,
+  InputBase,
+  Snackbar,
+  Alert,
+  Divider,
+  Switch,
 } from "@mui/material"
-import { useTheme } from "@mui/material/styles"
+import { useTheme, styled } from "@mui/material/styles"
+import { useCallback, useMemo, useState } from "react"
 
 import AddIcon from "@mui/icons-material/Add"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
@@ -19,9 +25,16 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
 import MenuIcon from "@mui/icons-material/Menu"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft"
+import ChevronRightIcon from "@mui/icons-material/ChevronRight"
+import SearchIcon from "@mui/icons-material/Search"
+import ShareIcon from "@mui/icons-material/Share"
+import DarkModeIcon from "@mui/icons-material/DarkMode"
+import LightModeIcon from "@mui/icons-material/LightMode"
 
 import { useChatStore } from "./store/chatStore"
-import { useSidebarStore } from "./store/sidebarStore"
+import { useSidebarStore, type SidebarState } from "./store/sidebarStore"
+import { useScrollContainerProvider } from "./ScrollContainerContext"
 import AuthPanel from "../../auth/ui/AuthPanel"
 
 interface Props {
@@ -31,9 +44,25 @@ interface Props {
   sidebarTopSlot?: React.ReactNode
 }
 
-const SIDEBAR_WIDTH = 260
+const ResizeHandle = styled(Box)(() => ({
+  width: "4px",
+  height: "100%",
+  cursor: "col-resize",
+  position: "absolute",
+  right: -2,
+  top: 0,
+  zIndex: 10,
+  transition: "background-color 0.2s",
+  "&:hover": {
+    backgroundColor: "#e5e7eb",
+  },
+  "&:active": {
+    backgroundColor: "#d1d5db",
+  }
+}))
 
-function SidebarSectionTitle({ children }: { children: React.ReactNode }) {
+function SidebarSectionTitle({ children, collapsed }: { children: React.ReactNode, collapsed?: boolean }) {
+  if (collapsed) return <Box sx={{ height: 20 }} />
   return (
     <Typography
       sx={{
@@ -43,7 +72,9 @@ function SidebarSectionTitle({ children }: { children: React.ReactNode }) {
         textTransform: "uppercase",
         letterSpacing: 0.7,
         px: 2,
-        pb: 0.75
+        pb: 0.75,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden'
       }}
     >
       {children}
@@ -55,65 +86,78 @@ function SessionItem({
   title,
   active,
   onClick,
-  onDelete
+  onDelete,
+  collapsed
 }: {
   title: string
   active?: boolean
   onClick: () => void
   onDelete: () => void
+  collapsed?: boolean
 }) {
   return (
     <ListItem disablePadding sx={{ px: 1, mb: 0.25 }}>
-      <ListItemButton
-        onClick={onClick}
-        sx={{
-          borderRadius: 2,
-          py: 0.875,
-          px: 1.25,
-          bgcolor: active ? "#f3f4f6" : "transparent",
-          "&:hover": { bgcolor: "#f3f4f6" },
-          minHeight: 36
-        }}
-      >
-        <ChatBubbleOutlineIcon
+      <Tooltip title={collapsed ? title : ""} placement="right">
+        <ListItemButton
+          onClick={onClick}
           sx={{
-            fontSize: 14,
-            color: active ? "#374151" : "#9ca3af",
-            mr: 1.25,
-            flexShrink: 0
+            borderRadius: 2,
+            py: 0.875,
+            px: collapsed ? 0 : 1.25,
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            bgcolor: active ? "var(--bg-secondary)" : "transparent",
+            "&:hover": {
+              bgcolor: "var(--bg-secondary)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
+            },
+            minHeight: 36
           }}
-        />
-
-        <ListItemText
-          primary={title}
-          primaryTypographyProps={{
-            fontSize: 13,
-            fontWeight: active ? 500 : 400,
-            color: active ? "#111827" : "#6b7280",
-            noWrap: true
-          }}
-        />
-
-        <Tooltip title="Elimina">
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
+        >
+          <ChatBubbleOutlineIcon
             sx={{
-              opacity: 0,
-              transition: "opacity 0.15s",
-              ".MuiListItemButton-root:hover &": { opacity: 1 },
-              color: "#9ca3af",
-              p: 0.4,
-              "&:hover": { color: "#ef4444", bgcolor: "transparent" }
+              fontSize: 14,
+              color: active ? "var(--text-primary)" : "var(--text-secondary)",
+              mr: collapsed ? 0 : 1.25,
+              flexShrink: 0
             }}
-          >
-            <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Tooltip>
-      </ListItemButton>
+          />
+
+          {!collapsed && (
+            <ListItemText
+              primary={title}
+              primaryTypographyProps={{
+                fontSize: 13,
+                fontWeight: active ? 500 : 400,
+                color: active ? "var(--text-primary)" : "var(--text-secondary)",
+                noWrap: true,
+                textAlign: collapsed ? 'center' : 'left'
+              }}
+            />
+          )}
+
+          {!collapsed && (
+            <Tooltip title="Elimina">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete()
+                }}
+                sx={{
+                  opacity: 0,
+                  transition: "opacity 0.15s",
+                  ".MuiListItemButton-root:hover &": { opacity: 1 },
+                  color: "var(--text-secondary)",
+                  p: 0.4,
+                  "&:hover": { color: "#ef4444", bgcolor: "transparent" }
+                }}
+              >
+                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </ListItemButton>
+      </Tooltip>
     </ListItem>
   )
 }
@@ -126,6 +170,7 @@ export default function ChatLayout({
 }: Props) {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down("md"))
+  const { ref: scrollRef, Provider: ScrollProvider } = useScrollContainerProvider()
 
   const sessions = useChatStore((s) => s.sessions)
   const activeSessionId = useChatStore((s) => s.activeSessionId)
@@ -134,18 +179,61 @@ export default function ChatLayout({
   const deleteSession = useChatStore((s) => s.deleteSession)
   const clearMemory = useChatStore((s) => s.clearMemory)
 
-  const mobileOpen = useSidebarStore((s) => s.mobileOpen)
-  const setMobileOpen = useSidebarStore((s) => s.setMobileOpen)
+  const mobileOpen = useSidebarStore((s: SidebarState) => s.mobileOpen)
+  const setMobileOpen = useSidebarStore((s: SidebarState) => s.setMobileOpen)
+  const isCollapsed = useSidebarStore((s: SidebarState) => s.isCollapsed)
+  const setIsCollapsed = useSidebarStore((s: SidebarState) => s.setIsCollapsed)
+  const width = useSidebarStore((s: SidebarState) => s.width)
+  const setWidth = useSidebarStore((s: SidebarState) => s.setWidth)
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [snackbarOpen, setSnackbarOpen] = useState(false)
+  const [snackbarMsg, setSnackbarMsg] = useState("")
+  const [isDarkMode, setIsDarkMode] = useState(() => document.body.classList.contains('dark-mode'))
+
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery) return sessions
+    return sessions.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
+  }, [sessions, searchQuery])
 
   const activeSession = sessions.find(
     (s) => s.id === (activeSessionId || sessions[0]?.id)
   )
 
   const handleNewChat = () => {
+    // BUG FIX: If we're already in a fresh session with no messages, don't create a new one.
+    if (activeSession && activeSession.chat.length <= 1) {
+      onNewChat?.()
+      if (isMobile) setMobileOpen(false)
+      return
+    }
+
     createSession()
     onNewChat?.()
     if (isMobile) setMobileOpen(false)
   }
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href)
+    setSnackbarMsg("Link della chat copiato negli appunti!")
+    setSnackbarOpen(true)
+  }
+
+
+  const handleThemeToggle = (mode: 'light' | 'dark') => {
+    if (mode === 'dark') {
+      document.body.classList.add('dark-mode')
+      setIsDarkMode(true)
+      setSnackbarMsg("Modalità scura attivata")
+    } else {
+      document.body.classList.remove('dark-mode')
+      setIsDarkMode(false)
+      setSnackbarMsg("Modalità chiara attivata")
+    }
+    setSnackbarOpen(true)
+  }
+
 
   const handleClearMemory = () => {
     if (
@@ -158,87 +246,136 @@ export default function ChatLayout({
     }
   }
 
+  const handleResize = useCallback((e: React.MouseEvent) => {
+    if (isCollapsed) return
+
+    const startX = e.clientX
+    const startWidth = width
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX
+      const newWidth = Math.min(Math.max(startWidth + delta, 200), 450)
+      setWidth(newWidth)
+    }
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+    }
+
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+  }, [width, setWidth, isCollapsed])
+
+  const currentSidebarWidth = isMobile ? 260 : (isCollapsed ? 64 : width)
+
   const sidebarContent = (
     <Box
       sx={{
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        bgcolor: "#fafafa"
+        bgcolor: 'var(--bg-secondary)',
+        position: 'relative',
+        transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s',
+        overflow: 'hidden',
+        border: "none",
+        borderRight: isMobile ? "none" : "1px solid var(--border-color)",
+        borderRadius: 0
       }}
     >
-      {/* HEADER */}
-      <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
-        <Box display="flex" alignItems="center" gap={1}>
-          <Box
-            sx={{
-              width: 28,
-              height: 28,
-              borderRadius: "8px",
-              bgcolor: "#111827",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            <AutoAwesomeIcon sx={{ fontSize: 15, color: "#fff" }} />
-          </Box>
-          <Box>
-            <Typography fontSize={13} fontWeight={600} color="#111827">
-              ebayGPT
-            </Typography>
-            <Typography fontSize={11} color="#9ca3af" lineHeight={1.2}>
-              shopping assistant
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
+      {!isMobile && !isCollapsed && <ResizeHandle onMouseDown={handleResize} />}
 
-      {/* NEW CHAT */}
-      <Box sx={{ px: 1.5, pb: 1.5 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-          onClick={handleNewChat}
+      {/* COLLAPSE TOGGLE (FULL WIDTH VIEW) */}
+      {!isMobile && (
+        <Box
           sx={{
-            justifyContent: "flex-start",
-            textTransform: "none",
-            borderRadius: 2,
-            fontSize: 13,
-            fontWeight: 500,
-            color: "#374151",
-            borderColor: "#e5e7eb",
-            bgcolor: "#fff",
-            boxShadow: "none",
-            py: 0.875,
-            "&:hover": {
-              bgcolor: "#f9fafb",
-              borderColor: "#d1d5db",
-              boxShadow: "none"
-            }
+            display: 'flex',
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            alignItems: 'center',
+            px: isCollapsed ? 0 : 1.5,
+            pt: 1
           }}
         >
-          Nuova chat
-        </Button>
+          {/* SEARCH TRIGGER (Corner) - Only render if not collapsed to allow centering of toggle */}
+          {!isCollapsed && (
+            <Tooltip title="Cerca chat">
+              <IconButton
+                size="small"
+                onClick={() => setIsSearchOpen(true)}
+                sx={{
+                  color: "var(--text-secondary)",
+                  "&:hover": { bgcolor: "var(--bg-secondary)" }
+                }}
+              >
+                <SearchIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          <IconButton
+            size="small"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            sx={{
+              color: "var(--text-secondary)",
+              "&:hover": { bgcolor: "var(--bg-secondary)" }
+            }}
+          >
+            {isCollapsed ? <ChevronRightIcon sx={{ fontSize: 18 }} /> : <ChevronLeftIcon sx={{ fontSize: 18 }} />}
+          </IconButton>
+        </Box>
+      )}
+
+      {/* NEW CHAT (PROMINENT AT TOP) */}
+      <Box sx={{ px: isCollapsed ? 1 : 2, pt: isCollapsed ? 1 : 1, pb: 2 }}>
+        <Tooltip title={isCollapsed ? "Nuova chat" : ""} placement="right">
+          <Button
+            fullWidth
+            variant="outlined"
+            onClick={handleNewChat}
+            sx={{
+              justifyContent: "center",
+              textTransform: "none",
+              borderRadius: 2,
+              minWidth: isCollapsed ? 0 : "auto",
+              fontSize: 13,
+              fontWeight: 500,
+              color: 'var(--text-primary)',
+              borderColor: 'var(--border-color)',
+              bgcolor: 'var(--bg-primary)',
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              py: 0.875,
+              px: isCollapsed ? 0 : 2,
+              "&:hover": {
+                bgcolor: 'var(--bg-secondary)',
+                borderColor: 'var(--text-secondary)',
+                boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+              }
+            }}
+          >
+            <AddIcon sx={{ fontSize: 16, mr: isCollapsed ? 0 : 1 }} />
+            {!isCollapsed && "Nuova chat"}
+          </Button>
+        </Tooltip>
       </Box>
 
       {/* AUTH PANEL */}
-      <Box px={1.5} pb={1.5}>
+      <Box px={0} pb={0}>
         {sidebarTopSlot ?? <AuthPanel />}
       </Box>
 
       {/* HISTORY */}
-      <Box sx={{ flex: 1, overflowY: "auto", pb: 1 }}>
-        {sessions.length > 0 && (
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: 'hidden', pb: 1 }}>
+        {filteredSessions.length > 0 && (
           <>
-            <SidebarSectionTitle>Recenti</SidebarSectionTitle>
+            <SidebarSectionTitle collapsed={isCollapsed}>Recenti</SidebarSectionTitle>
             <List dense disablePadding>
-              {sessions.map((session) => (
+              {filteredSessions.map((session) => (
                 <SessionItem
                   key={session.id}
                   title={session.title}
                   active={(activeSessionId || sessions[0]?.id) === session.id}
+                  collapsed={isCollapsed}
                   onClick={() => {
                     switchSession(session.id)
                     if (isMobile) setMobileOpen(false)
@@ -251,28 +388,29 @@ export default function ChatLayout({
         )}
       </Box>
 
-      {/* FOOTER */}
-      <Box
-        sx={{ p: 1.5, borderTop: "1px solid #f0f0f0" }}
-      >
-        <Button
-          fullWidth
-          variant="text"
-          startIcon={<DeleteSweepIcon sx={{ fontSize: 15 }} />}
-          onClick={handleClearMemory}
-          sx={{
-            justifyContent: "flex-start",
-            textTransform: "none",
-            borderRadius: 2,
-            fontSize: 12,
-            fontWeight: 500,
-            px: 1.25,
-            color: "#9ca3af",
-            "&:hover": { bgcolor: "#fff1f1", color: "#ef4444" }
-          }}
-        >
-          Svuota memoria server
-        </Button>
+
+      <Box sx={{ borderTop: "1px solid var(--border-color)", p: isCollapsed ? 1 : 1 }}>
+        <Tooltip title={isCollapsed ? "Svuota memoria" : ""} placement="right">
+          <Button
+            fullWidth
+            variant="text"
+            onClick={handleClearMemory}
+            sx={{
+              justifyContent: isCollapsed ? "center" : "flex-start",
+              textTransform: "none",
+              borderRadius: 2,
+              fontSize: 12,
+              fontWeight: 500,
+              px: isCollapsed ? 0 : 1.25,
+              minWidth: isCollapsed ? 0 : "auto",
+              color: "var(--text-secondary)",
+              "&:hover": { bgcolor: "rgba(239, 68, 68, 0.08)", color: "#ef4444" }
+            }}
+          >
+            <DeleteSweepIcon sx={{ fontSize: 15, mr: isCollapsed ? 0 : 1 }} />
+            {!isCollapsed && "Svuota memoria server"}
+          </Button>
+        </Tooltip>
       </Box>
     </Box>
   )
@@ -285,7 +423,7 @@ export default function ChatLayout({
           onClose={() => setMobileOpen(false)}
           variant="temporary"
           ModalProps={{ keepMounted: true }}
-          sx={{ "& .MuiDrawer-paper": { width: SIDEBAR_WIDTH } }}
+          sx={{ "& .MuiDrawer-paper": { width: currentSidebarWidth, border: "none" } }}
         >
           {sidebarContent}
         </Drawer>
@@ -293,12 +431,16 @@ export default function ChatLayout({
         <Drawer
           variant="permanent"
           sx={{
-            width: SIDEBAR_WIDTH,
+            width: currentSidebarWidth,
             flexShrink: 0,
+            transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             "& .MuiDrawer-paper": {
-              width: SIDEBAR_WIDTH,
+              width: currentSidebarWidth,
               boxSizing: "border-box",
-              borderRight: "1px solid #f0f0f0"
+              border: "none",
+              overflow: 'hidden',
+              transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              borderRadius: 0
             }
           }}
         >
@@ -314,54 +456,100 @@ export default function ChatLayout({
           minHeight: 0,
           display: "flex",
           flexDirection: "column",
-          bgcolor: "#ffffff"
+          bgcolor: 'var(--bg-primary)',
+          transition: 'background-color 0.2s'
         }}
       >
         {/* TOP BAR */}
         <Box
           sx={{
-            height: 48,
+            height: 56,
+            borderBottom: '1px solid var(--border-color)',
+            opacity: 0.95, // Subtle softening
+            display: 'flex',
+            alignItems: 'center',
             px: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #f5f5f5",
-            bgcolor: "#fff",
-            position: "sticky",
-            top: 0,
-            zIndex: 10
+            bgcolor: 'var(--bg-primary)',
+            transition: 'background-color 0.2s',
+            position: 'relative' // For centering title
           }}
         >
-          {/* Left — mobile hamburger */}
-          <Box sx={{ width: 80 }}>
+          {/* Left — branding & Title */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {isMobile && (
               <IconButton
                 onClick={() => setMobileOpen(true)}
                 size="small"
-                sx={{ color: "#6b7280" }}
+                sx={{ color: "var(--text-secondary)" }}
               >
                 <MenuIcon sx={{ fontSize: 20 }} />
               </IconButton>
             )}
+
+            <Box display="flex" alignItems="center" gap={1}>
+              <Box
+                sx={{
+                  bgcolor: '#111827',
+                  color: 'white',
+                  p: 0.5,
+                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <AutoAwesomeIcon sx={{ fontSize: 16 }} />
+              </Box>
+              <Typography fontWeight={700} color="var(--text-primary)" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                ebayGPT
+              </Typography>
+            </Box>
+
+            <Divider orientation="vertical" flexItem sx={{ height: 20, alignSelf: 'center', mx: 1, opacity: 0.1, borderColor: 'var(--text-secondary)' }} />
+
+            <Typography
+              fontSize={14}
+              fontWeight={600}
+              color="var(--text-primary)"
+              noWrap
+              sx={{
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                maxWidth: { xs: 120, sm: 300 },
+                textAlign: 'center',
+                color: (activeSession?.title === "Nuova chat" || !activeSession) ? "var(--text-secondary)" : "var(--text-primary)"
+              }}
+            >
+              {(activeSession?.title === "Nuova chat" || !activeSession) ? "Cerca" : activeSession.title}
+            </Typography>
           </Box>
 
-          {/* Center — session title */}
-          <Typography
-            fontSize={13}
-            fontWeight={500}
-            color="#6b7280"
-            noWrap
-            sx={{ flex: 1, textAlign: "center" }}
-          >
-            {activeSession?.title || "ebayGPT"}
-          </Typography>
+          {/* Right — actions */}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <LightModeIcon sx={{ fontSize: 16, color: !isDarkMode ? "var(--text-primary)" : "var(--text-secondary)" }} />
+              <Switch
+                size="small"
+                checked={isDarkMode}
+                onChange={(e) => handleThemeToggle(e.target.checked ? 'dark' : 'light')}
+                color="default"
+              />
+              <DarkModeIcon sx={{ fontSize: 16, color: isDarkMode ? "var(--text-primary)" : "var(--text-secondary)" }} />
+            </Box>
 
-          {/* Right — placeholder for balance */}
-          <Box sx={{ width: 80 }} />
+            <Tooltip title="Condividi">
+              <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={handleShare}>
+                <ShareIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+
+          </Box>
         </Box>
+
 
         {/* CHAT AREA */}
         <Box
+          ref={scrollRef}
           id="chat-scroll-container"
           sx={{
             flex: 1,
@@ -380,7 +568,9 @@ export default function ChatLayout({
               px: { xs: 2, md: 4 }
             }}
           >
-            {children}
+            <ScrollProvider value={scrollRef}>
+              {children}
+            </ScrollProvider>
           </Box>
         </Box>
 
@@ -388,11 +578,12 @@ export default function ChatLayout({
         {composer && (
           <Box
             sx={{
-              borderTop: "1px solid #f5f5f5",
+              borderTop: "1px solid var(--border-color)",
               px: { xs: 1.5, md: 3 },
               pt: 1,
               pb: { xs: 1.5, md: 2 },
-              bgcolor: "#fff"
+              bgcolor: "var(--bg-primary)",
+              transition: 'background-color 0.2s'
             }}
           >
             <Box sx={{ maxWidth: 1000, mx: "auto" }}>
@@ -401,6 +592,133 @@ export default function ChatLayout({
           </Box>
         )}
       </Box>
+
+      {/* SEARCH OVERLAY */}
+      {isSearchOpen && (
+        <Box
+          sx={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            bgcolor: 'var(--bg-primary)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            pt: { xs: 8, md: 12 },
+            px: 2
+          }}
+          onClick={() => setIsSearchOpen(false)}
+        >
+          <Box
+            sx={{
+              width: '100%',
+              maxWidth: 680
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Typography variant="h4" fontWeight={700} sx={{ mb: 4, textAlign: 'left', color: "var(--text-primary)" }}>
+              Cerca
+            </Typography>
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                bgcolor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '16px',
+                px: 2,
+                py: 1.5,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                mb: 6
+              }}
+            >
+              <SearchIcon sx={{ color: 'var(--text-secondary)', mr: 2, fontSize: 24 }} />
+              <InputBase
+                autoFocus
+                fullWidth
+                placeholder="Cerca le chat..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                sx={{ fontSize: 18, color: 'var(--text-primary)' }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setIsSearchOpen(false)
+                }}
+              />
+            </Box>
+
+            <Box sx={{ width: '100%' }}>
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#9ca3af",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                  mb: 2
+                }}
+              >
+                Recenti
+              </Typography>
+
+              <List sx={{ width: '100%' }}>
+                {filteredSessions.map((session) => (
+                  <ListItem disablePadding key={session.id} sx={{ mb: 1 }}>
+                    <ListItemButton
+                      onClick={() => {
+                        switchSession(session.id)
+                        setIsSearchOpen(false)
+                      }}
+                      sx={{
+                        borderRadius: '12px',
+                        py: 2,
+                        "&:hover": { bgcolor: 'var(--bg-secondary)' }
+                      }}
+                    >
+                      <ChatBubbleOutlineIcon sx={{ mr: 2, color: 'var(--text-secondary)' }} />
+                      <ListItemText
+                        primary={session.title}
+                        primaryTypographyProps={{
+                          fontSize: 16,
+                          fontWeight: 500,
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                      <Typography fontSize={13} color="#9ca3af">
+                        Oggi
+                      </Typography>
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          </Box>
+
+          <IconButton
+            onClick={() => setIsSearchOpen(false)}
+            sx={{
+              position: 'absolute',
+              top: 20,
+              left: 20
+            }}
+          >
+            <ChevronLeftIcon sx={{ fontSize: 32, color: 'var(--text-secondary)' }} />
+          </IconButton>
+        </Box>
+      )}
+
+      {/* SNACKBAR FEEDBACK */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" sx={{ width: '100%' }}>
+          {snackbarMsg}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

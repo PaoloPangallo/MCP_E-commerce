@@ -269,7 +269,7 @@ class EbayReactAgent:
                     else:
                         yield ThinkingEvent(
                             step=step_index,
-                            message="Sto preparando la risposta.",
+                            message="Sto preparando la sintesi finale per te...",
                         ).model_dump()
                         # The actual streaming will happen at the end of the loop
                     break
@@ -281,6 +281,7 @@ class EbayReactAgent:
                     step=step_index,
                     thought=decision.thought,
                     action=thought_action,
+                    message=f"Eseguo {thought_action}..." if thought_action else None
                 ).model_dump()
 
                 for action in planned_actions:
@@ -330,6 +331,11 @@ class EbayReactAgent:
                             observation.ok,
                             observation.status,
                         )
+                        # Log data size if present
+                        if observation.data and isinstance(observation.data, dict):
+                            res_list = observation.data.get("results") or observation.data.get("items")
+                            if isinstance(res_list, list):
+                                logger.info("Tool data results count: %d", len(res_list))
 
                     event_payload = ToolResultEvent(
                         step=step_index,
@@ -341,6 +347,9 @@ class EbayReactAgent:
                     ).model_dump()
                     
                     if observation.ok and observation.data:
+                        res_count = len(observation.data.get("results", []))
+                        logger.info("SSE tool_result payload | results_count=%d | keys=%s",
+                                    res_count, list(observation.data.keys()))
                         event_payload["data"] = observation.data
 
                     if backend:
@@ -362,7 +371,7 @@ class EbayReactAgent:
                     if observation.terminal:
                         yield ThinkingEvent(
                             step=step_index,
-                            message="Sto terminando l'analisi...",
+                            message="Analisi completata. Sto scrivendo la risposta...",
                         ).model_dump()
                         final_answer = await self._finalize(memory=memory, llm_engine=request.llm_engine)
                         break # Break from inner loop, then outer loop will break too
@@ -568,8 +577,22 @@ class EbayReactAgent:
 
     async def _call_final_llm_stream(self, prompt: str, llm_engine: str) -> AsyncGenerator[str, None]:
         try:
-            async for chunk in call_llm_stream(prompt):
+            gen = call_llm_stream(prompt)
+            # Usiamo __anext__ manuale per il primo chunk così da applicare il timeout
+            # solo alla fase di "attesa inizio risposta".
+            try:
+                first = await asyncio.wait_for(gen.__anext__(), timeout=18.0)
+                yield first
+            except (asyncio.TimeoutError, StopAsyncIteration):
+                if isinstance(StopAsyncIteration, Exception): # Just safety
+                    logger.warning("Ollama Cloud stream empty or timed out on first chunk")
+                yield "Ho preparato un riepilogo in base alle informazioni raccolte:\n\n"
+                return
+
+            # Continua normalmente per il resto
+            async for chunk in gen:
                 yield chunk
+
         except Exception as exc:
             logger.warning("Final answer streaming LLM failed: %s", exc)
             yield ""

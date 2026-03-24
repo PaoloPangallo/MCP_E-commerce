@@ -271,6 +271,8 @@ def _compute_seller_rag_signal(item: Dict, seller_docs: List[Dict]) -> Tuple[flo
 # RERANK PRODUCTS
 # ============================================================
 
+from app.services.rag.embedding import embed_batch, embed
+
 def rerank_products(
     query: str,
     items: List[Dict],
@@ -330,6 +332,16 @@ def rerank_products(
     # RERANK LOOP
     # --------------------------------------------------------
 
+    # Pre-embed all titles in bulk to optimize performance
+    titles_to_embed = [it.get("title", "") for it in items if "_embedding" not in it]
+    if titles_to_embed:
+        vectors = embed_batch(titles_to_embed)
+        v_idx = 0
+        for it in items:
+            if "_embedding" not in it:
+                it["_embedding"] = vectors[v_idx]
+                v_idx += 1
+
     for item in items:
         title = item.get("title", "") or ""
         title_lower = title.lower()
@@ -337,14 +349,9 @@ def rerank_products(
         # ----------------------------------------
         # EMBEDDING SIMILARITY
         # ----------------------------------------
-
+        
         try:
-            if "_embedding" in item:
-                t_vec = item["_embedding"]
-            else:
-                t_vec = embed(title)
-                item["_embedding"] = t_vec
-
+            t_vec = item["_embedding"]
             similarity = cosine_similarity(q_vec, t_vec)
             item["_semantic_sim"] = similarity
         except Exception:
@@ -386,8 +393,6 @@ def rerank_products(
         # ----------------------------------------
         
         # We try to get product_type from constraints or item metadata if available
-        # In a real scenario, this is passed into rerank_products as a top-level signal
-        # For now, we extract it from item or default to "Unknown"
         product_type = item.get("intent_product_type", "Unknown")
         acc_penalty = accessory_penalty(query, title, product_type=product_type)
         item["_accessory_penalty"] = acc_penalty
@@ -419,23 +424,6 @@ def rerank_products(
             item=item,
             seller_docs=seller_docs,
         )
-
-        # ----------------------------------------
-        # FINAL SCORE
-        # ----------------------------------------
-
-        # ----------------------------------------
-        # LTR FEATURES & MODEL PREDICTION
-        # ----------------------------------------
-
-        # Inject RAG signals into item for feature extraction
-        item["_rag_product_boost"] = product_rag_boost
-        item["_rag_seller_boost"] = seller_rag_boost
-        item["_rag_sentiment_signal"] = seller_sentiment_signal
-
-        # ----------------------------------------
-        # LTR FEATURES & MODEL PREDICTION
-        # ----------------------------------------
 
         # Inject RAG signals into item for feature extraction
         item["_rag_product_boost"] = product_rag_boost

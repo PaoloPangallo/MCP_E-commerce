@@ -4,7 +4,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 
 import SellerTrustGauge from "./SellerTrustGauge.tsx"
 import SellerFeedbackList from "../SellerFeedbackList.tsx"
-import type { Feedback } from "../../../types"
+import type { Feedback } from "../types"
 import { API_BASE } from "../../../api/apiClient.ts"
 
 interface ApiResponse {

@@ -8,28 +8,28 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 const actionCards = [
   {
     title: "Analisi di Mercato",
-    description: "Scopri i prezzi medi e i trend di interesse su Google per qualsiasi prodotto.",
+    description: "Scopri i prezzi medi e i trend di interesse.",
     icon: <TrendingUpIcon sx={{ color: "#10b981" }} />,
     prompt: "Quali sono i trend di mercato per le AirPods Pro 2?",
     color: "#10b981"
   },
   {
     title: "Shopping Intelligente",
-    description: "Trova le migliori offerte su eBay filtrando per prezzo, condizione e altro.",
+    description: "Trova le migliori offerte su eBay.",
     icon: <ShoppingCartIcon sx={{ color: "#3b82f6" }} />,
     prompt: "Cerca un iPhone 15 Pro Max nuovo sotto i 1000€",
     color: "#3b82f6"
   },
   {
     title: "Affidabilità Venditore",
-    description: "Analizziamo i feedback e la reputazione dei seller per acquisti sicuri.",
+    description: "Analizziamo i feedback dei seller.",
     icon: <VerifiedUserIcon sx={{ color: "#f59e0b" }} />,
     prompt: "Controlla l'affidabilità del venditore pegaso_italia",
     color: "#f59e0b"
   },
   {
     title: "Confronto Prodotti",
-    description: "Compara istantaneamente più modelli per trovare quello più conveniente.",
+    description: "Compara istantaneamente più modelli.",
     icon: <CompareArrowsIcon sx={{ color: "#8b5cf6" }} />,
     prompt: "Confronta iPhone 15 Pro, Samsung S24 e Google Pixel 8",
     color: "#8b5cf6"
@@ -44,7 +44,7 @@ export default function WelcomePanel() {
   return (
     <Box
       sx={{
-        py: { xs: 4, md: 8 },
+        py: { xs: 3, md: 5 },
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -52,53 +52,53 @@ export default function WelcomePanel() {
       }}
     >
       {/* Hero Section */}
-      <Box sx={{ mb: 6, maxWidth: 640 }}>
+      <Box sx={{ mb: 4, maxWidth: 850 }}>
         <Box
           sx={{
             display: "inline-flex",
-            p: 1.5,
-            borderRadius: "16px",
+            p: 1.25,
+            borderRadius: "12px",
             background: "linear-gradient(135deg, #111827 0%, #374151 100%)",
             color: "#fff",
-            mb: 3,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)"
+            mb: 2.5,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
           }}
         >
-          <AutoAwesomeIcon sx={{ fontSize: 28 }} />
+          <AutoAwesomeIcon sx={{ fontSize: 22 }} />
         </Box>
         
         <Typography
-          variant="h3"
+          variant="h4"
           sx={{
-            fontSize: { xs: 32, md: 42 },
-            fontWeight: 850,
-            background: "linear-gradient(90deg, #111827 0%, #4b5563 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            letterSpacing: "-0.03em",
-            lineHeight: 1.1,
-            mb: 2
+            fontSize: { xs: 24, md: 32 },
+            fontWeight: 800,
+            color: "var(--text-primary)",
+            letterSpacing: "-0.015em",
+            lineHeight: 1.2,
+            mb: 1,
+            whiteSpace: { md: "nowrap" }
           }}
         >
           Porta la tua ricerca su eBay al livello successivo
         </Typography>
 
         <Typography
-          variant="body1"
+          variant="body2"
           sx={{
-            color: "#6b7280",
-            fontSize: { xs: 16, md: 18 },
-            lineHeight: 1.6,
-            px: { xs: 2, md: 0 }
+            color: "var(--text-secondary)",
+            fontSize: { xs: 13, md: 15 },
+            lineHeight: 1.5,
+            px: { xs: 2, md: 2 },
+            opacity: 0.9,
+            whiteSpace: { md: "nowrap" }
           }}
         >
-          ebayGPT è il tuo assistente personale che analizza dati in tempo reale, 
-          confronta prezzi e verifica venditori per te.
+          ebayGPT analizza i dati in tempo reale, confronta i prezzi e verifica i venditori per te.
         </Typography>
       </Box>
 
       {/* Action Cards Grid */}
-      <Grid container spacing={2.5} sx={{ maxWidth: 800 }}>
+      <Grid container spacing={2} sx={{ maxWidth: 740 }}>
         {actionCards.map((card, i) => (
           <Grid size={{ xs: 12, sm: 6 }} key={i}>
             <Paper
@@ -107,25 +107,27 @@ export default function WelcomePanel() {
               elevation={0}
               sx={{
                 width: "100%",
-                p: 3,
+                p: 2,
                 height: "100%",
                 display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
                 textAlign: "left",
-                border: "1px solid #e5e7eb",
-                borderRadius: 4,
-                bgcolor: "#ffffff",
+                gap: 2,
+                border: "1px solid var(--border-color)",
+                borderRadius: "16px",
+                bgcolor: "var(--bg-primary)",
+                color: "var(--text-primary)",
                 cursor: "pointer",
                 transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                 fontFamily: "inherit",
                 "&:hover": {
-                  transform: "translateY(-4px)",
-                  boxShadow: "0 12px 24px -8px rgba(0,0,0,0.08)",
+                  transform: "translateY(-3px)",
+                  boxShadow: "0 10px 20px -10px rgba(0,0,0,0.2)",
                   borderColor: card.color,
                   "& .icon-box": {
                     bgcolor: `${card.color}15`,
-                    transform: "scale(1.1)"
+                    transform: "scale(1.05)"
                   }
                 },
                 "&:active": {
@@ -136,30 +138,31 @@ export default function WelcomePanel() {
               <Box
                 className="icon-box"
                 sx={{
-                  p: 1.25,
-                  borderRadius: "12px",
-                  bgcolor: "#f9fafb",
-                  mb: 2,
+                  p: 1.1,
+                  borderRadius: "10px",
+                  bgcolor: "var(--bg-secondary)",
                   display: "flex",
                   transition: "all 0.2s ease"
                 }}
               >
                 {card.icon}
               </Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#111827", mb: 0.5 }}>
-                {card.title}
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#6b7280", mb: 0 }}>
-                {card.description}
-              </Typography>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", mb: 0.25 }}>
+                  {card.title}
+                </Typography>
+                <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block", lineHeight: 1.3 }}>
+                  {card.description}
+                </Typography>
+              </Box>
             </Paper>
           </Grid>
         ))}
       </Grid>
       
-      <Typography sx={{ mt: 6, fontSize: 13, color: "#9ca3af", fontWeight: 500 }}>
-        Scrivi un messaggio qui sotto per iniziare una conversazione libera
+      <Typography sx={{ mt: 5, fontSize: 12, color: "var(--text-secondary)", fontWeight: 500, letterSpacing: '0.02em', opacity: 0.7 }}>
+        Inizia scrivendo un messaggio qui sotto
       </Typography>
     </Box>
   )
-}
+}

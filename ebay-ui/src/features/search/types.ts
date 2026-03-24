@@ -1,5 +1,5 @@
 import type { AgentStep } from "../agent/types"
-import type { AppMode } from "../../types"
+export type AppMode = "search" | "seller" | "hybrid" | "conversation" | "comparison"
 import type { Feedback, SellerSummaryBlock } from "../seller/types"
 
 export interface SearchItem {

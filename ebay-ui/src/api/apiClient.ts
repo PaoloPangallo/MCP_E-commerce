@@ -1,7 +1,7 @@
 import { getToken } from "../auth/authStore"
 
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8050"
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8050"
 
 type ApiOptions = RequestInit & {
   timeout?: number
@@ -30,7 +30,11 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   const token = getToken()
   const controller = new AbortController()
-  const timeout = options.timeout ?? 90000
+  
+  // Stricter timeouts for better UX
+  const isAuthMe = path === "/auth/me"
+  const defaultTimeout = isAuthMe ? 8000 : 15000
+  const timeout = options.timeout ?? defaultTimeout
 
   const timeoutId = window.setTimeout(() => {
     controller.abort()
@@ -44,6 +48,10 @@ export async function apiFetch<T = unknown>(
     })
 
     if (!response.ok) {
+      if (response.status !== 401 || path !== "/auth/me") {
+        console.warn(`API Error [${response.status}] for ${path}`);
+      }
+
       let message = "API error"
 
       try {
@@ -51,6 +59,11 @@ export async function apiFetch<T = unknown>(
         message = data?.detail || data?.message || message
       } catch {
         // ignore non-json body
+      }
+
+      // Bypass early debugger pause for /auth/me 401 (not logged in)
+      if (response.status === 401 && path === "/auth/me") {
+        return null as unknown as T
       }
 
       throw new Error(message)
@@ -65,7 +78,8 @@ export async function apiFetch<T = unknown>(
     return (await response.json()) as T
   } catch (err: any) {
     if (err?.name === "AbortError") {
-      throw new Error("Request timeout")
+      console.error(`Request timeout for ${path} after ${timeout}ms`);
+      throw new Error("Il server impiega troppo tempo a rispondere. Verifica la connessione.")
     }
 
     throw err

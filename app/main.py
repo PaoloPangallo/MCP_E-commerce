@@ -17,7 +17,12 @@ from app.db.database import Base, engine
 from app.config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
+# Force app loggers to INFO for extra visibility
+for logger_name in ["app", "uvicorn", "fastapi"]:
+    logging.getLogger(logger_name).setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
+logger.info("LOGGING INITIALIZED | LEVEL=INFO")
 
 from contextlib import asynccontextmanager
 from app.mcp.asgi import app as mcp_app
@@ -44,6 +49,15 @@ async def app_lifespan(app: FastAPI):
     await ebay.init_http_client()
     logger.info("eBay shared HTTP client initialized.")
 
+    from sqlalchemy import text
+    from app.db.database import engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Database connection warmed up.")
+    except Exception as e:
+        logger.error("Database warmup failed: %s", e)
+
     async with mcp_app.router.lifespan_context(app):
         yield
 
@@ -58,10 +72,21 @@ _allowed_origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 ]
+
+# Support multiple URLs in FRONTEND_URLS (comma separated)
+_frontend_urls = os.getenv("FRONTEND_URLS", "")
+if _frontend_urls:
+    for url in _frontend_urls.split(","):
+        clean_url = url.strip()
+        if clean_url and clean_url not in _allowed_origins:
+            _allowed_origins.append(clean_url)
+            logger.info("CORS: Added additional frontend origin: %s", clean_url)
+
 _ngrok_url = settings.NGROK_URL
 if _ngrok_url:
-    _allowed_origins.append(_ngrok_url)
-    logger.info("CORS: Added ngrok origin: %s", _ngrok_url)
+    if _ngrok_url not in _allowed_origins:
+        _allowed_origins.append(_ngrok_url)
+        logger.info("CORS: Added ngrok origin: %s", _ngrok_url)
 
 
 app = FastAPI(

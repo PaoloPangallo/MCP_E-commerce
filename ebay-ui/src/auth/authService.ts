@@ -4,6 +4,11 @@ import type { AuthUser } from "./useAuth"
 
 export interface AuthResponse {
   access_token: string
+  email: string
+  favorite_brands?: string | null
+  price_preference?: string | null
+  custom_instructions?: string | null
+
   token_type: string
   user_id: number
 }
@@ -54,5 +59,11 @@ export async function updateCustomInstructions(instructions: string): Promise<{ 
   return apiFetch<{ status: string, custom_instructions: string }>("/auth/me/instructions", {
     method: "PATCH",
     body: JSON.stringify({ custom_instructions: instructions })
+  })
+}
+export async function recoverPassword(email: string): Promise<{ status: string, message: string, password?: string }> {
+  return apiFetch<{ status: string, message: string, password?: string }>('/auth/recover-password', {
+    method: 'POST',
+    body: JSON.stringify({ email })
   })
 }

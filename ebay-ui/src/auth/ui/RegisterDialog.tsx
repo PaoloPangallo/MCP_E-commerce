@@ -5,7 +5,6 @@ import {
   CircularProgress,
   Dialog,
   DialogContent,
-  DialogTitle,
   Divider,
   IconButton,
   InputAdornment,
@@ -13,11 +12,9 @@ import {
   TextField,
   Typography
 } from "@mui/material"
-import { alpha } from "@mui/material/styles"
 import CloseIcon from "@mui/icons-material/Close"
 import VisibilityIcon from "@mui/icons-material/Visibility"
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff"
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import { useEffect, useState } from "react"
 import { useAuth } from "../useAuth"
 
@@ -56,8 +53,8 @@ export default function RegisterDialog({
       return
     }
 
-    if (password.length < 6) {
-      setError("La password deve contenere almeno 6 caratteri.")
+    if (password.length < 8) {
+      setError("La password deve contenere almeno 8 caratteri.")
       return
     }
 
@@ -87,79 +84,85 @@ export default function RegisterDialog({
       PaperProps={{
         sx: {
           width: "100%",
-          maxWidth: 460,
-          borderRadius: 6,
-          border: "1px solid #e5e7eb",
-          boxShadow: "0 28px 90px rgba(0,0,0,0.18)",
-          overflow: "hidden"
+          maxWidth: 420,
+          border: "1px solid var(--border-color)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+          overflow: "hidden",
+          bgcolor: "var(--bg-primary)",
+          backgroundImage: "none",
+          p: 0,
+          borderRadius: "20px"
         }
       }}
     >
-      <DialogTitle sx={{ px: 3, pt: 2.5, pb: 1 }}>
-        <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-          <Box sx={{ width: "100%" }}>
-            <Box
-              sx={{
-                width: 42,
-                height: 42,
-                borderRadius: "50%",
-                bgcolor: "#202123",
-                color: "#fff",
-                display: "grid",
-                placeItems: "center",
-                mb: 2
-              }}
-            >
-              <AutoAwesomeIcon sx={{ fontSize: 20 }} />
-            </Box>
+      {/* Header — same structure as LoginDialog */}
+      <Box sx={{ px: 4, pt: 4, pb: 0, position: "relative" }}>
+        <IconButton
+          onClick={onClose}
+          disabled={loading}
+          size="small"
+          sx={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            color: "var(--text-secondary)",
+            "&:hover": { bgcolor: "var(--bg-secondary)" }
+          }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
 
-            <Typography
-              sx={{
-                fontSize: 30,
-                fontWeight: 700,
-                color: "#202123",
-                lineHeight: 1.15,
-                letterSpacing: "-0.02em"
-              }}
-            >
-              Crea il tuo account
-            </Typography>
+        {/* Logo wordmark */}
+        <Typography
+          sx={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "var(--accent-primary)",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            mb: 3
+          }}
+        >
+          ebayGPT
+        </Typography>
 
-            <Typography
-              sx={{
-                fontSize: 14,
-                color: "#6e6e80",
-                mt: 1,
-                lineHeight: 1.55,
-                maxWidth: 360
-              }}
-            >
-              Registra il tuo profilo per salvare preferenze, istruzioni e risultati
-              più pertinenti nel tempo.
-            </Typography>
-          </Box>
+        <Typography
+          sx={{
+            fontSize: 26,
+            fontWeight: 800,
+            color: "var(--text-primary)",
+            lineHeight: 1.2,
+            letterSpacing: "-0.02em",
+            mb: 1
+          }}
+        >
+          Crea il tuo account
+        </Typography>
 
-          <IconButton
-            onClick={onClose}
-            disabled={loading}
-            size="small"
-            sx={{
-              ml: 1,
-              color: "#6e6e80"
-            }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      </DialogTitle>
+        <Typography
+          sx={{
+            fontSize: 14,
+            color: "var(--text-secondary)",
+            lineHeight: 1.5,
+            mb: 3
+          }}
+        >
+          Registrati per salvare preferenze e risultati personalizzati.
+        </Typography>
+      </Box>
 
-      <DialogContent sx={{ px: 3, pt: 1.5, pb: 3 }}>
-        <Stack spacing={2}>
+      <DialogContent sx={{ px: 4, pt: 0, pb: 4 }}>
+        <Stack spacing={2.5}>
           {error && (
             <Alert
               severity="error"
-              sx={{
-                borderRadius: 3
+              sx={{ 
+                borderRadius: "12px", 
+                fontSize: 13,
+                bgcolor: "rgba(239, 68, 68, 0.08)",
+                color: "#ef4444",
+                border: "1px solid rgba(239, 68, 68, 0.15)",
+                "& .MuiAlert-icon": { color: "#ef4444" }
               }}
             >
               {error}
@@ -167,7 +170,7 @@ export default function RegisterDialog({
           )}
 
           <TextField
-            label="Email"
+            label="Indirizzo email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -175,10 +178,21 @@ export default function RegisterDialog({
             autoFocus
             disabled={loading}
             autoComplete="email"
+            variant="outlined"
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: 3,
-                bgcolor: "#fff"
+                borderRadius: "12px",
+                bgcolor: "var(--bg-secondary)",
+                fontSize: 14,
+                color: "var(--text-primary)",
+                "& fieldset": { borderColor: "var(--border-color)" },
+                "&:hover fieldset": { borderColor: "var(--text-secondary)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--accent-primary)", borderWidth: 2 }
+              },
+              "& .MuiInputLabel-root": { 
+                fontSize: 14, 
+                color: "var(--text-secondary)",
+                "&.Mui-focused": { color: "var(--accent-primary)" }
               }
             }}
           />
@@ -191,10 +205,21 @@ export default function RegisterDialog({
             fullWidth
             disabled={loading}
             autoComplete="new-password"
+            variant="outlined"
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: 3,
-                bgcolor: "#fff"
+                borderRadius: "12px",
+                bgcolor: "var(--bg-secondary)",
+                fontSize: 14,
+                color: "var(--text-primary)",
+                "& fieldset": { borderColor: "var(--border-color)" },
+                "&:hover fieldset": { borderColor: "var(--text-secondary)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--accent-primary)", borderWidth: 2 }
+              },
+              "& .MuiInputLabel-root": { 
+                fontSize: 14, 
+                color: "var(--text-secondary)",
+                "&.Mui-focused": { color: "var(--accent-primary)" }
               }
             }}
             InputProps={{
@@ -204,9 +229,9 @@ export default function RegisterDialog({
                     edge="end"
                     onClick={() => setShowPassword((prev) => !prev)}
                     disabled={loading}
-                    sx={{ color: "#6e6e80" }}
+                    sx={{ color: "var(--text-secondary)" }}
                   >
-                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    {showPassword ? <VisibilityOffIcon sx={{ fontSize: 18 }} /> : <VisibilityIcon sx={{ fontSize: 18 }} />}
                   </IconButton>
                 </InputAdornment>
               )
@@ -221,13 +246,24 @@ export default function RegisterDialog({
             fullWidth
             disabled={loading}
             autoComplete="new-password"
+            variant="outlined"
             onKeyDown={(e) => {
               if (e.key === "Enter") handleRegister()
             }}
             sx={{
               "& .MuiOutlinedInput-root": {
-                borderRadius: 3,
-                bgcolor: "#fff"
+                borderRadius: "12px",
+                bgcolor: "var(--bg-secondary)",
+                fontSize: 14,
+                color: "var(--text-primary)",
+                "& fieldset": { borderColor: "var(--border-color)" },
+                "&:hover fieldset": { borderColor: "var(--text-secondary)" },
+                "&.Mui-focused fieldset": { borderColor: "var(--accent-primary)", borderWidth: 2 }
+              },
+              "& .MuiInputLabel-root": { 
+                fontSize: 14, 
+                color: "var(--text-secondary)",
+                "&.Mui-focused": { color: "var(--accent-primary)" }
               }
             }}
           />
@@ -238,86 +274,64 @@ export default function RegisterDialog({
             onClick={handleRegister}
             disabled={loading}
             sx={{
-              mt: 0.5,
+              mt: 1,
               textTransform: "none",
-              borderRadius: 999,
-              py: 1.35,
+              borderRadius: "12px",
+              py: 1.5,
               fontWeight: 700,
-              fontSize: 15,
-              bgcolor: "#202123",
-              color: "#fff",
-              boxShadow: "none",
-              "&:hover": {
-                bgcolor: "#111214",
-                boxShadow: "none"
+              fontSize: 14,
+              bgcolor: "var(--text-primary)",
+              color: "var(--bg-primary)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              letterSpacing: "0.01em",
+              "&:hover": { 
+                bgcolor: "var(--text-primary)", 
+                opacity: 0.9,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.2)" 
               },
-              "&:disabled": {
-                bgcolor: alpha("#202123", 0.45),
-                color: "#fff"
-              }
+              "&:disabled": { bgcolor: "var(--border-color)", color: "var(--text-secondary)" }
             }}
           >
             {loading ? (
               <Stack direction="row" spacing={1} alignItems="center">
-                <CircularProgress size={18} color="inherit" />
-                <span>Creazione account...</span>
+                <CircularProgress size={16} color="inherit" />
+                <span>Creazione account…</span>
               </Stack>
-            ) : (
-              "Continua"
-            )}
+            ) : "Continua"}
           </Button>
 
-          <Divider sx={{ color: "#a1a1aa", fontSize: 12 }}>oppure</Divider>
+          <Divider sx={{ 
+            fontSize: 11, 
+            color: "var(--text-secondary)", 
+            my: 1,
+            "&::before, &::after": { borderColor: "var(--border-color)" }
+          }}>oppure</Divider>
 
-          <Box
-            sx={{
-              borderRadius: 3,
-              bgcolor: "#f7f7f8",
-              border: "1px solid #ececf1",
-              px: 2,
-              py: 1.5
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: 13,
-                color: "#6e6e80",
-                lineHeight: 1.55
-              }}
-            >
-              Hai già un account?
+          <Box sx={{ textAlign: "center" }}>
+            <Typography sx={{ fontSize: 13, color: "var(--text-secondary)", display: "inline" }}>
+              Hai già un account?{" "}
             </Typography>
-
             <Button
               onClick={onLogin}
               disabled={loading}
               sx={{
-                mt: 0.5,
                 p: 0,
                 minWidth: 0,
                 textTransform: "none",
                 fontWeight: 700,
-                color: "#202123",
-                "&:hover": {
-                  bgcolor: "transparent",
-                  textDecoration: "underline"
-                }
+                fontSize: 13,
+                color: "var(--text-primary)",
+                display: "inline",
+                verticalAlign: "baseline",
+                "&:hover": { bgcolor: "transparent", textDecoration: "underline" }
               }}
             >
               Accedi
             </Button>
           </Box>
 
-          <Typography
-            sx={{
-              fontSize: 11.5,
-              color: "#8e8ea0",
-              lineHeight: 1.5,
-              textAlign: "center",
-              mt: 0.5
-            }}
-          >
-            Creando un account, abiliti un’esperienza più personalizzata nella piattaforma.
+          <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", opacity: 0.7, textAlign: "center", lineHeight: 1.5 }}>
+            Creando un account, abiliti un'esperienza più personalizzata nella piattaforma.
           </Typography>
         </Stack>
       </DialogContent>

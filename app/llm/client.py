@@ -10,6 +10,7 @@ NON da services/parser.py.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -82,29 +83,50 @@ async def call_ollama_cloud(
 
     if not stream:
         try:
-            response = await client.chat(
-                model=selected_model,
-                messages=messages,
-                options={"num_predict": 4096},
+            # Add explicit timeout for non-streaming calls
+            response = await asyncio.wait_for(
+                client.chat(
+                    model=selected_model,
+                    messages=messages,
+                    options={"num_predict": 4096},
+                ),
+                timeout=OLLAMA_TIMEOUT
             )
             content = (response.message.content or "").strip()
             return content if content else None
+        except asyncio.TimeoutError:
+            logger.error("Ollama Cloud call timed out after %ss", OLLAMA_TIMEOUT)
+            return None
         except Exception as exc:
             logger.warning("Ollama Cloud error: %s", exc)
             return None
 
     # ── Streaming ────────────────────────────────────────────────────────────
     async def _generator() -> AsyncGenerator[str, None]:
+        first_chunk = True
         try:
-            async for part in await client.chat(
-                model=selected_model,
-                messages=messages,
-                stream=True,
-                options={"num_predict": 4096},
-            ):
+            # The client.chat(stream=True) returns an async generator. 
+            # We apply timeout to getting the stream itself.
+            response_stream = await asyncio.wait_for(
+                client.chat(
+                    model=selected_model,
+                    messages=messages,
+                    stream=True,
+                    options={"num_predict": 4096},
+                ),
+                timeout=OLLAMA_TIMEOUT
+            )
+            
+            async for part in response_stream:
                 content = part.message.content
                 if content:
+                    if first_chunk:
+                        logger.info("Ollama Cloud: First chunk received")
+                        first_chunk = False
                     yield content
+        except asyncio.TimeoutError:
+            logger.error("Ollama Cloud stream initiation timed out after %ss", OLLAMA_TIMEOUT)
+            yield ""
         except Exception as exc:
             logger.warning("Ollama Cloud streaming error: %s", exc)
             yield ""

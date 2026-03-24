@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { Box, Button, Typography } from "@mui/material"
+import { useState, useMemo, useEffect } from "react"
+import { Box, Typography, Button } from "@mui/material"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GppGoodIcon from "@mui/icons-material/GppGood"
 import ListIcon from "@mui/icons-material/List"
@@ -25,11 +25,12 @@ export default function SearchResultList({
   aspect_distributions = [],
 }: Props) {
   const [visibleCount, setVisibleCount] = useState(5)
+
   const safeResults = useMemo(() => {
     const seen = new Set<string>()
     return (results || []).filter((item) => {
       if (!item) return false
-      if (!item.ebay_id) return true // Keep if no ID (prevent loss of generic results)
+      if (!item.ebay_id) return true
       if (seen.has(item.ebay_id)) return false
       seen.add(item.ebay_id)
       return true
@@ -40,8 +41,8 @@ export default function SearchResultList({
     setVisibleCount(5)
   }, [safeResults])
 
-  const visibleResults = safeResults.slice(0, visibleCount)
   const topTrust = getTopTrust(safeResults)
+  const visibleResults = safeResults.slice(0, visibleCount)
   const remaining = safeResults.length - visibleCount
 
   if (safeResults.length === 0) {
@@ -70,7 +71,7 @@ export default function SearchResultList({
 
       {/* ── Filters ─────────────────────────────────────────────────────── */}
       {aspect_distributions.length > 0 && (
-        <Box sx={{ px: 2, pt: 1.5, pb: 1.25, borderBottom: "1px solid #f5f5f5" }}>
+        <Box sx={{ px: 2, pt: 1, pb: 1, borderBottom: "1px solid var(--border-color)" }}>
           <FilterSidebar
             distributions={aspect_distributions}
             onFilterClick={handleFilterClick}
@@ -78,7 +79,7 @@ export default function SearchResultList({
         </Box>
       )}
 
-      {/* ── Summary line — one quiet row, no heavy chrome ─────────────── */}
+      {/* ── Summary Row ─────────────────────────────────────────────── */}
       <Box
         sx={{
           px: 2,
@@ -86,21 +87,21 @@ export default function SearchResultList({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          bgcolor: "#fafafa",
-          borderBottom: "1px solid #f0f0f0",
+          bgcolor: "var(--bg-secondary)",
+          borderBottom: "1px solid var(--border-color)",
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <ListIcon sx={{ fontSize: 14, color: "#9ca3af" }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#4b5563" }}>
-              {safeResults.length} {safeResults.length === 1 ? "risultato" : "risultati"}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <ListIcon sx={{ fontSize: 14, color: "var(--text-secondary)" }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
+              {safeResults.length} RISULTATI
             </Typography>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <TrendingUpIcon sx={{ fontSize: 14, color: "#8b5cf6" }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <TrendingUpIcon sx={{ fontSize: 14, color: "var(--brand-primary)" }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>
               AI Sorted
             </Typography>
           </Box>
@@ -108,58 +109,48 @@ export default function SearchResultList({
 
         {topTrust !== null && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <GppGoodIcon sx={{ fontSize: 14, color: "#10b981" }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#10b981" }}>
+            <GppGoodIcon sx={{ fontSize: 14, color: "var(--success)" }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--success)" }}>
               Trust {Math.round(topTrust * 100)}% max
             </Typography>
           </Box>
         )}
       </Box>
 
-      {/* ── Cards ─────────────────────────────────────────────────────── */}
+      {/* ── Vertical List ─────────────────────────────────────────────── */}
       <Box sx={{ px: 2 }}>
         {visibleResults.map((item, index) => (
           <SearchResultCard
             key={item.ebay_id ?? `${index}-${item.title}`}
             item={item}
+            variant="list"
+            index={index}
           />
         ))}
       </Box>
 
-      {/* ── Load more — plain text link, no button ────────────────────── */}
+      {/* ── Load More ─────────────────────────────────────────────────── */}
       {remaining > 0 && (
-        <Box
-          sx={{
-            p: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderTop: "1px solid #f0f0f0",
-            bgcolor: "#fff"
-          }}
-        >
-          <Button
-            variant="outlined"
-            onClick={() => setVisibleCount((prev) => Math.min(prev + 5, safeResults.length))}
-            fullWidth
-            sx={{
-              textTransform: "none",
-              borderRadius: "10px",
-              borderColor: "#e5e7eb",
-              color: "#374151",
-              fontSize: 13,
-              fontWeight: 600,
-              py: 1,
-              "&:hover": {
-                bgcolor: "#f9fafb",
-                borderColor: "#d1d5db"
-              }
-            }}
-          >
-            Mostra altri {Math.min(remaining, 5)} prodotti ({remaining} rimanenti)
-          </Button>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
+           <Button
+             variant="outlined"
+             fullWidth
+             onClick={() => setVisibleCount(prev => prev + 5)}
+             sx={{
+               textTransform: 'none',
+               borderRadius: '10px',
+               borderColor: 'var(--border-color)',
+               color: 'var(--text-primary)',
+               fontWeight: 600,
+               py: 1,
+               "&:hover": { bgcolor: 'var(--bg-secondary)', borderColor: 'var(--brand-primary)' }
+             }}
+           >
+             Mostra altri {Math.min(remaining, 5)} prodotti ({remaining} rimanenti)
+           </Button>
         </Box>
       )}
+
     </Box>
   )
 }

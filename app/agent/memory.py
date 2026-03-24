@@ -656,9 +656,16 @@ class RequestState:
 
     def final_data(self) -> Dict[str, Any]:
         compact_top = _compact_result(self.top_result) if self.top_result else None
+        
+        # Sanitize search_payload: strip any residual "raw" or giant fields
+        # to avoid JSON serialization issues in FinalEvent
+        search = None
+        if self.search_payload:
+            search = {k: v for k, v in self.search_payload.items() if k != "raw"}
+            
         return {
             "intent": self.detected_intent,
-            "search": self.search_payload,
+            "search": search,
             "seller": self.seller_payload,
             "compare": self.compare_payload,
             "metadata": self.metadata_payload,

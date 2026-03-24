@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 # Approx 4 characters per token as a rough safety heuristic
 ROUGH_CHARS_PER_TOKEN = 4
@@ -33,8 +33,9 @@ def _truncate_scratchpad(
         for heavy_key in ("results", "feedbacks", "rag_context", "recent_tool_results"):
             if heavy_key in compact:
                 val = compact[heavy_key]
-                if isinstance(val, list) and len(val) > 3:
-                    compact[heavy_key] = val[:3]
+                if isinstance(val, list):
+                    # Use a slice that satisfies Pyre's SupportsIndex requirement
+                    compact[heavy_key] = [val[i] for i in range(len(val)) if i < 3]
                     compact[f"_{heavy_key}_truncated"] = True
         return json.dumps(compact, ensure_ascii=False, indent=2, default=str)[:context_budget_chars]
 
@@ -147,6 +148,7 @@ REGOLE DI FORMATTAZIONE E STILE (CRITICO):
 - **DOPPIO INVIO**: Dopo ogni titolo (## Titolo) DEVI inserire DUE INVIO (riga vuota). Se non lasci la riga vuota, il sistema non leggerà correttamente la formattazione.
 - **NO ATTACCATO**: Non scrivere mai il testo subito dopo il titolo sulla stessa riga.
 - **MARGINE**: Lascia molto spazio tra le sezioni ## Analisi, ## Affidabilità e ## Verdetto.
+- **RISULTATI TROVATI (CRITICO)**: Se `results_count` > 0 o `top_results` contiene elementi, HAI risultati! NON dire MAI "non ho trovato nulla" o "non compaiono offerte" se ci sono risultati nel context. Presenta SEMPRE i risultati trovati, anche se non corrispondono al 100% ai criteri specifici dell'utente. In quel caso, segnala le differenze ma MOSTRA comunque i prodotti disponibili.
 - **NO HALLUCINATION FILTRI**: Se la ricerca restituisce 0 risultati, NON inventare che l'utente ha usato filtri come "nuovo" o "massima RAM".
 - **SINTESI FINALE**: È FONDAMENTALE che dopo la tabella (o i blocchi offerte) tu scriva SEMPRE le frasi conclusive nei paragrafi ## Affidabilità e ## Verdetto. NON fermarti all'elenco dati!
 - **FILTRI NEGATIVI (CRITICO)**: Se l'utente specifica di NON volere qualcosa (es. "senza cappuccio", "no nero", "nè zip"), DEVI assicurarti che i prodotti selezionati per la tabella e l'analisi rispettino RIGOROSAMENTE queste esclusioni. NON proporre mai articoli che contengano attributi esplicitamente vietati.
@@ -174,12 +176,13 @@ def _compact_tool_catalog_for_prompt(tool_catalog: Dict[str, Dict[str, Any]]) ->
         if not isinstance(spec, dict):
             continue
 
+        examples = spec.get("examples") or []
         compact[name] = {
             "description": spec.get("description"),
             "input_schema": spec.get("input_schema"),
             "required_fields": spec.get("required_fields") or [],
             "tags": spec.get("tags") or [],
-            "examples": (spec.get("examples") or [])[:2],
+            "examples": [examples[i] for i in range(len(examples)) if i < 2] if isinstance(examples, list) else [],
             "state_key": spec.get("state_key"),
             "cost": spec.get("cost"),
             "latency_class": spec.get("latency_class"),
@@ -221,11 +224,13 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
     search = final_data.get("search") or {}
     seller = final_data.get("seller") or {}
 
+    search_data = search.get("results") or []
     compact_search = {
         "results_count": search.get("results_count"),
+        "ebay_query_used": search.get("ebay_query_used"),
         "analysis": search.get("analysis"),
         "metrics": search.get("metrics") or search.get("ir_metrics"),
-        "top_results": (search.get("results") or [])[:3],
+        "top_results": [search_data[i] for i in range(len(search_data)) if i < 6] if isinstance(search_data, list) else [],
     } if search else None
 
     compact_seller = {
@@ -332,7 +337,7 @@ def build_final_answer_prompt(
     ltm = compact_final_data.get("long_term_memory") or {}
     if ltm:
         prefs = ltm.get("user_preferences") or {}
-        pref_parts = []
+        pref_parts: List[str] = []
         
         # Preferenze DB (Le più affidabili)
         db_brands = prefs.get("db_favorite_brands")
@@ -344,13 +349,18 @@ def build_final_answer_prompt(
             pref_parts.append(f"Fascia di prezzo abituale (DB): ~{db_price}€")
 
         if prefs.get("favorite_sellers"):
-            pref_parts.append(f"Venditori preferiti: {', '.join(str(s) for s in prefs['favorite_sellers'][:3])}")
+            sellers = prefs.get("favorite_sellers") or []
+            if isinstance(sellers, list):
+                pref_parts.append(f"Venditori preferiti: {', '.join(str(s) for s in [sellers[i] for i in range(len(sellers)) if i < 3])}")
+        
         if prefs.get("recent_brand_hints"):
-            pref_parts.append(f"Interessi recenti: {', '.join(str(b) for b in prefs['recent_brand_hints'][:3])}")
+            hints = prefs.get("recent_brand_hints") or []
+            if isinstance(hints, list):
+                pref_parts.append(f"Interessi recenti: {', '.join(str(b) for b in [hints[i] for i in range(len(hints)) if i < 3])}")
             
         prev = ltm.get("previous_searches") or []
-        if prev:
-            pref_parts.append(f"Ricerche precedenti: {', '.join(str(q) for q in prev[:3])}")
+        if isinstance(prev, list):
+            pref_parts.append(f"Ricerche precedenti: {', '.join(str(q) for q in [prev[i] for i in range(len(prev)) if i < 3])}")
             
         if pref_parts:
             pref_str = "\n".join(pref_parts)
@@ -361,8 +371,18 @@ def build_final_answer_prompt(
     
     scratch_str = _truncate_scratchpad(scratchpad, budget_chars)
 
-    return f"""{system_prompt}
+    # Inject explicit results count so the LLM can't ignore them
+    results_count = 0
+    if isinstance(compact_final_data.get("search"), dict):
+        results_count = compact_final_data["search"].get("results_count") or len(compact_final_data["search"].get("top_results") or [])
 
+    results_hint = ""
+    if results_count > 0:
+        ebay_q = (compact_final_data.get("search") or {}).get("ebay_query_used") or "N/A"
+        results_hint = f"\nSEARCH_RESULTS_AVAILABLE: {results_count} products found (eBay query: '{ebay_q}'). You MUST present these results to the user.\n"
+
+    return f"""{system_prompt}
+{results_hint}
 CONVERSATION CONTEXT:
 {context_info}
 

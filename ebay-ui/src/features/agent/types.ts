@@ -1,3 +1,9 @@
+export interface AgentMessage {
+  role: "user" | "assistant"
+  content: string
+  image?: string
+}
+
 export interface PlannedTask {
   tool: string
   input: Record<string, any>
@@ -19,6 +25,7 @@ export interface AgentStep {
   action_input?: Record<string, any>
   observation_summary?: string
   status?: "thinking" | "running" | "ok" | "error" | "final"
+  ebay_query?: string
 }
 
 export interface AgentEvent {

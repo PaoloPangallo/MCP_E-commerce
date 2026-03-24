@@ -26,8 +26,8 @@ export default function FilterSidebar({ distributions = [], onFilterClick }: Pro
       <Typography
         sx={{
           fontSize: 11,
-          fontWeight: 500,
-          color: "#9ca3af",
+          fontWeight: 700,
+          color: "var(--text-secondary)",
           textTransform: "uppercase",
           letterSpacing: "0.06em"
         }}
@@ -35,46 +35,52 @@ export default function FilterSidebar({ distributions = [], onFilterClick }: Pro
         Affina la ricerca
       </Typography>
 
-      {visibleAspects.map((aspect) => (
-        <Box key={aspect.localizedAspectName}>
-          <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#6b7280", mb: 0.6 }}>
-            {aspect.localizedAspectName}
-          </Typography>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        {visibleAspects.map((aspect) => (
+          <Box key={aspect.localizedAspectName}>
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", mb: 0.6 }}>
+              {aspect.localizedAspectName}
+            </Typography>
 
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            {aspect.aspectValues.slice(0, 6).map((val) => (
-              <Box
-                key={val.localizedValue}
-                component="button"
-                onClick={() => onFilterClick?.(aspect.localizedAspectName, val.localizedValue)}
-                sx={{
-                  background: "none",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "20px",
-                  px: 1,
-                  py: 0.25,
-                  fontSize: 11,
-                  color: "#6b7280",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 0.5,
-                  transition: "all 0.12s",
-                  "&:hover": {
-                    bgcolor: "#f9fafb",
-                    borderColor: "#d1d5db",
-                    color: "#374151"
-                  }
-                }}
-              >
-                <span>{val.localizedValue}</span>
-                <span style={{ color: "#d1d5db" }}>{val.matchCount}</span>
-              </Box>
-            ))}
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+              {aspect.aspectValues.slice(0, 8).map((val) => (
+                <Box
+                  key={val.localizedValue}
+                  component="button"
+                  onClick={() => onFilterClick?.(aspect.localizedAspectName, val.localizedValue)}
+                  sx={{
+                    background: "none",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "20px",
+                    px: 1.25,
+                    py: 0.5,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    transition: "all 0.15s ease",
+                    bgcolor: "var(--bg-primary)",
+                    "&:hover": {
+                      bgcolor: "var(--bg-secondary)",
+                      borderColor: "var(--brand-primary)",
+                      color: "var(--text-primary)"
+                    }
+                  }}
+                >
+                  <span>{val.localizedValue}</span>
+                  <span style={{ color: "var(--text-secondary)", opacity: 0.5, marginLeft: 2 }}>
+                    {val.matchCount}
+                  </span>
+                </Box>
+              ))}
+            </Box>
           </Box>
-        </Box>
-      ))}
+        ))}
+      </Box>
     </Box>
   )
 }
