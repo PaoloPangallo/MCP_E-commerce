@@ -9,7 +9,7 @@ interface CarouselProps {
   count?: number
 }
 
-export default function HorizontalCarousel({ children, title, count }: CarouselProps) {
+export default function HorizontalCarousel({ children, title}: CarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [showLeft, setShowLeft] = useState(false)
   const [showRight, setShowRight] = useState(true)

@@ -237,6 +237,27 @@ async def token(
 # ME / PREFERENCES
 # ---------------------------------------------------
 
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    favorite_brands: Optional[str] = None
+    price_preference: Optional[str] = None
+    custom_instructions: Optional[str] = None
+    theme: Optional[str] = "light"
+    conversation_tone: Optional[str] = "neutral"
+
+@router.get("/me", response_model=UserResponse)
+def get_me(user: User = Depends(get_current_user)):
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        favorite_brands=user.favorite_brands,
+        price_preference=user.price_preference,
+        custom_instructions=user.custom_instructions,
+        theme=user.theme,
+        conversation_tone=user.conversation_tone,
+    )
+
 class UserPreferencesUpdate(BaseModel):
     theme: Optional[str] = None
     conversation_tone: Optional[str] = None
@@ -267,3 +288,35 @@ def update_preferences(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+class InstructionsUpdate(BaseModel):
+    custom_instructions: str
+
+@router.patch("/me/instructions")
+def update_instructions(
+    request: InstructionsUpdate,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        user.custom_instructions = request.custom_instructions
+        db.commit()
+        db.refresh(user)
+        return {
+            "status": "success", 
+            "custom_instructions": user.custom_instructions
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class RecoverRequest(BaseModel):
+    email: str
+
+@router.post("/recover-password")
+async def recover_password(request: RecoverRequest, db: Session = Depends(get_db)):
+    # Mock semplice per evitare 404 in fase di login se l'utente clicca su recupero
+    user = db.query(User).filter(User.email == request.email.lower().strip()).first()
+    if not user:
+         return {"status": "error", "message": "Se l'utente esiste, un'email è stata inviata."}
+    return {"status": "success", "message": "Se l'utente esiste, un'email è stata inviata."}

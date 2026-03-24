@@ -579,15 +579,39 @@ class ReactPlanner:
         elif action == "market_trends" and not action_input.get("query"):
             action_input["query"] = text
 
-        elif action == "conversation" and not action_input.get("query"):
-            action_input["query"] = text
-            # Potremmo passare conversation_history as well but we rely on MCP side if needed
+        elif action in {"get_item_details", "get_shipping_costs"} and not action_input.get("item_id"):
+            id_match = EBAY_ID_RE.search(text)
+            if id_match:
+                action_input["item_id"] = id_match.group(0)
+                logger.info(f"Auto-extracted item_id for {action}: {action_input['item_id']}")
+            else:
+                return None # Indispensabile per questi tool
 
-        elif action == "get_ebay_deals" and not action_input.get("category_id") and not action_input.get("query"):
-            cat_match = re.search(r"\b(?:id[:\s]+)?(\d{4,8})\b", lowered)
-            if cat_match:
-                action_input["category_id"] = cat_match.group(1)
-                logger.info("Auto-extracted category_id for get_ebay_deals: %s", action_input["category_id"])
+        elif action == "get_ebay_deals":
+            # 1. Estrarre Category ID più robusto
+            if not action_input.get("category_id"):
+                # Cerca patterns come "ID: 9355", "(9355)", "categoria 9355"
+                cat_match = re.search(r"(?:id|cat|categoria)[:\s]*(\d{4,8})", lowered)
+                if not cat_match:
+                    # Fallback: cerca un numero di 4-8 cifre tra parentesi o a fine stringa
+                    cat_match = re.search(r"\((\d{4,8})\)|(?:\s|^)(\d{4,8})(?:\s|$)", lowered)
+                
+                if cat_match:
+                    # Prendi il primo gruppo catturato non nullo
+                    cat_id = next((g for g in cat_match.groups() if g), None)
+                    if cat_id:
+                        action_input["category_id"] = cat_id
+                        logger.info("Auto-extracted category_id for get_ebay_deals: %s", cat_id)
+
+            # 2. Estrarre Query come fallback (se non già presente)
+            if not action_input.get("query"):
+                # Rimuoviamo il rumore (ID...) e le parole chiave del tool
+                q_clean = re.sub(r"\([^\)]*id[:\s]*\d+[^\)]*\)", "", lowered, flags=re.IGNORECASE)
+                q_clean = re.sub(r"\b(cerca|offerte|deals|categoria|id|per|la|del|giorno|migliori|🏷️)\b", "", q_clean, flags=re.IGNORECASE)
+                q_clean = re.sub(r"\s+", " ", q_clean).strip()
+                if q_clean:
+                    action_input["query"] = q_clean
+                    logger.info("Auto-extracted query for get_ebay_deals: %s", q_clean)
         
         return action_input
 

@@ -113,9 +113,14 @@ const SearchBlockView = memo(function SearchBlockView({
   const isComparisonRunning = agentTrace.some(s => s.action?.includes("compare") && s.status === "running") && !hasComparison
   const isSellerRunning = agentTrace.some(s => s.action?.includes("analyze_seller") && s.status === "running") && !hasSeller
   const isTrendsRunning = agentTrace.some(s => s.action?.includes("market_trends") && s.status === "running") && !search.market_trends
+  const isItemDetailsRunning = agentTrace.some(s => s.action?.includes("get_item_details") && s.status === "running") && !search.item_details
+  const isShippingRunning = agentTrace.some(s => s.action?.includes("get_shipping_costs") && s.status === "running") && !search.shipping_costs
 
   const showSellerCard =
     hasSeller && (search.mode === "seller" || search.mode === "hybrid")
+
+  // Determina se mostrare un carosello di confronto o la lista classica
+  const isShowingComparison = hasComparison || (search.mode !== "seller" && hasResults && !hasComparison && search.results.length >= 2);
 
   return (
     <Box sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 1.5 }}>
@@ -136,7 +141,10 @@ const SearchBlockView = memo(function SearchBlockView({
       {isComparisonRunning && <ToolSkeleton type="comparison" />}
       {isSellerRunning && <ToolSkeleton type="seller" />}
       {isTrendsRunning && <ToolSkeleton type="trends" />}
+      {isItemDetailsRunning && <ToolSkeleton type="search" />}
+      {isShippingRunning && <ToolSkeleton type="search" />}
 
+      {/* Carosello di confronto automatico (se ci sono almeno 2 risultati e non c'è confronto esplicito) */}
       {search.mode !== "seller" && hasResults && !hasComparison && search.results.length >= 2 && (
         <ComparisonDisplay
           data={{
@@ -188,6 +196,7 @@ const SearchBlockView = memo(function SearchBlockView({
         />
       )}
 
+      {/* Confronto esplicito da tool compare_products */}
       {hasComparison && (
         <ComparisonDisplay 
           data={{
@@ -210,11 +219,12 @@ const SearchBlockView = memo(function SearchBlockView({
         />
       )}
 
-      {hasResults && (
+      {/* Display full results list ONLY if no comparison/carousel is already shown to avoid redundancy */}
+      {hasResults && !isShowingComparison && (
         <CollapsibleSection 
-          label={hasComparison ? "Tutti i risultati" : "Risultati della ricerca"} 
+          label="Risultati della ricerca" 
           count={search.results.length} 
-          defaultOpen={!hasComparison}
+          defaultOpen={true}
         >
           <Box sx={{ p: 2 }}>
             <SearchResultList results={search.results} />

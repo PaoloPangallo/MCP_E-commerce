@@ -15,7 +15,7 @@ _CACHE_TTL = 300  # 5 minuti
 async def run_seller_pipeline(
     seller_name: str,
     page: int = 1,
-    limit: int = 50,
+    limit: int = 300,
 ) -> Dict[str, Any]:
     """
     Seller analysis service with Redis caching and async fetch.
@@ -25,7 +25,7 @@ async def run_seller_pipeline(
         raise ValueError("seller_name vuoto")
 
     page = max(1, int(page))
-    limit = min(max(int(limit), 1), 100)
+    limit = min(max(int(limit), 1), 500)
     needed = page * limit
 
     cache_key = f"seller_analysis:{seller_name.lower()}:{needed}"
@@ -66,13 +66,29 @@ async def run_seller_pipeline(
     sentiment_score = await asyncio.to_thread(
         compute_sentiment_score,
         feedbacks,
-        max_texts=50,
+        max_texts=300,
     )
     trust_score = await asyncio.to_thread(
         compute_trust_score,
         feedbacks,
         sentiment_score=sentiment_score,
     )
+
+    # Genera un sommario AI più esplicativo per il pannello UI
+    ai_summary = None
+    try:
+        from app.llm.client import call_llm
+        texts = [f.get("CommentText") or f.get("comment") or f.get("text", "") for f in feedbacks]
+        texts = [t for t in texts if isinstance(t, str) and len(t.strip()) > 5][:100]  # usa max 100 commenti come campione per LLM
+        if texts:
+            prompt = (
+                f"Analizza queste recenti e autentiche recensioni di acquirenti sul venditore '{seller_name}'. "
+                "Scrivi in lingua italiana al massimo 2 o 3 frasi (max 50 parole) che riassumono il giudizio generale, i pregi e i potenziali difetti o rischi emersi. Sii conciso e diretto, senza convenevoli.\n\n"
+            ) + " ; ".join(texts)
+            res, _ = await call_llm(prompt)
+            ai_summary = res.strip() if res else None
+    except Exception as exc:
+        logger.warning(f"Errore generazione ai_summary per venditore {seller_name}: {exc}")
 
     res = {
         "seller_name": seller_name,
@@ -91,6 +107,7 @@ async def run_seller_pipeline(
         "store_name": store_details.get("store_name"),
         "logo_url": store_details.get("logo_url"),
         "store_description": store_details.get("description"),
+        "ai_summary": ai_summary,
     }
 
     redis_client.set_json(cache_key, res, ttl_seconds=_CACHE_TTL)

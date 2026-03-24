@@ -8,13 +8,20 @@ import {
   Menu, 
   MenuItem, 
   ListItemIcon, 
-  ListItemText 
+  ListItemText,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  Paper
 } from "@mui/material"
+import { EBAY_CATEGORIES } from "../search/constants"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate"
 import AddIcon from "@mui/icons-material/Add"
 import SellIcon from "@mui/icons-material/Sell"
 import CloseIcon from "@mui/icons-material/Close"
+import StarsIcon from "@mui/icons-material/Stars"
+
 
 interface Props {
   onSend: (value: string, image?: string) => void
@@ -35,6 +42,9 @@ export default function ChatInput({
   // Menu State
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const openMenu = Boolean(anchorEl)
+
+  // Deals Modal State
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -80,8 +90,16 @@ export default function ChatInput({
 
   const handleDealsClick = () => {
     handleMenuClose()
-    onSend("Mostrami le migliori offerte del giorno su eBay 🏷️", undefined)
+    setIsCategoryModalOpen(true)
   }
+
+  const handleCategorySelect = (category: typeof EBAY_CATEGORIES[0]) => {
+    setIsCategoryModalOpen(false)
+    setTimeout(() => {
+      onSend(`Cerca le migliori offerte del giorno per la categoria ${category.name} (ID: ${category.id}) 🏷️`, undefined)
+    }, 100);
+  }
+
 
   const canSend = (!!value.trim() || !!image) && !disabled && !isProcessing
 
@@ -124,7 +142,10 @@ mt: -1,
           />
         </MenuItem>
         
-        <MenuItem onClick={handleDealsClick} sx={{ py: 1.5, px: 2 }}>
+        <MenuItem 
+          onClick={handleDealsClick} 
+          sx={{ py: 1.5, px: 2 }}
+        >
           <ListItemIcon sx={{ color: '#ef4444' }}>
             <SellIcon fontSize="small" />
           </ListItemIcon>
@@ -134,6 +155,8 @@ mt: -1,
           />
         </MenuItem>
       </Menu>
+
+
 
       {/* Image Preview */}
       {image && (
@@ -264,6 +287,90 @@ mt: -1,
       >
         Enter per inviare · Shift + Enter per andare a capo
       </Typography>
+
+      {/* Deals Category Modal */}
+      <Dialog 
+        open={isCategoryModalOpen} 
+        onClose={() => setIsCategoryModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "20px",
+            bgcolor: "var(--bg-primary)",
+            backgroundImage: "none",
+            boxShadow: "0 24px 48px -12px rgba(0,0,0,0.15)",
+            border: "1px solid var(--border-color)",
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          pt: 4, 
+          pb: 1.5, 
+          px: 4, 
+          color: "var(--text-primary)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 1
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <StarsIcon sx={{ color: '#ef4444', fontSize: 28 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: 24, letterSpacing: '-0.02em' }}>Scegli la categoria</Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: "var(--text-secondary)", fontWeight: 500, opacity: 0.8 }}>
+            L'agente cercherà le migliori offerte eBay per la categoria selezionata.
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 4, pb: 4, pt: 1 }}>
+          <Box sx={{ 
+            display: "grid", 
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, 
+            gap: 2, 
+            mt: 2 
+          }}>
+            {EBAY_CATEGORIES.map((cat) => (
+              <Paper
+                key={cat.id}
+                component="button"
+                onClick={() => handleCategorySelect(cat)}
+                elevation={0}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                  p: 2,
+                  textAlign: "left",
+                  bgcolor: "var(--bg-secondary)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                  fontFamily: "inherit",
+                  "&:hover": {
+                    bgcolor: "var(--bg-primary)",
+                    borderColor: "#ef4444",
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 8px 20px -8px rgba(239, 68, 68, 0.3)"
+                  }
+                }}
+              >
+                <Box sx={{ fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {cat.icon}
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", mb: 0.25 }}>
+                    {cat.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.2 }}>
+                    {cat.desc}
+                  </Typography>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+        </DialogContent>
+      </Dialog>
     </Box>
   )
-}
+}

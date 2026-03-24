@@ -23,7 +23,9 @@ interface ToolDataPatch {
 export function mapToolData(toolName: string, data: any): ToolDataPatch {
   switch (toolName) {
     case "get_ebay_deals":
-      return { deals: data.deals || data.items || data }
+      if (data && Array.isArray(data.deals)) return { deals: data }
+      if (data && Array.isArray(data.items)) return { deals: { ...data, deals: data.items } }
+      return { deals: data }
     case "search_products":
       return {
         results: data.results || [],
@@ -36,9 +38,9 @@ export function mapToolData(toolName: string, data: any): ToolDataPatch {
     case "compare_products":
       return { comparison: data }
     case "get_item_details":
-      return { itemDetails: data.data || data }
+      return { itemDetails: (data && data.data) ? data.data : data }
     case "get_shipping_costs":
-      return { shippingCosts: data.data || data }
+      return { shippingCosts: (data && data.data) ? data.data : data }
     case "market_trends":
       return { marketTrends: data }
     case "get_marketplace_metadata":

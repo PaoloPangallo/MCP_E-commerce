@@ -27,7 +27,7 @@ interface DealsDisplayProps {
   data: DealsData
 }
 
-const EBAY_CATEGORIES = [
+export const EBAY_CATEGORIES = [
   { id: "9355", name: "Smartphone", icon: "📱", desc: "Ultimi modelli e accessori" },
   { id: "111422", name: "Informatica", icon: "💻", desc: "Laptop, Tablet e Componenti" },
   { id: "1249", name: "Console & Giochi", icon: "🎮", desc: "PS5, Xbox, Switch e titoli" },

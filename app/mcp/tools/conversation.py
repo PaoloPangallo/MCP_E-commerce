@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Annotated, List
+from typing import Dict, Any, Annotated, List, Optional
 from pydantic import Field
 
 from app.mcp.core import mcp, _db_context, _build_context, _tool_error
@@ -56,7 +56,7 @@ async def conversation(
     llm_engine: Annotated[str, Field(description="L'engine LLM preferito (es 'ollama')")] = "ollama",
     session_id: Annotated[str, Field(description="ID di sessione utente (opzionale)")] = "",
     context_info: Annotated[str, Field(description="Contesto testuale estratto dalla memoria")] = "",
-    conversation_history: Annotated[list, Field(description="Lista di oggetti role/content precedenti")] = None
+    conversation_history: Annotated[Optional[List[Dict[str, str]]], Field(description="Lista di oggetti role/content precedenti")] = None
 ) -> Dict[str, Any]:
     try:
         with _db_context() as db:

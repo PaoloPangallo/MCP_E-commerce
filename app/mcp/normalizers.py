@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from app.utils.text import clean_text as _clean_text
+
 def _normalize_search_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     results = raw.get("results") or raw.get("items") or []
     top_result = results[0] if results else None
@@ -91,7 +92,6 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "sentiment_score": sentiment_score,
         "error": raw.get("error"),
         "summary": summary,
-        "raw": raw,
     }
 
 def _normalize_item_details_output(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -110,7 +110,6 @@ def _normalize_item_details_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "error": raw.get("error"),
         "message": raw.get("message"),
         "summary": summary,
-        "raw": raw,
     }
 
 
@@ -126,7 +125,6 @@ def _normalize_similar_items_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "results_count": count,
         "error": raw.get("error"),
         "summary": summary,
-        "raw": raw,
     }
 
 
@@ -144,7 +142,6 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "data": raw.get("data"),
         "error": raw.get("error"),
         "summary": summary,
-        "raw": raw,
     }
 
 import re
@@ -213,4 +210,3 @@ def extract_explicit_seller(text: str) -> str | None:
         return candidate
 
     return None
-

@@ -45,15 +45,21 @@ async def fetch_ebay_deals(
     if query:
         params["_nkw"] = query # eBay search query
     
-    # Se mancano sia query che category_id, usiamo una categoria di default (es: 9355 - Cellulari) 
-    # per evitare il 400 Bad Request di SerpApi dell'engine ebay.
+    # Se mancano sia query che category_id, usiamo una categoria di default
     effective_category = category_id
+    effective_query = query
     if not query and not category_id:
-        effective_category = "9355" # Default to Consumer Electronics / Cell Phones common category
+        effective_category = "9355"
         logger.info("No query or category provided for eBay deals. Using default category 9355.")
+    
+    # Se abbiamo una categoria ma non una query, dobbiamo fornire una query a SerpApi per evitare 400 Bad Request
+    if effective_category and not effective_query:
+        effective_query = "offerte"
 
+    if effective_query:
+        params["_nkw"] = effective_query
     if effective_category:
-        params["category_id"] = effective_category
+        params["_sacat"] = effective_category
 
     async with httpx.AsyncClient() as client:
         try:
@@ -62,29 +68,50 @@ async def fetch_ebay_deals(
             data = response.json()
             
             deals_data = data.get("deals", {})
-            if not deals_data or not deals_data.get("items"):
-                # If no direct deals section, try to look into results if any? 
-                # serpapi usually has a "deals" key for specific deal engines
-                logger.info("No 'deals' section found in SerpApi eBay response")
-                return None
-
             items = []
-            for item in deals_data.get("items", []):
-                items.append(DealItem(
-                    title=item.get("title", ""),
-                    link=item.get("link", ""),
-                    price=item.get("price", {}),
-                    old_price=item.get("old_price"),
-                    thumbnail=item.get("thumbnail"),
-                    product_id=item.get("product_id"),
-                    extensions=item.get("extensions", [])
-                ))
-
-            return DealsResult(
-                title=deals_data.get("title"),
-                subtitle=deals_data.get("subtitle"),
-                items=items
-            )
+            
+            # 1. Prova a estrarre deals "ufficiali" dalla pagina Deals
+            if deals_data and deals_data.get("items"):
+                for item in deals_data.get("items", []):
+                    items.append(DealItem(
+                        title=item.get("title", ""),
+                        link=item.get("link", ""),
+                        price=item.get("price", {}),
+                        old_price=item.get("old_price"),
+                        thumbnail=item.get("thumbnail"),
+                        product_id=item.get("product_id"),
+                        extensions=item.get("extensions", [])
+                    ))
+                return DealsResult(
+                    title=deals_data.get("title", "Offerte in Evidenza"),
+                    subtitle=deals_data.get("subtitle", ""),
+                    items=items
+                )
+            
+            # 2. Fallback strategico: usa organic_results se abbiamo cercato in una categoria specifica
+            organic = data.get("organic_results", [])
+            if organic:
+                logger.info("No explicit 'deals' section found, falling back to top organic results as deals.")
+                for item in organic[:20]:
+                    items.append(DealItem(
+                        title=item.get("title", ""),
+                        link=item.get("link", ""),
+                        price=item.get("price", {}),
+                        old_price=item.get("old_price"),
+                        thumbnail=item.get("thumbnail"),
+                        product_id=None,
+                        extensions=item.get("extensions", [])
+                    ))
+                
+                cat_name = effective_query if effective_query != "offerte" else "Selezionata"
+                return DealsResult(
+                    title=f"Migliori Offerte (Categoria {cat_name})",
+                    subtitle="Risultati top per la ricerca",
+                    items=items
+                )
+                
+            logger.info("No 'deals' or 'organic_results' found in SerpApi eBay response")
+            return None
 
         except Exception as e:
             logger.error(f"Error fetching deals from SerpApi: {e}")

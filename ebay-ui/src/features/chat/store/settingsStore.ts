@@ -18,7 +18,7 @@ interface SettingsState {
   loadSettingsFromAuth: (theme?: string, tone?: string, instructions?: string) => void
 }
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
+export const useSettingsStore = create<SettingsState>((set) => ({
   settings: {
     theme: 'light',
     conversationTone: 'neutral',

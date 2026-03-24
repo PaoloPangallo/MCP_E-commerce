@@ -220,21 +220,7 @@ export default function ChatLayout({
     setSnackbarMsg("Link della chat copiato negli appunti!")
     setSnackbarOpen(true)
   }
-
-
-  const handleThemeToggle = (mode: 'light' | 'dark') => {
-    if (mode === 'dark') {
-      document.body.classList.add('dark-mode')
-      setSnackbarMsg("Modalità scura attivata")
-    } else {
-      document.body.classList.remove('dark-mode')
-      setSnackbarMsg("Modalità chiara attivata")
-    }
-    setSnackbarOpen(true)
-  }
-
-
-  const handleClearMemory = () => {
+    const handleClearMemory = () => {
     if (
       confirm(
         "Vuoi svuotare la memoria dell'agente? La cronologia e le ricerche verranno cancellate."

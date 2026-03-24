@@ -51,6 +51,10 @@ function humanizeToolName(action?: string, input?: any) {
       return "Calcolo spedizione"
     case "get_marketplace_metadata":
       return "Ricerca metadati marketplace"
+    case "get_ebay_deals":
+      return "Ricerca offerte eBay"
+    case "market_trends":
+      return "Analisi trend di mercato"
     case "conversation":
       return "Azione conversazionale"
     case "finish":
