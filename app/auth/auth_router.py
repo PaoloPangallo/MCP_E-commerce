@@ -367,7 +367,23 @@ async def get_ebay_identity():
         "username": user_info.get("username"),
         "feedback_score": user_info.get("feedback_score"),
         "status": user_info.get("status"),
+        "site": user_info.get("site"),
+        "registration_date": user_info.get("registration_date"),
         "watchlist_items": watchlist_count,
         "token_configured": True,
     }
+
+from pydantic import BaseModel
+class MessageRequest(BaseModel):
+    item_id: str
+    body: str
+
+@router.post("/ebay/message")
+async def post_ebay_message(req: MessageRequest):
+    """Sends a message to a seller."""
+    from app.services.ebay_user import send_message_to_seller
+    res = await send_message_to_seller(req.item_id, req.body)
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res.get("message"))
+    return {"status": "success"}
 

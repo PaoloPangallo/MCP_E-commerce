@@ -140,6 +140,67 @@ async def add_to_ebay_watchlist(item_id: str) -> Dict[str, Any]:
     return {"success": False, "message": last_error or "Nessun ID valido trovato per eBay"}
 
 
+async def send_message_to_seller(item_id: str, body_text: str, question_type: str = "General") -> Dict[str, Any]:
+    """
+    Sends a message to a seller regarding a specific item.
+    Uses AddMemberMessageAAQToSeller Trading API.
+    """
+    token = (settings.EBAY_USER_TOKEN or "").strip()
+    if not token:
+        return {"success": False, "message": "EBAY_USER_TOKEN non configurato"}
+
+    # Extract numeric part just in case
+    candidates = []
+    if "|" in item_id:
+        parts = item_id.split("|")
+        if len(parts) >= 2: candidates.append(parts[1])
+    else:
+        candidates.append(item_id)
+    
+    target_id = candidates[0] if candidates else item_id
+
+    inner_xml = f"""
+        <ItemID>{target_id}</ItemID>
+        <MemberMessage>
+            <Body>{body_text}</Body>
+            <DisplayToPublic>false</DisplayToPublic>
+            <EmailCopyToSender>true</EmailCopyToSender>
+            <QuestionType>{question_type}</QuestionType>
+        </MemberMessage>
+    """
+    
+    xml = _xml_body("AddMemberMessageAAQToSeller", inner_xml)
+    
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                TRADING_API_URL,
+                headers=_base_headers("AddMemberMessageAAQToSeller"),
+                content=xml.encode("utf-8"),
+            )
+
+        root = ET.fromstring(resp.text)
+        ns = "{urn:ebay:apis:eBLBaseComponents}"
+        ack = (_find_text(root, "Ack", ns) or "").lower()
+
+        if ack in ("success", "warning"):
+            logger.info("eBay Message sent successfully | Item: %s", target_id)
+            return {"success": True}
+        
+        # Extract error
+        errors_el = root.find(f"{ns}Errors")
+        err_msg = "Errore sconosciuto da eBay"
+        if errors_el is not None:
+            err_msg = _find_text(errors_el, "LongMessage", ns) or ""
+            
+        logger.warning("Fallimento invio messaggio eBay | Msg: %s", err_msg)
+        return {"success": False, "message": err_msg}
+
+    except Exception as exc:
+        logger.exception("Eccezione durante invio messaggio eBay")
+        return {"success": False, "message": str(exc)}
+
+
 # ---------------------------------------------------------------------------
 # Watchlist — Remove
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import app.mcp.tools.conversation
 import app.mcp.tools.deals
 import app.mcp.tools.trends
 import app.mcp.tools.wishlist_tool
+import app.mcp.tools.contact_seller
 import app.mcp.resources
 
 __all__ = ["mcp", "configure_mcp"]

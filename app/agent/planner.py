@@ -16,7 +16,7 @@ from app.services.parser import extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends", "deals", "wishlist"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends", "deals", "wishlist", "contact_seller"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -83,6 +83,11 @@ MARKET_CUES = {
 WISHLIST_CUES = {
     "wishlist", "preferiti", "salva", "salvami", "aggiungi", "preferito", "lista", "desideri", "scelta", "voglio", "desiderio"
 }
+CONTACT_CUES = {
+    "contatta", "contattare", "messaggio", "messaggi", "scrivi", "scrivere", "scrivergli", "scriverle", "parla", "parlare",
+    "chiedere", "chiedi", "trattare", "tratta", "prezzo", "proposta", "comunicare", "comunica", "invia", "inviami",
+    "informazioni", "informazione", "info", "messaggiare", "contatto"
+}
 
 PERSONAL_PRONOUNS = {
     "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
@@ -118,12 +123,14 @@ class IntentEvidence:
     reasons: Dict[str, list[str]] = field(
         default_factory=lambda: {
             "product": [], "seller": [], "conversation": [], "comparison": [],
-            "shipping": [], "item_details": [], "metadata": [], "market_trends": [], "deals": [], "wishlist": []
+            "shipping": [], "item_details": [], "metadata": [], "market_trends": [], "deals": [], "wishlist": [],
+            "contact_seller": []
         }
     )
     market: float = 0.0
     deals: float = 0.0
     wishlist: float = 0.0
+    contact_seller: float = 0.0
 
     # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
     _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
@@ -138,6 +145,7 @@ class IntentEvidence:
         "metadata": "metadata",
         "market_trends": "market",
         "wishlist": "wishlist",
+        "contact_seller": "contact_seller",
     })
 
     def add(self, label: str, value: float, reason: str) -> None:
@@ -729,6 +737,11 @@ class ReactPlanner:
                 return "product_search", 1.0, IntentEvidence(product=1.0)
 
         evidence = self._score_query(memory.user_query or "", memory)
+        
+        # PRIORITÀ ASSOLUTA: Se l'utente vuole contattare, deve vincere su tutto
+        if evidence.contact_seller >= 0.5:
+            return "contact_seller", evidence.contact_seller, evidence
+            
         top, second = evidence.top_two()
         label, score = top
         margin = score - second[1]
@@ -751,6 +764,8 @@ class ReactPlanner:
             return label, getattr(evidence, "metadata", 0.0), evidence
         if label == "market_trends" and evidence.market >= self.intent_threshold:
             return label, evidence.market, evidence
+        if label == "contact_seller" and evidence.contact_seller >= 0.5:
+            return label, evidence.contact_seller, evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
         if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
@@ -817,6 +832,17 @@ class ReactPlanner:
             # Se la query è "aggiungi ai preferiti", deve avere un peso alto
             ev.add("wishlist", min(0.60 + 0.15 * wishlist_hits, 0.95), "wishlist_lexicon")
             setattr(ev, "wishlist_score", ev.wishlist)
+
+        contact_hits = len(token_set & CONTACT_CUES)
+        if contact_hits:
+            ev.add("contact_seller", min(0.65 + 0.15 * contact_hits, 0.95), "contact_lexicon")
+            
+            # Se abbiamo parole di contatto E un venditore esplicito, il segnale è fortissimo (0.95+)
+            if explicit_seller:
+                ev.add("contact_seller", 0.5, "contact_with_explicit_seller")
+                # AZZERIAMO la ricerca e l'analisi feedback: l'utente vuole SCRIVERE ora.
+                ev.seller = 0.0
+                ev.product = 0.0
 
         market_hits = len(token_set & MARKET_CUES)
         if market_hits:

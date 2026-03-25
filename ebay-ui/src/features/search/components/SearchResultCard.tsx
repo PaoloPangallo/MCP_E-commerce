@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Box, Button, Collapse, Link, Typography, Chip } from "@mui/material"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import LocalShippingIcon from "@mui/icons-material/LocalShipping"
@@ -9,6 +10,7 @@ import Inventory2Icon from "@mui/icons-material/Inventory2"
 import PersonSearchIcon from "@mui/icons-material/PersonSearch"
 import AnalyticsIcon from "@mui/icons-material/Analytics"
 import { Menu, MenuItem, ListItemIcon, ListItemText, IconButton } from "@mui/material"
+import ContactMailIcon from "@mui/icons-material/ContactMail"
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
@@ -71,6 +73,24 @@ export default function SearchResultCard({
     handleMenuClose()
     window.dispatchEvent(new CustomEvent("send-chat", { detail: prompt }))
   }
+
+  const handleContactSeller = (event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    handleMenuClose();
+    
+    // eBay contact link format: 
+    // https://contact.ebay.it/ws/eBayISAPI.dll?ContactUserNextGen&recipient=USERNAME&itemID=ITEMID
+    const seller = item.seller_name || "";
+    // ItemID extraction logic (use middle part for v1|...|... format if available)
+    let finalId = item.ebay_id;
+    if (item.ebay_id?.includes("|")) {
+      const parts = item.ebay_id.split("|");
+      if (parts.length >= 2) finalId = parts[1];
+    }
+    
+    const contactUrl = `https://www.ebay.it/cnt/IntermediatedFAQ?seller_name=${seller}&item_id=${finalId}`;
+    window.open(contactUrl, "_blank");
+  };
 
   const rankingPct = typeof item.ranking_score === "number" ? item.ranking_score : null
   const valuePct = (item as any).value_score ?? 0
@@ -174,6 +194,11 @@ export default function SearchResultCard({
               </MenuItem>
             )}
 
+            <MenuItem onClick={handleContactSeller} sx={{ py: 1.5, px: 2 }}>
+              <ListItemIcon sx={{ minWidth: 32 }}><ContactMailIcon sx={{ fontSize: 18, color: "var(--brand-primary)" }} /></ListItemIcon>
+              <ListItemText primary="Contatta Venditore" primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }} />
+            </MenuItem>
+
             <MenuItem onClick={(e) => triggerChat(`Analisi di mercato e storico prezzi per ${item.title}`, e)} sx={{ py: 1.5, px: 2, borderTop: "1px solid var(--border-color)" }}>
               <ListItemIcon sx={{ minWidth: 32 }}><AnalyticsIcon sx={{ fontSize: 18, color: "var(--brand-primary)" }} /></ListItemIcon>
               <ListItemText primary="Analisi Mercato" primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }} />
@@ -240,23 +265,48 @@ export default function SearchResultCard({
           </Box>
         )}
 
-        <Button
-          fullWidth
-          variant="outlined"
-          sx={{
-            mt: 0.5,
-            textTransform: "none",
-            borderRadius: "24px",
-            fontSize: 12,
-            fontWeight: 600,
-            borderColor: "var(--border-color)",
-            color: "var(--text-secondary)",
-            py: 0.75,
-            "&:hover": { borderColor: "var(--brand-primary)", color: "var(--brand-primary)", bgcolor: 'transparent' }
-          }}
-        >
-          Dettagli eBay <OpenInNewIcon sx={{ fontSize: 12, ml: 0.5 }} />
-        </Button>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, mt: 0.5 }}>
+          {item.url && (
+            <Button
+              fullWidth
+              variant="contained"
+              disableElevation
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              startIcon={<ShoppingCartIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                textTransform: "none",
+                borderRadius: "24px",
+                fontSize: 12,
+                fontWeight: 700,
+                bgcolor: "#0064d2",
+                color: "#fff",
+                py: 0.85,
+                "&:hover": { bgcolor: "#0053b3" }
+              }}
+            >
+              Acquista su eBay
+            </Button>
+          )}
+          <Button
+            fullWidth
+            variant="outlined"
+            sx={{
+              textTransform: "none",
+              borderRadius: "24px",
+              fontSize: 12,
+              fontWeight: 600,
+              borderColor: "var(--border-color)",
+              color: "var(--text-secondary)",
+              py: 0.75,
+              "&:hover": { borderColor: "var(--brand-primary)", color: "var(--brand-primary)", bgcolor: 'transparent' }
+            }}
+            onClick={() => item.url && window.open(item.url, '_blank')}
+          >
+            Dettagli <OpenInNewIcon sx={{ fontSize: 12, ml: 0.5 }} />
+          </Button>
+        </Box>
       </Box>
     )
   }
@@ -432,6 +482,29 @@ export default function SearchResultCard({
         )}
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+          {item.url && (
+            <Button
+              size="small"
+              variant="contained"
+              disableElevation
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              startIcon={<ShoppingCartIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                textTransform: "none",
+                borderRadius: "8px",
+                fontSize: 12,
+                fontWeight: 700,
+                bgcolor: "#0064d2",
+                color: "#fff",
+                px: 2,
+                "&:hover": { bgcolor: "#0053b3" }
+              }}
+            >
+              Acquista
+            </Button>
+          )}
           <Button
             size="small"
             variant="contained"

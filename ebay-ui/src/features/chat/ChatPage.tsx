@@ -31,6 +31,7 @@ export default function ChatPage() {
   const scrollContainerRef = useScrollContainer()
   const isAtBottomRef = useRef(true)
   const isAutoScrollingRef = useRef(false)
+  const openedLinksRef = useRef<Set<string>>(new Set())
 
   // Aggiorna se siamo vicini al fondo durante lo scroll dell'utente
   useEffect(() => {
@@ -80,11 +81,44 @@ export default function ChatPage() {
     return () => window.removeEventListener("send-chat", handleSendChat as EventListener)
   }, [handleSend])
 
-  const showWelcome = !hasSearches && chat.length <= 1
-
-  // Cast to the correct types — useChatSession may return unknown[] depending on its definition
+  // Cast to the correct types
   const typedSteps = (steps ?? []) as AgentStep[]
   const typedPlannedTasks = (plannedTasks ?? []) as PlannedTask[]
+
+  // EFFETTO: Apertura automatica del link contact_seller
+  useEffect(() => {
+    if (!running) {
+      // Quando il processo finisce, resettiamo i link aperti per la prossima query
+      return
+    }
+
+    // Cerchiamo passi di tipo contact_seller che hanno un link
+    // e che non abbiamo ancora "aperto" in questa esecuzione.
+    typedSteps.forEach((step: any) => {
+      const toolName = step.tool?.toLowerCase() || ""
+      const isContact = toolName.includes("contact_seller")
+      const resultData = step.observation_data?.data || step.observation_data
+      const contactUrl = resultData?.contact_url
+
+      if (isContact && contactUrl && !openedLinksRef.current.has(step.step.toString())) {
+        openedLinksRef.current.add(step.step.toString())
+        
+        // Piccola pausa per lasciare che l'utente veda il pill del tool prima del popup
+        setTimeout(() => {
+          window.open(contactUrl, "_blank")
+        }, 300)
+      }
+    })
+  }, [typedSteps, running])
+
+  // Reset del Set quando la query cambia o finisce
+  useEffect(() => {
+    if (!running) {
+      openedLinksRef.current = new Set()
+    }
+  }, [running])
+
+  const showWelcome = !hasSearches && chat.length <= 1
 
   return (
     <ChatLayout
