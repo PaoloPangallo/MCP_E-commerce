@@ -22,25 +22,11 @@ const VisionAnalysisCard: React.FC<VisionAnalysisCardProps> = ({
           mb: 3,
           borderRadius: "20px",
           background: "var(--bg-secondary)",
-          backdropFilter: "blur(10px)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.2)",
           position: "relative",
           overflow: "hidden"
         }}
       >
-        {/* Glow effect */}
-        <Box
-          sx={{
-            position: "absolute",
-            top: -50,
-            right: -50,
-            width: 150,
-            height: 150,
-            background: "radial-gradient(circle, rgba(0, 102, 255, 0.1) 0%, transparent 70%)",
-            zIndex: 0
-          }}
-        />
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2, position: "relative" }}>
           <Box
@@ -51,8 +37,8 @@ const VisionAnalysisCard: React.FC<VisionAnalysisCardProps> = ({
               width: 36,
               height: 36,
               borderRadius: "10px",
-              background: "linear-gradient(135deg, #0066FF 0%, #0044BB 100%)",
-              color: "white"
+              background: "var(--brand-primary)",
+              color: "var(--bg-primary)"
             }}
           >
             <VisibilityIcon sx={{ fontSize: 20 }} />
@@ -95,8 +81,8 @@ const VisionAnalysisCard: React.FC<VisionAnalysisCardProps> = ({
                   fontWeight: 500,
                   fontSize: "0.75rem",
                   "&:hover": {
-                    background: "rgba(255, 255, 255, 0.1)",
-                    borderColor: "#0066FF"
+                    background: "var(--bg-secondary)",
+                    borderColor: "var(--text-secondary)"
                   }
                 }}
               />

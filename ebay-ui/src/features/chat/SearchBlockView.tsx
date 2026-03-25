@@ -35,7 +35,6 @@ function CollapsibleSection({
         borderRadius: "16px", // Standardized to 16px
         overflow: "hidden",
         bgcolor: "var(--bg-primary)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
         transition: "all 0.2s ease"
       }}
     >

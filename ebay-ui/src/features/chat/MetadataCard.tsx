@@ -37,7 +37,6 @@ export default function MetadataCard({ data }: MetadataProps) {
         bgcolor: "var(--bg-primary)",
         overflow: "hidden",
         mb: 2,
-        boxShadow: "0 2px 4px -1px rgb(0 0 0 / 0.05)",
       }}
     >
       <Box p={2.5}>

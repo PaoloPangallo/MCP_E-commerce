@@ -146,15 +146,14 @@ export default function MessageBubble({
         <Box
           sx={{
             maxWidth: { xs: "88%", md: "72%" },
-            bgcolor: "var(--accent-primary)",
-            color: "var(--bg-primary)",
+            bgcolor: "var(--bg-secondary)",
+            color: "var(--text-primary)",
             px: 2,
             py: 1.25,
             borderRadius: "18px 18px 4px 18px",
             fontSize: "0.9375rem",
             lineHeight: 1.6,
-            wordBreak: "break-word",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.08)"
+            wordBreak: "break-word"
           }}
         >
           {image && (

@@ -59,23 +59,24 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
         sx={{ 
           mb: 4, 
           p: 3, 
-background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
-          color: "#fff",
-          boxShadow: "0 10px 25px -5px rgba(239, 68, 68, 0.3)",
+          background: "var(--bg-secondary)",
+          color: "var(--text-primary)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "16px",
           position: "relative",
           overflow: "hidden"
         }}
       >
         <Box sx={{ position: "relative", zIndex: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
-            <Avatar sx={{ bgcolor: "rgba(255,255,255,0.2)", width: 40, height: 40 }}>
-              <FlashOnIcon sx={{ color: "#fff" }} />
+            <Avatar sx={{ bgcolor: "var(--bg-primary)", width: 40, height: 40, border: "1px solid var(--border-color)" }}>
+              <FlashOnIcon sx={{ color: "var(--text-secondary)" }} />
             </Avatar>
             <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: "-0.02em" }}>
               {title || "Offerte eBay del Giorno"}
             </Typography>
           </Box>
-          <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.9)", fontWeight: 500, ml: 7.2 }}>
+          <Typography variant="body1" sx={{ color: "var(--text-secondary)", fontWeight: 500, ml: 7.2 }}>
             {subtitle || "Esplora i migliori sconti selezionati per te."}
           </Typography>
         </Box>
@@ -235,11 +236,10 @@ background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
                 position: "relative",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
-                  transform: "translateY(-8px)",
-                  boxShadow: "0 20px 40px -12px rgba(0,0,0,0.1)",
-                  borderColor: "#f97316",
+                  transform: "translateY(-4px)",
+                  borderColor: "var(--text-secondary)",
                   "& .deal-img": { transform: "scale(1.05)" },
-                  "& .view-btn": { bgcolor: "#f97316", color: "#fff" }
+                  "& .view-btn": { bgcolor: "var(--text-secondary)", color: "var(--bg-primary)" }
                 },
               }}
             >
@@ -250,15 +250,14 @@ background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
                   top: 16,
                   left: 16,
                   zIndex: 2,
-                  bgcolor: "#ef4444",
-                  color: "#fff",
+                  bgcolor: "var(--text-primary)",
+                  color: "var(--bg-primary)",
                   px: 1.5,
                   py: 0.5,
                   borderRadius: 2,
                   display: "flex",
                   alignItems: "center",
-                  gap: 0.5,
-                  boxShadow: "0 4px 10px rgba(239, 68, 68, 0.4)"
+                  gap: 0.5
                 }}
               >
                 <TrendingDownIcon sx={{ fontSize: 14 }} />

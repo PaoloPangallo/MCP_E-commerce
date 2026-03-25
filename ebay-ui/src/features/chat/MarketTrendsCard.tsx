@@ -229,13 +229,12 @@ export default function MarketTrendsCard({ data }: MarketTrendsCardProps) {
           bgcolor: "var(--bg-primary)",
           border: "1px solid var(--border-color)",
           borderRadius: "16px",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
           overflow: "hidden",
           position: "relative",
           "&::before": {
             content: '""', position: "absolute",
             top: 0, left: 0, width: "4px", height: "100%",
-            background: "var(--brand-gradient)",
+            background: "var(--border-color)",
           },
         }}
       >
@@ -396,7 +395,7 @@ export default function MarketTrendsCard({ data }: MarketTrendsCardProps) {
           {verdetto && (
             <Box sx={{
               mt: 3, p: 2.5,
-              background: "linear-gradient(135deg, var(--brand-soft) 0%, var(--brand-soft) 100%)",
+              background: "var(--bg-secondary)",
               borderRadius: 3,
               border: "1px dashed var(--border-color)",
               display: "flex", gap: 2, alignItems: "flex-start",
@@ -439,7 +438,7 @@ export default function MarketTrendsCard({ data }: MarketTrendsCardProps) {
                       border: `1px solid ${idx === 0 ? "var(--brand-primary)" : "var(--border-color)"}`,
                       textDecoration: "none",
                       transition: "all 0.18s ease",
-                      "&:hover": { borderColor: "var(--brand-primary)", boxShadow: "0 2px 10px rgba(0,0,0,0.1)", transform: "translateY(-1px)" },
+                      "&:hover": { borderColor: "var(--text-secondary)", transform: "none" },
                     }}
                   >
                     <Box sx={{
@@ -499,7 +498,7 @@ export default function MarketTrendsCard({ data }: MarketTrendsCardProps) {
                       p: 1.2, borderRadius: 2, bgcolor: "var(--bg-primary)",
                       border: "1px solid var(--border-color)", textDecoration: "none",
                       transition: "all 0.2s",
-                      "&:hover": { borderColor: "var(--brand-primary)", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", transform: "translateY(-1px)" },
+                      "&:hover": { borderColor: "var(--text-secondary)", transform: "none" },
                     }}
                   >
                     {item.thumbnail && (

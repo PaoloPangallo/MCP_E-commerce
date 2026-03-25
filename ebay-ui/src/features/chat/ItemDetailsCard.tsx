@@ -54,8 +54,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                 bgcolor: "var(--bg-primary)",
                 overflow: "hidden",
                 mt: 1,
-                mb: 2,
-                boxShadow: "0 4px 6px -1px var(--bg-secondary)"
+                mb: 2
             }}
         >
             <Box p={3}>
@@ -131,7 +130,8 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                             textTransform: "none",
                             boxShadow: "none",
                             bgcolor: "var(--accent-primary)",
-                            "&:hover": { bgcolor: "var(--accent-primary)", opacity: 0.9, boxShadow: "0 10px 15px -3px var(--bg-secondary)" }
+                            color: "var(--bg-primary)",
+                            "&:hover": { bgcolor: "var(--text-secondary)", opacity: 0.9, boxShadow: "none" }
                         }}
                     >
                         Vedi e Acquista su eBay
@@ -301,11 +301,10 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                         borderRadius: 3,
                                         border: "1px solid var(--border-color)",
                                         textDecoration: "none",
-                                        transition: "transform 0.2s, box-shadow 0.2s",
+                                        transition: "transform 0.2s, background-color 0.2s",
                                         "&:hover": {
-                                            transform: "translateY(-4px)",
-                                            boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)",
-                                            borderColor: "#e2e8f0"
+                                            transform: "none",
+                                            bgcolor: "var(--bg-secondary)"
                                         }
                                     }}
                                 >

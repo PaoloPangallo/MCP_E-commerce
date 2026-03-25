@@ -203,14 +203,12 @@ mt: -1,
           gap: 0.75,
           px: 1.5,
           py: 1,
-          borderRadius: "24px",
+          borderRadius: "16px",
           bgcolor: "var(--bg-primary)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
           transition: "all 0.2s ease",
           "&:focus-within": {
-            borderColor: "var(--text-primary)",
-            boxShadow: "0 8px 30px rgba(0, 0, 0, 0.08)"
+            borderColor: "var(--text-secondary)",
           }
         }}
       >
@@ -253,19 +251,17 @@ mt: -1,
           onClick={handleSend}
           disabled={!canSend}
           sx={{
-            width: 34,
-            height: 34,
+            width: 32,
+            height: 32,
             mb: 0.25,
             flexShrink: 0,
-            bgcolor: canSend ? "var(--text-primary)" : "var(--bg-secondary)",
-            color: canSend ? "var(--bg-primary)" : "var(--text-secondary)",
+            bgcolor: canSend ? "var(--bg-sidebar)" : "transparent",
+            color: canSend ? "var(--text-primary)" : "var(--text-secondary)",
             transition: "all 0.15s ease",
             "&:hover": {
-              bgcolor: canSend ? "var(--text-primary)" : "var(--bg-secondary)",
-              opacity: canSend ? 0.9 : 1
+              bgcolor: canSend ? "var(--border-color)" : "transparent",
             },
             "&.Mui-disabled": {
-              bgcolor: "var(--bg-secondary)",
               color: "var(--text-secondary)",
               opacity: 0.5
             }
@@ -349,9 +345,7 @@ mt: -1,
                   fontFamily: "inherit",
                   "&:hover": {
                     bgcolor: "var(--bg-primary)",
-                    borderColor: "#ef4444",
-                    transform: "translateY(-2px)",
-                    boxShadow: "0 8px 20px -8px rgba(239, 68, 68, 0.3)"
+                    borderColor: "var(--text-secondary)"
                   }
                 }}
               >

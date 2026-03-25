@@ -101,14 +101,13 @@ function SessionItem({
         <ListItemButton
           onClick={onClick}
           sx={{
-            borderRadius: 2,
+            borderRadius: 1.5,
             py: 0.875,
             px: collapsed ? 0 : 1.25,
             justifyContent: collapsed ? 'center' : 'flex-start',
             bgcolor: active ? "var(--bg-secondary)" : "transparent",
             "&:hover": {
-              bgcolor: "var(--bg-secondary)",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
+              bgcolor: "var(--bg-secondary)"
             },
             minHeight: 36
           }}
@@ -449,8 +448,6 @@ export default function ChatLayout({
         <Box
           sx={{
             height: 56,
-            borderBottom: '1px solid var(--border-color)',
-            opacity: 0.95, // Subtle softening
             display: 'flex',
             alignItems: 'center',
             px: 2,
@@ -559,7 +556,6 @@ export default function ChatLayout({
         {composer && (
           <Box
             sx={{
-              borderTop: "1px solid var(--border-color)",
               px: { xs: 1.5, md: 3 },
               pt: 1,
               pb: { xs: 1.5, md: 2 },

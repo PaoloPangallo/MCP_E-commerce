@@ -1,36 +1,36 @@
 :root {
   --bg-primary: #ffffff;
-  --bg-secondary: #fafafa;
-  --bg-sidebar: #f8fafc;
+  --bg-secondary: #f9fafb;
+  --bg-sidebar: #f9fafb;
   --text-primary: #111827;
   --text-secondary: #6b7280;
   --border-color: #e5e7eb;
   --accent-primary: #111827;
   
-  /* Brand Colors — purple premium */
-  --brand-primary: #7c3aed;
-  --brand-gradient: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
-  --brand-soft: rgba(124, 58, 237, 0.1);
+  /* Brand Colors — clean grayscale/monochrome */
+  --brand-primary: #111827;
+  --brand-gradient: none;
+  --brand-soft: #f3f4f6;
   --success: #16a34a;
-  --success-soft: rgba(22, 163, 74, 0.1);
+  --success-soft: #dcfce7;
   --danger: #ef4444;
-  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-bg: #ffffff;
 }
 
 body.dark-mode {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-sidebar: #0f172a;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --border-color: #334155;
-  --accent-primary: #38bdf8;
-  --brand-primary: #38bdf8; /* Light blue (Azzurro) */
-  --brand-gradient: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
-  --brand-soft: rgba(56, 189, 248, 0.15);
+  --bg-primary: #212121;
+  --bg-secondary: #2f2f2f;
+  --bg-sidebar: #171717;
+  --text-primary: #ececec;
+  --text-secondary: #a0a0a0;
+  --border-color: #424242;
+  --accent-primary: #ececec;
+  --brand-primary: #ececec;
+  --brand-gradient: none;
+  --brand-soft: #383838;
   --success: #4ade80;
   --success-soft: rgba(74, 222, 128, 0.15);
-  --glass-bg: rgba(15, 23, 42, 0.8);
+  --glass-bg: #212121;
 }
 
 * {
@@ -47,20 +47,18 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
-/* Premium Dropdown Styles */
+/* Clean Dropdown Styles */
 .premium-dropdown .ant-dropdown-menu {
-  background: var(--glass-bg) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
+  background: var(--bg-primary) !important;
   border: 1px solid var(--border-color) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
-  padding: 6px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  padding: 4px !important;
 }
 
 .premium-dropdown .ant-dropdown-menu-item {
-  border-radius: 10px !important;
-  padding: 10px 14px !important;
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
   margin-bottom: 2px !important;
   transition: all 0.2s ease !important;
   color: var(--text-primary) !important;

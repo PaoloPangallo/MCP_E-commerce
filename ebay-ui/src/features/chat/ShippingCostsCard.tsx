@@ -46,10 +46,9 @@ export default function ShippingCostsCard({ data }: ShippingCostsCardProps) {
       sx={{
         width: "100%",
         borderRadius: 4,
-        border: "1px solid #e1e7ef",
-        bgcolor: "#ffffff",
+        border: "1px solid var(--border-color)",
+        bgcolor: "var(--bg-primary)",
         overflow: "hidden",
-        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)",
       }}
     >
       {/* 🔹 HEADER & SUMMARY */}
@@ -61,8 +60,8 @@ export default function ShippingCostsCard({ data }: ShippingCostsCardProps) {
                 width: 42,
                 height: 42,
                 borderRadius: "12px",
-                bgcolor: "#2563eb",
-                color: "#fff",
+                bgcolor: "var(--brand-primary)",
+                color: "var(--bg-primary)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
