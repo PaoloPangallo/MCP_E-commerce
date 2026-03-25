@@ -5,6 +5,7 @@ import type { ChatEntry, Message } from "../features/chat/store/chatStore.ts"
 
 import { useAgentStream } from "../features/agent/hooks/useAgentStream.ts"
 import { useChatStore } from "../features/chat/store/chatStore.ts"
+import { useSettingsStore } from "../features/chat/store/settingsStore.ts"
 
 export function useChatSession() {
   // Data selectors — useShallow prevents re-renders when unrelated state changes
@@ -44,11 +45,21 @@ export function useChatSession() {
     sessionId: activeSessionId
   })
 
+  const refreshSettings = useSettingsStore(s => s.refreshSettings)
+
   // Watch for payload completion
   useEffect(() => {
     if (!finalPayload || running || !loadingQuery) return
     saveAgentResponse(loadingQuery, finalPayload)
-  }, [finalPayload, running, loadingQuery, saveAgentResponse])
+    
+    // Auto-refresh settings if the agent potentially updated them
+    const hasProfileUpdate = steps.some((s: any) => 
+      s.tool_calls?.some((tc: any) => tc.name === "update_user_preferences")
+    )
+    if (hasProfileUpdate) {
+      refreshSettings()
+    }
+  }, [finalPayload, running, loadingQuery, saveAgentResponse, steps, refreshSettings])
 
   // Ensure an active session is set on mount if missing
   useEffect(() => {

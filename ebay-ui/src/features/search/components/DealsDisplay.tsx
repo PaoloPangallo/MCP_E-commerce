@@ -22,6 +22,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp"
 import { useState } from "react"
 import type { DealsData } from "../types"
+import { WishlistToggleButton } from "../../chat/WishlistPanel"
 
 interface DealsDisplayProps {
   data: DealsData
@@ -264,6 +265,18 @@ export default function DealsDisplay({ data }: DealsDisplayProps) {
                 <Typography sx={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>
                   Sconto Top
                 </Typography>
+              </Box>
+
+              {/* Wishlist Toggle */}
+              <Box sx={{ position: "absolute", top: 12, right: 12, zIndex: 2 }}>
+                <WishlistToggleButton
+                  ebayId={deal.product_id || `deal-${idx}`}
+                  title={deal.title}
+                  price={deal.price.extracted}
+                  currency="EUR"
+                  imageUrl={deal.thumbnail}
+                  url={deal.link}
+                />
               </Box>
 
               {/* Image Container */}

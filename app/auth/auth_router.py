@@ -262,6 +262,8 @@ class UserPreferencesUpdate(BaseModel):
     theme: Optional[str] = None
     conversation_tone: Optional[str] = None
     custom_instructions: Optional[str] = None
+    favorite_brands: Optional[str] = None
+    price_preference: Optional[str] = None
 
 @router.patch("/me/preferences")
 def update_preferences(
@@ -276,6 +278,10 @@ def update_preferences(
             user.conversation_tone = request.conversation_tone
         if request.custom_instructions is not None:
             user.custom_instructions = request.custom_instructions
+        if request.favorite_brands is not None:
+            user.favorite_brands = request.favorite_brands
+        if request.price_preference is not None:
+            user.price_preference = request.price_preference
         
         db.commit()
         db.refresh(user)
@@ -283,7 +289,9 @@ def update_preferences(
             "status": "success", 
             "theme": user.theme,
             "conversation_tone": user.conversation_tone,
-            "custom_instructions": user.custom_instructions
+            "custom_instructions": user.custom_instructions,
+            "favorite_brands": user.favorite_brands,
+            "price_preference": user.price_preference
         }
     except Exception as e:
         db.rollback()

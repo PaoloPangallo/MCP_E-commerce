@@ -22,7 +22,7 @@ from app.services.rag.retriever import retrieve_context
 from app.services.rag.reranker import rerank_products
 from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
-from app.services.user_profiling import update_user_profile
+# from app.services.user_profiling import update_user_profile (Disabled: using explicit MCP updates)
 from app.services.ebay_metadata import get_return_policies
 from app.services.nlp_ner import extract_attributes_batch
 from app.services.rag.qdrant_store import index_search_items
@@ -574,14 +574,13 @@ async def run_search_pipeline(
     seller_docs = [d for d in rag_docs if d.get("type") == "seller_feedback"]
 
     # ============================================================
-    # 3) USER PROFILE UPDATE (Non-blocking enough)
+    # 3) USER PROFILE UPDATE (Disabled legacy automatic profiling)
     # ============================================================
-    logger.info("PIPELINE STEP 2: user_profile")
-    if user:
-        try:
-            update_user_profile(user, parsed, db)
-        except Exception:
-            logger.warning("User profiling update failed")
+    # if user:
+    #     try:
+    #         update_user_profile(user, parsed, db)
+    #     except Exception:
+    #         logger.warning("User profiling update failed")
 
     # ============================================================
     # 4) SELLER TRUST  (deve venire PRIMA del rerank per alimentarlo)

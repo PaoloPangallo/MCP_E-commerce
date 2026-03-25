@@ -140,12 +140,12 @@ export default function SettingsModal() {
         <Box>
           <Typography fontWeight={600} fontSize={15} gutterBottom>Istruzioni Personalizzate (GEM)</Typography>
           <Typography variant="body2" color="var(--text-secondary)" mb={2}>
-            Regole generali che l'agente deve sempre rispettare (es. "Rispondi sempre in inglese" o "Concentrati solo sui prodotti ricondizionati")
+            Regole generali che l'agente deve sempre rispettare (es. "Rispondi sempre in inglese")
           </Typography>
           <TextField
             fullWidth
             multiline
-            rows={3}
+            rows={2}
             placeholder="Le tue direttive..."
             value={localSettings.customInstructions}
             onChange={(e) => setLocalSettings({ ...localSettings, customInstructions: e.target.value })}
@@ -157,6 +157,47 @@ export default function SettingsModal() {
               }
             }}
           />
+        </Box>
+
+        <Divider sx={{ borderColor: 'var(--border-color)' }} />
+
+        {/* SHOPPING PROFILE (BRANDS & PRICE) */}
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography fontWeight={600} fontSize={15} gutterBottom>Brand Preferiti</Typography>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Nike, Apple, Sony..."
+              value={localSettings.favoriteBrands}
+              onChange={(e) => setLocalSettings({ ...localSettings, favoriteBrands: e.target.value })}
+              InputProps={{
+                sx: { 
+                    bgcolor: 'var(--bg-secondary)', 
+                    color: 'var(--text-primary)',
+                    '& fieldset': { borderColor: 'var(--border-color)' }
+                }
+              }}
+            />
+          </Box>
+          <Box sx={{ width: 120 }}>
+            <Typography fontWeight={600} fontSize={15} gutterBottom>Budget (€)</Typography>
+            <TextField
+              fullWidth
+              size="small"
+              type="number"
+              placeholder="es. 500"
+              value={localSettings.pricePreference}
+              onChange={(e) => setLocalSettings({ ...localSettings, pricePreference: e.target.value })}
+              InputProps={{
+                sx: { 
+                    bgcolor: 'var(--bg-secondary)', 
+                    color: 'var(--text-primary)',
+                    '& fieldset': { borderColor: 'var(--border-color)' }
+                }
+              }}
+            />
+          </Box>
         </Box>
 
         <Divider sx={{ borderColor: 'var(--border-color)' }} />

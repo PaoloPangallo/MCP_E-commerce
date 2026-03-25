@@ -14,6 +14,7 @@ import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
 import SellerInfo from "../../seller/SellerInfo.tsx"
 import ExplanationChips from "./ExplanationChips.tsx"
+import { WishlistToggleButton } from "../../chat/WishlistPanel"
 import type { SearchItem } from "../types"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -113,6 +114,19 @@ export default function SearchResultCard({
           ) : (
               <Typography variant="caption" color="text.disabled">No Image</Typography>
           )}
+
+          {/* Wishlist Toggle Button */}
+          <Box sx={{ position: "absolute", top: 8, right: 44, zIndex: 10 }}>
+            <WishlistToggleButton
+              ebayId={item.ebay_id || `search-${index}`}
+              title={item.title}
+              price={item.price}
+              currency={item.currency || "EUR"}
+              imageUrl={item.image_url}
+              url={item.url}
+              sellerName={item.seller_name}
+            />
+          </Box>
 
           {/* Restored Dropdown Menu */}
           <IconButton
@@ -307,6 +321,20 @@ export default function SearchResultCard({
              <Typography variant="caption" color="text.disabled">No img</Typography>
           </Box>
         )}
+        
+        {/* Wishlist Toggle Button (Overlay) */}
+        <Box sx={{ position: "absolute", top: 4, right: 4, zIndex: 5 }}>
+          <WishlistToggleButton
+            ebayId={item.ebay_id || `list-${index}`}
+            title={item.title}
+            price={item.price}
+            currency={item.currency || "EUR"}
+            imageUrl={item.image_url}
+            url={item.url}
+            sellerName={item.seller_name}
+            size="small"
+          />
+        </Box>
       </Box>
 
       <Box sx={{ flex: 1, minWidth: 0 }}>

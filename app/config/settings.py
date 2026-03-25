@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     ENV: str = "development"
+    EBAY_USER_TOKEN: str = ""
     EBAY_CLIENT_ID: str = ""
     EBAY_CLIENT_SECRET: str = ""
     EBAY_ENV: str = "sandbox"

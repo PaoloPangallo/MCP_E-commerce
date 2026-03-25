@@ -11,6 +11,7 @@ import {
   getCurrentUser
 } from "./authService"
 import { useSettingsStore } from "../features/chat/store/settingsStore"
+import { useWishlistStore } from "../features/chat/store/wishlistStore"
 
 export interface AuthUser {
   email: string
@@ -65,8 +66,12 @@ export function useAuth() {
           useSettingsStore.getState().loadSettingsFromAuth(
             (data as any).theme,
             (data as any).conversation_tone,
-            (data as any).custom_instructions
+            (data as any).custom_instructions,
+            (data as any).favorite_brands,
+            (data as any).price_preference
           )
+          // Load wishlist items when session is restored
+          useWishlistStore.getState().loadItems()
         } else {
           handleLogout()
         }
@@ -105,8 +110,12 @@ export function useAuth() {
       useSettingsStore.getState().loadSettingsFromAuth(
         (res as any).theme,
         (res as any).conversation_tone,
-        (res as any).custom_instructions
+        (res as any).custom_instructions,
+        (res as any).favorite_brands,
+        (res as any).price_preference
       )
+      // Load wishlist items after login
+      useWishlistStore.getState().loadItems()
 
       setLoadingUser(false)
     } catch (err: any) {
@@ -132,8 +141,12 @@ export function useAuth() {
       useSettingsStore.getState().loadSettingsFromAuth(
         (res as any).theme,
         (res as any).conversation_tone,
-        (res as any).custom_instructions
+        (res as any).custom_instructions,
+        (res as any).favorite_brands,
+        (res as any).price_preference
       )
+      // Load wishlist items after register
+      useWishlistStore.getState().loadItems()
 
       setLoadingUser(false)
     } catch (err: any) {

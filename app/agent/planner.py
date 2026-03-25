@@ -16,7 +16,7 @@ from app.services.parser import extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends", "deals"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends", "deals", "wishlist"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -80,6 +80,9 @@ MARKET_CUES = {
     "serpapi", "google", "prezzo", "medio", "prezzi", "medi", "interesse", "popolarità", "popolarita",
     "statistiche", "andamento prezzi", "prezzi online", "interesse di ricerca", "popolarità online"
 }
+WISHLIST_CUES = {
+    "wishlist", "preferiti", "salva", "salvami", "aggiungi", "preferito", "lista", "desideri", "scelta", "voglio", "desiderio"
+}
 
 PERSONAL_PRONOUNS = {
     "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
@@ -115,11 +118,12 @@ class IntentEvidence:
     reasons: Dict[str, list[str]] = field(
         default_factory=lambda: {
             "product": [], "seller": [], "conversation": [], "comparison": [],
-            "shipping": [], "item_details": [], "metadata": [], "market_trends": [], "deals": []
+            "shipping": [], "item_details": [], "metadata": [], "market_trends": [], "deals": [], "wishlist": []
         }
     )
     market: float = 0.0
     deals: float = 0.0
+    wishlist: float = 0.0
 
     # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
     _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
@@ -133,6 +137,7 @@ class IntentEvidence:
         "item_details": "item_details",
         "metadata": "metadata",
         "market_trends": "market",
+        "wishlist": "wishlist",
     })
 
     def add(self, label: str, value: float, reason: str) -> None:
@@ -154,6 +159,7 @@ class IntentEvidence:
                 ("metadata", self.metadata),
                 ("market_trends", self.market),
                 ("deals", getattr(self, "deals", 0.0)),
+                ("wishlist", getattr(self, "wishlist_score", 0.0)),
             ],
             key=lambda x: x[1],
             reverse=True,
@@ -183,7 +189,8 @@ class ReactPlanner:
             memory: AgentMemory,
             step_index: int,
             max_steps: int,
-            custom_instructions: Optional[str] = None
+            custom_instructions: Optional[str] = None,
+            tone: Optional[str] = None
     ) -> PlannerOutput:
         explicit_seller = extract_explicit_seller(memory.user_query)
         if explicit_seller and not memory.last_seller_name:
@@ -214,8 +221,8 @@ class ReactPlanner:
         deterministic = self._deterministic_decide(memory)
         if deterministic:
             return deterministic
-
-        llm_decision = await self._llm_decide(memory, step_index, max_steps, custom_instructions=custom_instructions)
+ 
+        llm_decision = await self._llm_decide(memory, step_index, max_steps, custom_instructions=custom_instructions, tone=tone)
         if llm_decision:
             return llm_decision
 
@@ -385,7 +392,8 @@ class ReactPlanner:
             memory: AgentMemory,
             step_index: int,
             max_steps: int,
-            custom_instructions: Optional[str] = None
+            custom_instructions: Optional[str] = None,
+            tone: Optional[str] = None
     ) -> Optional[PlannerOutput]:
         if self.llm_engine == "rule_based":
             return None
@@ -409,7 +417,8 @@ class ReactPlanner:
             step_index=step_index,
             max_steps=max_steps,
             tool_catalog=tool_catalog,
-            custom_instructions=custom_instructions
+            custom_instructions=custom_instructions,
+            tone=tone
         )
 
         raw = await self._call_llm(prompt)
@@ -613,6 +622,37 @@ class ReactPlanner:
                     action_input["query"] = q_clean
                     logger.info("Auto-extracted query for get_ebay_deals: %s", q_clean)
         
+        elif action == "manage_wishlist":
+            # Se l'azione è 'add' e manca ebay_id, proviamo a prenderlo dai top_results del scratchpad
+            if action_input.get("action") == "add" and not action_input.get("ebay_id"):
+                scratchpad = memory.scratchpad()
+                results = []
+                if isinstance(scratchpad, dict):
+                    results = scratchpad.get("results", [])
+                elif isinstance(scratchpad, list):
+                    # Cerca l'ultimo risultato di ricerca nel scratchpad
+                    for item in reversed(scratchpad):
+                        if item.get("tool") == "search_products":
+                            results = item.get("results", [])
+                            break
+                
+                if results and len(results) > 0:
+                    top = results[0]
+                    action_input["ebay_id"] = top.get("ebay_id")
+                    if not action_input.get("title"):
+                        action_input["title"] = top.get("title")
+                    if not action_input.get("price"):
+                        action_input["price"] = top.get("price")
+                    if not action_input.get("currency"):
+                        action_input["currency"] = top.get("currency")
+                    if not action_input.get("image_url"):
+                        action_input["image_url"] = top.get("image_url")
+                    if not action_input.get("url"):
+                        action_input["url"] = top.get("url")
+                    if not action_input.get("seller_name"):
+                        action_input["seller_name"] = top.get("seller_name")
+                    logger.info("Auto-extracted product details for manage_wishlist 'add' from scratchpad: %s", action_input["ebay_id"])
+
         return action_input
 
     def _intent_is_satisfied(self, memory: AgentMemory, intent: str) -> bool:
@@ -623,7 +663,7 @@ class ReactPlanner:
         if not tools:
             return memory.has_any_terminal_state()
 
-        if intent in {"hybrid", "shipping", "item_details"}:
+        if intent in {"hybrid", "shipping", "item_details", "wishlist"}:
             return all(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
@@ -657,6 +697,8 @@ class ReactPlanner:
             return ["market_trends"]
         if intent == "deals":
             return ["get_ebay_deals"]
+        if intent == "wishlist":
+            return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
         return []
 
     def _tool_state_is_terminal(self, memory: AgentMemory, tool_name: str) -> bool:
@@ -768,6 +810,13 @@ class ReactPlanner:
         metadata_hits = len(token_set & METADATA_CUES)
         if metadata_hits:
             ev.add("metadata", min(0.40 + 0.20 * metadata_hits, 0.9), "metadata_lexicon")
+
+        wishlist_hits = len(token_set & WISHLIST_CUES)
+        if wishlist_hits:
+            # Punteggio basato su parole come "salva", "wishlist", "preferiti"
+            # Se la query è "aggiungi ai preferiti", deve avere un peso alto
+            ev.add("wishlist", min(0.60 + 0.15 * wishlist_hits, 0.95), "wishlist_lexicon")
+            setattr(ev, "wishlist_score", ev.wishlist)
 
         market_hits = len(token_set & MARKET_CUES)
         if market_hits:

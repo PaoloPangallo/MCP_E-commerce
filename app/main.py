@@ -12,8 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.agent_stream import router as agent_stream_router
 from app.api.routes import router as search_router
 from app.api.seller import seller_router
+from app.api.wishlist import wishlist_router
 from app.auth.auth_router import router as auth_router
 from app.db.database import Base, engine
+from app.models import wishlist as _wishlist_model  # noqa: F401 – ensure table is registered
 from app.config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +39,13 @@ async def app_lifespan(app: FastAPI):
     logger.info("Pre-loading SentenceTransformer model...")
     await asyncio.to_thread(_preload_model)
     logger.info("SentenceTransformer model ready.")
+
+    # Create all tables at startup (including new wishlist table)
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables verified/created.")
+    except Exception as e:
+        logger.error("Failed to create database tables: %s", e)
 
     from app.db.redis import redis_client
     try:
@@ -121,6 +130,7 @@ app.include_router(agent_stream_router, prefix="/agent", tags=["Agent Stream"])
 app.include_router(search_router)
 app.include_router(seller_router)
 app.include_router(auth_router)
+app.include_router(wishlist_router)
 
 
 @app.get("/health")

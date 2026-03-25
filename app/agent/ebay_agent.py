@@ -252,7 +252,8 @@ class EbayReactAgent:
                         memory=memory,
                         step_index=step_index,
                         max_steps=max_steps,
-                        custom_instructions=getattr(self.user, "custom_instructions", None)
+                        custom_instructions=getattr(self.user, "custom_instructions", None),
+                        tone=getattr(self.user, "conversation_tone", None)
                     )
                 except Exception as exc:
                     logger.exception("Planner failed at step %s: %s", step_index, exc)
@@ -454,7 +455,8 @@ class EbayReactAgent:
                 user_query=memory.user_query,
                 scratchpad=memory.scratchpad(),
                 final_data=memory.final_data(),
-                custom_instructions=getattr(self.user, "custom_instructions", None)
+                custom_instructions=getattr(self.user, "custom_instructions", None),
+                tone=getattr(self.user, "conversation_tone", None)
             )
 
             got_any = False
@@ -503,7 +505,8 @@ class EbayReactAgent:
                 user_query=memory.user_query,
                 scratchpad=memory.scratchpad(),
                 final_data=memory.final_data(),
-                custom_instructions=getattr(self.user, "custom_instructions", None)
+                custom_instructions=getattr(self.user, "custom_instructions", None),
+                tone=getattr(self.user, "conversation_tone", None)
             )
             got_any = False
             async for chunk in self._call_final_llm_stream(comparison_prompt, llm_engine):
@@ -562,7 +565,8 @@ class EbayReactAgent:
             user_query=memory.user_query,
             scratchpad=memory.scratchpad(),
             final_data=memory.final_data(),
-            custom_instructions=getattr(self.user, "custom_instructions", None)
+            custom_instructions=getattr(self.user, "custom_instructions", None),
+            tone=getattr(self.user, "conversation_tone", None)
         )
 
         got_any = False

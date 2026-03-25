@@ -14,6 +14,7 @@ import {
   Snackbar,
   Alert,
   Divider,
+  Badge,
 } from "@mui/material"
 import { useTheme, styled } from "@mui/material/styles"
 import { useCallback, useMemo, useState } from "react"
@@ -29,13 +30,17 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import SearchIcon from "@mui/icons-material/Search"
 import ShareIcon from "@mui/icons-material/Share"
 import SettingsIcon from "@mui/icons-material/Settings"
+import FavoriteIcon from "@mui/icons-material/Favorite"
 
-import { useChatStore } from "./store/chatStore"
+import { useChatStore, type ChatSession } from "./store/chatStore"
 import { useSidebarStore, type SidebarState } from "./store/sidebarStore"
 import { useSettingsStore } from "./store/settingsStore"
 import { useScrollContainerProvider } from "./ScrollContainerContext"
 import AuthPanel from "../../auth/ui/AuthPanel"
 import SettingsModal from "./SettingsModal"
+import ProfileBadge from "./ProfileBadge"
+import WishlistPanel from "./WishlistPanel"
+import { useWishlistStore } from "./store/wishlistStore"
 
 interface Props {
   children: React.ReactNode
@@ -191,11 +196,42 @@ export default function ChatLayout({
   const [searchQuery, setSearchQuery] = useState("")
   const [snackbarOpen, setSnackbarOpen] = useState(false)
   const [snackbarMsg, setSnackbarMsg] = useState("")
+  const [wishlistOpen, setWishlistOpen] = useState(false)
+
+  const wishlistItems = useWishlistStore((s) => s.items)
 
   const filteredSessions = useMemo(() => {
     if (!searchQuery) return sessions
     return sessions.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
   }, [sessions, searchQuery])
+
+  const groupSessionsByDate = (sessionsToGroup: ChatSession[]) => {
+    const groups: { [key: string]: any[] } = {
+      "Oggi": [],
+      "Ieri": [],
+      "Ultimi 7 giorni": [],
+      "Più vecchi": []
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const sevenDaysAgo = new Date(today)
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    sessionsToGroup.forEach(session => {
+      const date = new Date(session.createdAt || Date.now())
+      if (date >= today) groups["Oggi"].push(session)
+      else if (date >= yesterday) groups["Ieri"].push(session)
+      else if (date >= sevenDaysAgo) groups["Ultimi 7 giorni"].push(session)
+      else groups["Più vecchi"].push(session)
+    })
+
+    return Object.entries(groups).filter(([_, items]) => items.length > 0)
+  }
+
+  const groupedSessions = groupSessionsByDate(filteredSessions)
 
   const activeSession = sessions.find(
     (s) => s.id === (activeSessionId || sessions[0]?.id)
@@ -348,27 +384,39 @@ export default function ChatLayout({
         {sidebarTopSlot ?? <AuthPanel />}
       </Box>
 
+      {/* PROFILE BADGE */}
+      <ProfileBadge />
+
       {/* HISTORY */}
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: 'hidden', pb: 1 }}>
-        {filteredSessions.length > 0 && (
-          <>
-            <SidebarSectionTitle collapsed={isCollapsed}>Recenti</SidebarSectionTitle>
-            <List dense disablePadding>
-              {filteredSessions.map((session) => (
-                <SessionItem
-                  key={session.id}
-                  title={session.title}
-                  active={(activeSessionId || sessions[0]?.id) === session.id}
-                  collapsed={isCollapsed}
-                  onClick={() => {
-                    switchSession(session.id)
-                    if (isMobile) setMobileOpen(false)
-                  }}
-                  onDelete={() => deleteSession(session.id)}
-                />
-              ))}
-            </List>
-          </>
+        {groupedSessions.length > 0 ? (
+          groupedSessions.map(([title, items]) => (
+            <Box key={title} sx={{ mb: 1 }}>
+              <SidebarSectionTitle collapsed={isCollapsed}>{title}</SidebarSectionTitle>
+              <List dense disablePadding>
+                {items.map((session) => (
+                  <SessionItem
+                    key={session.id}
+                    title={session.title}
+                    active={(activeSessionId || sessions[0]?.id) === session.id}
+                    collapsed={isCollapsed}
+                    onClick={() => {
+                      switchSession(session.id)
+                      if (isMobile) setMobileOpen(false)
+                    }}
+                    onDelete={() => deleteSession(session.id)}
+                  />
+                ))}
+              </List>
+            </Box>
+          ))
+        ) : (
+          <Box sx={{ p: 3, textAlign: 'center', opacity: 0.5, mt: 4 }}>
+            <ChatBubbleOutlineIcon sx={{ fontSize: 40, mb: 1, color: 'var(--text-secondary)' }} />
+            <Typography sx={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {searchQuery ? "Nessun risultato" : "Nessuna chat ancora"}
+            </Typography>
+          </Box>
         )}
       </Box>
 
@@ -508,6 +556,14 @@ export default function ChatLayout({
 
           {/* Right — actions */}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1 }}>
+
+            <Tooltip title="Wishlist">
+              <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={() => setWishlistOpen(true)}>
+                <Badge badgeContent={wishlistItems.length} color="error" sx={{ "& .MuiBadge-badge": { fontSize: 10, height: 16, minWidth: 16 } }}>
+                  <FavoriteIcon sx={{ fontSize: 18 }} />
+                </Badge>
+              </IconButton>
+            </Tooltip>
 
             <Tooltip title="Impostazioni">
               <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={() => setSettingsOpen(true)}>
@@ -698,6 +754,31 @@ export default function ChatLayout({
       </Snackbar>
 
       <SettingsModal />
+
+      <Drawer
+        anchor="right"
+        open={wishlistOpen}
+        onClose={() => setWishlistOpen(false)}
+        SlideProps={{ timeout: 500 }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              bgcolor: "rgba(0, 0, 0, 0.1)",
+              backdropFilter: "blur(4px)",
+            }
+          }
+        }}
+        sx={{
+          "& .MuiDrawer-paper": {
+            bgcolor: "transparent",
+            boxShadow: "none",
+            border: "none",
+            overflow: "visible"
+          }
+        }}
+      >
+        <WishlistPanel onClose={() => setWishlistOpen(false)} />
+      </Drawer>
     </Box>
   )
 }

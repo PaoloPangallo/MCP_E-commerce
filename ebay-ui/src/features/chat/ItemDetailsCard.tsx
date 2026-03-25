@@ -17,6 +17,7 @@ import ImageIcon from "@mui/icons-material/Image"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import DOMPurify from "dompurify"
 import type { ItemDetailsData } from "../search/types"
+import { WishlistToggleButton } from "./WishlistPanel"
 
 interface ItemDetailsCardProps {
     data: ItemDetailsData
@@ -59,10 +60,22 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
         >
             <Box p={3}>
                 {/* Header with Title & Price */}
-                <Box mb={3}>
-                    <Typography variant="h6" fontWeight={700} sx={{ color: "var(--text-primary)", mb: 1, lineHeight: 1.2 }}>
-                        {title || "Dettagli Prodotto"}
-                    </Typography>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                        <Typography variant="h6" fontWeight={700} sx={{ color: "var(--text-primary)", lineHeight: 1.2, pr: 2 }}>
+                            {title || "Dettagli Prodotto"}
+                        </Typography>
+                        <WishlistToggleButton
+                            ebayId={data.item_id || ""}
+                            title={title}
+                            price={price?.value}
+                            currency={price?.currency}
+                            condition={condition}
+                            imageUrl={mainImageUrl}
+                            url={item_url}
+                            size="medium"
+                        />
+                    </Box>
+
                     <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
                         <Typography variant="h5" fontWeight={800} color="var(--accent-primary)">
                             {priceValue}
@@ -76,7 +89,6 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                         )}
                         {brand && <Chip label={brand} size="small" variant="outlined" sx={{ fontWeight: 500 }} />}
                     </Box>
-                </Box>
 
                 {/* Hero Image & Gallery */}
                 {allImages.length > 0 && (
