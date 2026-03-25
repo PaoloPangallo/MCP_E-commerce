@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Dict, Any, Annotated, Optional
 from pydantic import Field
@@ -5,6 +6,44 @@ from pydantic import Field
 from app.mcp.core import mcp, _db_context, resolve_user_by_id
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_to_ebay_watchlist(action: str, ebay_id: str) -> None:
+    """
+    Fire-and-forget coroutine that syncs the DB operation to the real eBay Watchlist.
+    Runs in the background so it never blocks the MCP response.
+    """
+    from app.services.ebay_user import add_to_ebay_watchlist, remove_from_ebay_watchlist
+    from app.config.settings import settings
+
+    if not settings.EBAY_USER_TOKEN:
+        return  # Skip silently if no user token configured
+
+    async def _run():
+        try:
+            if action == "add":
+                result = await add_to_ebay_watchlist(ebay_id)
+                if result.get("success"):
+                    logger.info("eBay Watchlist synced [add] | item=%s", ebay_id)
+                else:
+                    logger.warning("eBay Watchlist sync failed [add] | item=%s | %s", ebay_id, result.get("message"))
+            elif action == "remove":
+                result = await remove_from_ebay_watchlist(ebay_id)
+                if result.get("success"):
+                    logger.info("eBay Watchlist synced [remove] | item=%s", ebay_id)
+                else:
+                    logger.warning("eBay Watchlist sync failed [remove] | item=%s | %s", ebay_id, result.get("message"))
+        except Exception as exc:
+            logger.error("eBay Watchlist sync exception | %s", exc)
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(_run())
+        else:
+            loop.run_until_complete(_run())
+    except Exception:
+        pass
 
 
 @mcp.tool(
@@ -33,6 +72,7 @@ async def manage_wishlist(
 ) -> Dict[str, Any]:
     """
     Add, remove, or list wishlist items for the current user.
+    Also syncs with the real eBay Watchlist in the background when EBAY_USER_TOKEN is set.
     """
     if not session_id:
         return {"status": "error", "message": "session_id non può essere vuoto."}
@@ -102,6 +142,9 @@ async def manage_wishlist(
 
                 logger.info("Wishlist item added: user=%s, ebay_id=%s", user.id, ebay_id)
 
+                # Sync to real eBay Watchlist in background
+                _sync_to_ebay_watchlist("add", ebay_id)
+
                 # Notify resource update for frontend sync
                 try:
                     await mcp.notify_resource_updated(f"wishlist://{session_id}")
@@ -111,7 +154,7 @@ async def manage_wishlist(
                 return {
                     "status": "ok",
                     "action": "add",
-                    "message": f"✅ '{title or ebay_id}' aggiunto alla tua wishlist!",
+                    "message": f"✅ '{title or ebay_id}' aggiunto alla tua wishlist e alla Watchlist eBay!",
                     "item_id": item.id,
                     "_backend": "mcp"
                 }
@@ -132,6 +175,9 @@ async def manage_wishlist(
                 db.commit()
                 logger.info("Wishlist item removed: user=%s, ebay_id=%s", user.id, ebay_id)
 
+                # Sync to real eBay Watchlist in background
+                _sync_to_ebay_watchlist("remove", ebay_id)
+
                 try:
                     await mcp.notify_resource_updated(f"wishlist://{session_id}")
                 except Exception as notify_exc:
@@ -140,7 +186,7 @@ async def manage_wishlist(
                 return {
                     "status": "ok",
                     "action": "remove",
-                    "message": f"🗑️ Prodotto rimosso dalla tua wishlist.",
+                    "message": f"🗑️ Prodotto rimosso dalla tua wishlist e dalla Watchlist eBay.",
                     "_backend": "mcp"
                 }
 

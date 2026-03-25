@@ -59,7 +59,6 @@ async def app_lifespan(app: FastAPI):
     logger.info("eBay shared HTTP client initialized.")
 
     from sqlalchemy import text
-    from app.db.database import engine
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))

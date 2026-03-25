@@ -4,7 +4,10 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import time
+import logging
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
@@ -328,3 +331,43 @@ async def recover_password(request: RecoverRequest, db: Session = Depends(get_db
     if not user:
          return {"status": "error", "message": "Se l'utente esiste, un'email è stata inviata."}
     return {"status": "success", "message": "Se l'utente esiste, un'email è stata inviata."}
+
+
+# ---------------------------------------------------
+# EBAY ACCOUNT INFO (real user token)
+# ---------------------------------------------------
+
+@router.get("/ebay/me")
+async def get_ebay_identity():
+    """
+    Returns the authenticated eBay user's public profile info using the
+    EBAY_USER_TOKEN from the .env file.
+    This does NOT require our own JWT — it's a server-side call.
+    """
+    from app.services.ebay_user import get_ebay_user_info, get_ebay_watchlist
+    from app.config.settings import settings
+
+    logger.info("Accesso endpoint /auth/ebay/me | Token presente: %s", bool(settings.EBAY_USER_TOKEN))
+
+    if not settings.EBAY_USER_TOKEN:
+        raise HTTPException(status_code=503, detail="EBAY_USER_TOKEN non configurato.")
+
+    user_info = await get_ebay_user_info()
+    if not user_info:
+        raise HTTPException(status_code=502, detail="Impossibile recuperare le info da eBay. Il token potrebbe essere scaduto.")
+
+    # Also fetch watchlist count for the badge
+    try:
+        watchlist = await get_ebay_watchlist(entries_per_page=1)
+        watchlist_count = len(watchlist)  # partial count from first page
+    except Exception:
+        watchlist_count = None
+
+    return {
+        "username": user_info.get("username"),
+        "feedback_score": user_info.get("feedback_score"),
+        "status": user_info.get("status"),
+        "watchlist_items": watchlist_count,
+        "token_configured": True,
+    }
+

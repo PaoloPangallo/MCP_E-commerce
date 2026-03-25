@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import asyncio
 
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
@@ -12,6 +13,26 @@ from app.models.wishlist import WishlistItem
 logger = logging.getLogger(__name__)
 
 wishlist_router = APIRouter(prefix="/wishlist", tags=["Wishlist"])
+
+
+async def _sync_to_ebay_task(action: str, ebay_id: str):
+    """Utility to run eBay sync as a background task via asyncio."""
+    from app.services.ebay_user import add_to_ebay_watchlist, remove_from_ebay_watchlist
+    from app.config.settings import settings
+
+    if not settings.EBAY_USER_TOKEN:
+        logger.warning("EBAY_USER_TOKEN non configurato, skip sync.")
+        return
+
+    try:
+        if action == "add":
+            logger.info("Avvio sync eBay: ADD %s", ebay_id)
+            await add_to_ebay_watchlist(ebay_id)
+        elif action == "remove":
+            logger.info("Avvio sync eBay: REMOVE %s", ebay_id)
+            await remove_from_ebay_watchlist(ebay_id)
+    except Exception as e:
+        logger.error("Error syncing to eBay in background: %s", e)
 
 
 class AddItemRequest(BaseModel):
@@ -26,7 +47,7 @@ class AddItemRequest(BaseModel):
 
 
 @wishlist_router.get("")
-def list_wishlist(user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def list_wishlist(user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Return all wishlist items for the current user."""
     items = (
         db.query(WishlistItem)
@@ -55,7 +76,7 @@ def list_wishlist(user=Depends(get_current_user), db: Session = Depends(get_db))
 
 
 @wishlist_router.post("")
-def add_to_wishlist(
+async def add_to_wishlist(
     body: AddItemRequest,
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -84,11 +105,15 @@ def add_to_wishlist(
     db.commit()
     db.refresh(item)
     logger.info("Wishlist item added via REST: user=%s, ebay_id=%s", user.id, body.ebay_id)
+
+    # Launch background task properly
+    asyncio.create_task(_sync_to_ebay_task("add", body.ebay_id))
+
     return {"status": "added", "id": item.id}
 
 
 @wishlist_router.delete("/{ebay_id}")
-def remove_from_wishlist(
+async def remove_from_wishlist(
     ebay_id: str,
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -104,4 +129,8 @@ def remove_from_wishlist(
     db.delete(item)
     db.commit()
     logger.info("Wishlist item removed via REST: user=%s, ebay_id=%s", user.id, ebay_id)
+
+    # Launch background task properly
+    asyncio.create_task(_sync_to_ebay_task("remove", ebay_id))
+
     return {"status": "removed"}

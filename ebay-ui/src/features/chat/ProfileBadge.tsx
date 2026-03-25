@@ -2,13 +2,39 @@ import { Box, Typography, Chip, Tooltip } from "@mui/material"
 import { useSettingsStore } from "./store/settingsStore"
 import LocalOfferIcon from "@mui/icons-material/LocalOffer"
 import MonetizationOnIcon from "@mui/icons-material/MonetizationOn"
+import EbayIcon from "@mui/icons-material/ShoppingBag"
+import { useEffect, useState } from "react"
+import { API_BASE, apiFetch } from "../../api/apiClient"
+
+interface EbayInfo {
+  username?: string
+  feedback_score?: string
+  watchlist_items?: number
+}
 
 export default function ProfileBadge() {
   const { settings } = useSettingsStore()
-  
+  const [ebayInfo, setEbayInfo] = useState<EbayInfo | null>(null)
+
+  useEffect(() => {
+    console.log("[ProfileBadge] Fetching eBay identity from:", `${API_BASE}/auth/ebay/me`);
+    
+    // Use the robust apiFetch instead of raw fetch
+    apiFetch<EbayInfo>("/auth/ebay/me")
+      .then(data => { 
+        if (data) {
+          console.log("[ProfileBadge] eBay identity received:", data.username);
+          setEbayInfo(data);
+        }
+      })
+      .catch(err => {
+        console.error("[ProfileBadge] Failed to fetch eBay identity:", err);
+      })
+  }, [])
+
   const isEmpty = !settings.favoriteBrands && !settings.pricePreference
   
-  if (isEmpty) {
+  if (isEmpty && !ebayInfo) {
     return (
       <Box
         sx={{
@@ -36,7 +62,7 @@ export default function ProfileBadge() {
     )
   }
 
-  const brands = settings.favoriteBrands.split(",").filter(b => b.trim()).slice(0, 3)
+  const brands = settings.favoriteBrands ? settings.favoriteBrands.split(",").filter(b => b.trim()).slice(0, 3) : []
 
   return (
     <Box
@@ -66,6 +92,33 @@ export default function ProfileBadge() {
       >
         Profilo Shopping
       </Typography>
+
+      {/* eBay Identity */}
+      {ebayInfo?.username && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+          <EbayIcon sx={{ fontSize: 14, color: "#0064d2" }} />
+          <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#0064d2" }}>
+            {ebayInfo.username}
+          </Typography>
+          {ebayInfo.feedback_score && (
+            <Tooltip title="Feedback score eBay">
+              <Chip
+                label={`⭐ ${ebayInfo.feedback_score}`}
+                size="small"
+                sx={{
+                  height: 18,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  bgcolor: "rgba(0, 100, 210, 0.08)",
+                  color: "#0064d2",
+                  border: "none",
+                  "& .MuiChip-label": { px: 0.75 }
+                }}
+              />
+            </Tooltip>
+          )}
+        </Box>
+      )}
 
       {/* Brands */}
       {brands.length > 0 && (
