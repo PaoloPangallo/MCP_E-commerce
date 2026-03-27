@@ -377,6 +377,8 @@ class RequestState:
     market_trends_payload: Optional[Dict[str, Any]] = None
     deals_payload: Optional[Dict[str, Any]] = None
     contact_seller_payload: Optional[Dict[str, Any]] = None
+    contact_seller_playwright_payload: Optional[Dict[str, Any]] = None
+    mcp_mode: str = "standard"
     vision_description: Optional[str] = None
     final_answer: Optional[str] = None
 
@@ -500,6 +502,10 @@ class RequestState:
         if observation.tool == "contact_seller" and observation.ok:
             if isinstance(observation.data, dict):
                 self.contact_seller_payload = observation.data
+
+        if observation.tool == "contact_seller_playwright" and observation.ok:
+            if isinstance(observation.data, dict):
+                self.contact_seller_playwright_payload = observation.data
 
     def _apply_compare_payload(self, payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
@@ -650,6 +656,8 @@ class RequestState:
             "metadata": self.metadata_payload,
             "deals": self.deals_payload,
             "contact_seller": self.contact_seller_payload,
+            "contact_seller_playwright": self.contact_seller_playwright_payload,
+            "mcp_mode": self.mcp_mode,
             "tool_calls": dict(self.tool_call_counts),
             "llm_calls": dict(self.llm_call_counts),
             "tool_states": self.tool_state_summaries(),
@@ -680,6 +688,7 @@ class RequestState:
             "market_trends": self.market_trends_payload,
             "deals": self.deals_payload,
             "contact_seller": self.contact_seller_payload,
+            "contact_seller_playwright": self.contact_seller_playwright_payload,
             "top_result": compact_top,
             "last_seller_name": self.last_seller_name,
             "search_analysis": self.search_analysis,
