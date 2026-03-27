@@ -53,27 +53,6 @@ export default function ProfileBadge() {
 
   const isEmpty = !settings.favoriteBrands && !settings.pricePreference
   
-  if (isEmpty && !ebayInfo) {
-    return (
-      <Box
-        sx={{
-          mx: 2, mt: 1, mb: 2, p: 2,
-          borderRadius: 2,
-          bgcolor: "transparent",
-          border: "1px dashed var(--border-color)",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-          opacity: 0.6, transition: "all 0.2s ease",
-          "&:hover": { bgcolor: "rgba(0,0,0,0.02)", opacity: 1 }
-        }}
-      >
-        <MonetizationOnIcon sx={{ fontSize: 20, color: "var(--text-secondary)" }} />
-        <Typography sx={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textAlign: "center" }}>
-          Configura il tuo profilo shopping per ricerche personalizzate
-        </Typography>
-      </Box>
-    )
-  }
-
   const brands = settings.favoriteBrands
     ? settings.favoriteBrands.split(",").filter(b => b.trim()).slice(0, 3)
     : []
@@ -105,6 +84,27 @@ export default function ProfileBadge() {
   }, [lastSearch])
 
   const activeContextBudget = activeContext ? contextualBudgetsMap[activeContext] : null
+
+  if (isEmpty && !ebayInfo) {
+    return (
+      <Box
+        sx={{
+          mx: 2, mt: 1, mb: 2, p: 2,
+          borderRadius: 2,
+          bgcolor: "transparent",
+          border: "1px dashed var(--border-color)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+          opacity: 0.6, transition: "all 0.2s ease",
+          "&:hover": { bgcolor: "rgba(0,0,0,0.02)", opacity: 1 }
+        }}
+      >
+        <MonetizationOnIcon sx={{ fontSize: 20, color: "var(--text-secondary)" }} />
+        <Typography sx={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textAlign: "center" }}>
+          Configura il tuo profilo shopping per ricerche personalizzate
+        </Typography>
+      </Box>
+    )
+  }
 
   return (
     <Box

@@ -134,7 +134,7 @@ async def register(
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
-        contextual_budgets=user.contextual_budgets,
+        contextual_budgets=getattr(user, "contextual_budgets", None),
     )
 
 
@@ -191,7 +191,7 @@ async def login(
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
-        contextual_budgets=user.contextual_budgets,
+        contextual_budgets=getattr(user, "contextual_budgets", None),
     )
 
 
@@ -236,7 +236,7 @@ async def token(
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
-        contextual_budgets=user.contextual_budgets,
+        contextual_budgets=getattr(user, "contextual_budgets", None),
     )
 
 
@@ -264,7 +264,7 @@ def get_me(user: User = Depends(get_current_user)):
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
-        contextual_budgets=user.contextual_budgets,
+        contextual_budgets=getattr(user, "contextual_budgets", None),
     )
 
 class UserPreferencesUpdate(BaseModel):
@@ -304,7 +304,7 @@ def update_preferences(
             "custom_instructions": user.custom_instructions,
             "favorite_brands": user.favorite_brands,
             "price_preference": user.price_preference,
-            "contextual_budgets": user.contextual_budgets
+            "contextual_budgets": getattr(user, "contextual_budgets", None)
         }
     except Exception as e:
         db.rollback()

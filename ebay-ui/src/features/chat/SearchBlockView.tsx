@@ -1,6 +1,7 @@
 import { useState, memo } from "react"
-import { Box, Collapse, Paper, Typography } from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
+import { Button, Box, Collapse, Paper, Typography, Fab, Zoom } from "@mui/material"
 import type { SearchBlock } from "../search/types.ts"
 import { ThinkingPill } from "../agent/components/ThinkingPill.tsx"
 import ItemDetailsCard from "./ItemDetailsCard.tsx"
@@ -97,6 +98,35 @@ const SearchBlockView = memo(function SearchBlockView({
   search: SearchBlock,
   hideTrace?: boolean 
 }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectable, setSelectable] = useState(false)
+
+  const handleSelect = (id: string) => {
+    if (id === "__TOGGLE_MODE__") {
+      setSelectable(!selectable)
+      if (selectable) setSelectedIds([])
+      return
+    }
+
+    setSelectedIds(prev => 
+      prev.includes(id) 
+        ? prev.filter(item => item !== id) 
+        : [...prev, id].slice(0, 4) // Max 4 items for comparison
+    )
+  }
+
+  const handleCompare = () => {
+    if (selectedIds.length < 2) return
+    window.dispatchEvent(
+      new CustomEvent("send-chat", {
+        detail: `Confronta questi prodotti (ID): ${selectedIds.join(", ")}`,
+      })
+    )
+    // Optional: reset selection after sending
+    // setSelectedIds([])
+    // setSelectable(false)
+  }
+
   const hasSeller = !!search.seller_summary?.seller_name
   const hasResults = Array.isArray(search.results) && search.results.length > 0
   const hasComparison =
@@ -225,11 +255,46 @@ const SearchBlockView = memo(function SearchBlockView({
           count={search.results.length} 
           defaultOpen={true}
         >
-          <Box sx={{ p: 2 }}>
-            <SearchResultList results={search.results} />
+          <Box sx={{ p: 2, position: "relative" }}>
+            <SearchResultList 
+              results={search.results} 
+              selectable={selectable}
+              selectedIds={selectedIds}
+              onSelect={handleSelect}
+            />
           </Box>
         </CollapsibleSection>
       )}
+
+      {/* 🔹 FLOATING ACTION BUTTON FOR COMPARISON */}
+      <Zoom in={selectable && selectedIds.length >= 2}>
+        <Fab
+          variant="extended"
+          color="primary"
+          onClick={handleCompare}
+          sx={{
+            position: "fixed",
+            bottom: 32,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1000,
+            textTransform: "none",
+            boxShadow: "0 8px 32px rgba(0, 100, 210, 0.4)",
+            fontWeight: 700,
+            gap: 1,
+            px: 3,
+            bgcolor: "var(--brand-primary)",
+            "&:hover": {
+              bgcolor: "var(--brand-primary)",
+              opacity: 0.9,
+              transform: "translateX(-50%) translateY(-2px)"
+            }
+          }}
+        >
+          <CompareArrowsIcon />
+          Confronta Selezionati ({selectedIds.length})
+        </Fab>
+      </Zoom>
 
       {search.item_details && <ItemDetailsCard data={search.item_details} />}
 

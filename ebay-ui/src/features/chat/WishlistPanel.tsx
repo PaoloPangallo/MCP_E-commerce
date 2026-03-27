@@ -153,6 +153,8 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                     }}
                   />
                   <ListItemText
+                    primaryTypographyProps={{ component: 'div' }}
+                    secondaryTypographyProps={{ component: 'div' }}
                     primary={
                       <Typography
                         component="a"

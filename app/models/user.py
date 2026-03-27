@@ -64,6 +64,11 @@ class User(Base):
         nullable=False
     )
 
+    contextual_budgets = Column(
+        String(2000), # JSON encoded category/brand budgets
+        nullable=True
+    )
+
     # -------------------------
     # Metadata
     # -------------------------

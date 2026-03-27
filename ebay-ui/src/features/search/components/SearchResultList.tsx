@@ -3,6 +3,7 @@ import { Box, Typography, Button } from "@mui/material"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GppGoodIcon from "@mui/icons-material/GppGood"
 import ListIcon from "@mui/icons-material/List"
+import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
 
 import SearchResultCard from "./SearchResultCard"
 import FilterSidebar from "./FilterSidebar"
@@ -11,6 +12,9 @@ import type { SearchItem } from "../types"
 interface Props {
   results?: SearchItem[]
   aspect_distributions?: any[]
+  selectable?: boolean
+  selectedIds?: string[]
+  onSelect?: (id: string) => void
 }
 
 function getTopTrust(results: SearchItem[]) {
@@ -23,6 +27,9 @@ function getTopTrust(results: SearchItem[]) {
 export default function SearchResultList({
   results = [],
   aspect_distributions = [],
+  selectable = false,
+  selectedIds = [],
+  onSelect
 }: Props) {
   const [visibleCount, setVisibleCount] = useState(5)
 
@@ -99,12 +106,23 @@ export default function SearchResultList({
             </Typography>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <TrendingUpIcon sx={{ fontSize: 14, color: "var(--brand-primary)" }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>
-              AI Sorted
-            </Typography>
-          </Box>
+          <Button
+            size="small"
+            onClick={() => onSelect?.("__TOGGLE_MODE__")}
+            startIcon={<CompareArrowsIcon sx={{ fontSize: 14 }} />}
+            sx={{
+              textTransform: 'none',
+              fontSize: 11,
+              fontWeight: 700,
+              color: selectable ? "var(--brand-primary)" : "var(--text-secondary)",
+              bgcolor: selectable ? "var(--brand-soft)" : "transparent",
+              borderRadius: "6px",
+              px: 1,
+              "&:hover": { bgcolor: selectable ? "var(--brand-soft)" : "rgba(0,0,0,0.05)" }
+            }}
+          >
+            {selectable ? "SELEZIONE ATTIVA" : "CONFRONTA"}
+          </Button>
         </Box>
 
         {topTrust !== null && (
@@ -125,6 +143,9 @@ export default function SearchResultList({
             item={item}
             variant="list"
             index={index}
+            selectable={selectable}
+            isSelected={selectedIds.includes(item.ebay_id || "")}
+            onSelect={onSelect}
           />
         ))}
       </Box>

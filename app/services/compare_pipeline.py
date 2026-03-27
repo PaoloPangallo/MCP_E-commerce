@@ -129,61 +129,88 @@ async def run_compare_pipeline(
     llm_engine: str = "ollama",
     max_queries: int = 4,
     session_id: Optional[str] = None,
+    ebay_ids: Optional[List[str]] = None,
     fetch_shipping: bool = True,
     shipping_country: str = "IT",
 ) -> Dict[str, Any]:
     """
     Run up to `max_queries` searches in parallel and compare their top results.
-
-    Args:
-        queries:          List of product search strings to compare.
-        db:               SQLAlchemy session.
-        llm_engine:       LLM backend for query parsing.
-        fetch_shipping:   If True, also fetch cheapest shipping for each candidate.
-        shipping_country: ISO country code for shipping estimates.
-
-    Returns:
-        A dict with:
-            - candidates: list of scored candidates (with shipping info)
-            - winner: the winning candidate
-            - winner_reason: human-readable explanation
-            - comparison_matrix: full data matrix for display
     """
-    queries = [q.strip() for q in queries if q and q.strip()][:max_queries]
+    queries = [q.strip() for q in queries if q and q.strip()] if queries else []
+    ebay_ids = [i.strip() for i in ebay_ids if i and i.strip()] if ebay_ids else []
 
-    if len(queries) < 2:
+    if len(queries) < 2 and len(ebay_ids) < 2:
         return {
             "status": "error",
-            "error": "Servono almeno 2 query per confrontare i prodotti.",
+            "error": "Servono almeno 2 prodotti (tramite query o ID) per il confronto.",
         }
 
-    # ── Run all searches in parallel ────────────────────────────────────
-    search_tasks = [
-        _run_single_search(q, db, llm_engine, session_id=session_id)
-        for q in queries
-    ]
-    raw_results: List[Dict[str, Any]] = await asyncio.gather(*search_tasks, return_exceptions=False)
+    # ── Resolve input: Queries or Explicit IDs ───────────────────────────
+    resolved_candidates: List[Dict[str, Any]] = []
+
+    if ebay_ids:
+        # Fetch specific items by ID
+        from app.services.ebay import get_item_details
+        id_tasks = [get_item_details(eid) for eid in ebay_ids[:max_queries]]
+        raw_items = await asyncio.gather(*id_tasks, return_exceptions=True)
+        
+        for i, item in enumerate(raw_items):
+            if isinstance(item, Exception) or item is None:
+                continue
+            
+            # Re-normalize to the format expected by the pipeline
+            # Note: get_item_details returns more fields, we map them back
+            resolved_candidates.append({
+                "query": f"ID:{item.get('item_id')}",
+                "ebay_id": item.get("item_id"),
+                "title": item.get("title", "N/A"),
+                "price": float(item.get("price", {}).get("value") or 0),
+                "currency": item.get("price", {}).get("currency", "EUR"),
+                "condition": item.get("condition", "N/A"),
+                "seller_name": item.get("seller", {}).get("username"),
+                "seller_rating": float(item.get("seller", {}).get("feedbackPercentage") or 0),
+                "trust_score": float(item.get("seller", {}).get("feedbackPercentage") or 100) / 100.0, # Guess trust from rating if missing
+                "ranking_score": 1.0, # Direct selection has max relevance
+                "url": item.get("item_url"),
+                "image_url": item.get("image", {}).get("imageUrl"),
+            })
+    else:
+        # Run all searches in parallel
+        search_tasks = [
+            _run_single_search(q, db, llm_engine, session_id=session_id)
+            for q in queries
+        ]
+        raw_results: List[Dict[str, Any]] = await asyncio.gather(*search_tasks, return_exceptions=False)
+        
+        for raw in raw_results:
+            top = raw.get("top")
+            if top is None:
+                continue
+            resolved_candidates.append({
+                "query": raw["query"],
+                "ebay_id": top.get("ebay_id"),
+                "title": top.get("title", "N/A"),
+                "price": top.get("price"),
+                "currency": top.get("currency", "EUR"),
+                "condition": top.get("condition", "N/A"),
+                "seller_name": top.get("seller_name"),
+                "seller_rating": top.get("seller_rating"),
+                "trust_score": top.get("trust_score"),
+                "ranking_score": top.get("ranking_score"),
+                "url": top.get("url"),
+                "image_url": top.get("image_url"),
+            })
 
     # ── Extract top items ────────────────────────────────────────────────
-    candidates = []
-    for raw in raw_results:
-        top = raw.get("top")
-        if top is None:
-            continue
-        candidates.append({
-            "query": raw["query"],
-            "ebay_id": top.get("ebay_id"),
-            "title": top.get("title", "N/A"),
-            "price": top.get("price"),
-            "currency": top.get("currency", "EUR"),
-            "condition": top.get("condition", "N/A"),
-            "seller_name": top.get("seller_name"),
-            "seller_rating": top.get("seller_rating"),
-            "trust_score": top.get("trust_score"),
-            "ranking_score": top.get("ranking_score"),
-            "url": top.get("url"),
-            "image_url": top.get("image_url"),
-        })
+    candidates = resolved_candidates
+
+    if not candidates:
+        return {
+            "status": "no_data",
+            "error": "Nessun prodotto trovato per il confronto.",
+            "queries_tried": queries if not ebay_ids else [],
+            "ids_tried": ebay_ids or [],
+        }
 
     if not candidates:
         return {

@@ -15,7 +15,8 @@ engine = create_engine(DATABASE_URL)
 def run_migration():
     commands = [
         "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS previous_price FLOAT;",
-        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;"
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS contextual_budgets VARCHAR(2000);"
     ]
     
     with engine.connect() as conn:

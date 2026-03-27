@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Annotated
+from typing import Dict, Any, Annotated, Optional
 from pydantic import Field
 
 from app.mcp.core import mcp, _db_context, _build_context, _tool_error
@@ -100,26 +100,30 @@ async def profile_query(
     ),
 )
 async def compare_products(
-    queries: Annotated[str, Field(description="Stringa con le query da confrontare separate da virgola (es. 'nike air max, adidas ultraboost')")],
+    queries: Annotated[Optional[str], Field(description="Stringa con le query da confrontare separate da virgola (es. 'nike air max, adidas ultraboost')")] = None,
+    ebay_ids: Annotated[Optional[str], Field(description="Lista di eBay ID specifici da confrontare separati da virgola")] = None,
     llm_engine: Annotated[str, Field(description="Engine LLM da utilizzare per l'analisi (es. 'ollama')")] = "ollama",
     session_id: Annotated[str, Field(description="ID di sessione utente")] = ""
 ) -> Dict[str, Any]:
     try:
-        sep_queries = [q.strip() for q in queries.replace(";", ",").split(",") if q.strip()]
+        sep_queries = [q.strip() for q in queries.replace(";", ",").split(",") if q.strip()] if queries else []
+        sep_ids = [i.strip() for i in ebay_ids.split(",") if i.strip()] if ebay_ids else []
 
-        if len(sep_queries) < 2:
+        if not sep_queries and not sep_ids:
             return _tool_error(
-                error="Fornisci almeno 2 query separate da virgola per confrontare i prodotti.",
+                error="Fornisci almeno 2 prodotti tramite query o ID per il confronto.",
                 example="iphone 13, samsung galaxy s22",
             )
 
         with _db_context() as db:
             context = _build_context(db=db, llm_engine=llm_engine, session_id=session_id)
-            logger.info("MCP TOOL compare_products START | queries=%s", queries)
+            logger.info("MCP TOOL compare_products START | queries=%s | ids=%s", queries, ebay_ids)
             result = await run_compare_pipeline(
                 queries=sep_queries,
+                ebay_ids=sep_ids,
                 db=db,
-                llm_engine=llm_engine
+                llm_engine=llm_engine,
+                session_id=session_id
             )
             result["_backend"] = "mcp"
             logger.info("MCP TOOL compare_products END")

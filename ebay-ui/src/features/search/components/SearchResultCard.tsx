@@ -11,6 +11,9 @@ import PersonSearchIcon from "@mui/icons-material/PersonSearch"
 import AnalyticsIcon from "@mui/icons-material/Analytics"
 import { Menu, MenuItem, ListItemIcon, ListItemText, IconButton } from "@mui/material"
 import ContactMailIcon from "@mui/icons-material/ContactMail"
+import CheckCircleIcon from "@mui/icons-material/CheckCircle"
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
+import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
@@ -47,11 +50,17 @@ function ScoreBar({ label, score, color }: { label: string, score: number, color
 export default function SearchResultCard({ 
   item, 
   variant = 'list',
-  index = 0
+  index = 0,
+  selectable = false,
+  isSelected = false,
+  onSelect
 }: { 
   item: SearchItem, 
   variant?: 'list' | 'compact',
-  index?: number
+  index?: number,
+  selectable?: boolean,
+  isSelected?: boolean,
+  onSelect?: (id: string) => void
 }) {
   const [imageError, setImageError] = useState(false)
   const [sellerOpen, setSellerOpen] = useState(false)
@@ -106,21 +115,24 @@ export default function SearchResultCard({
           flexShrink: 0,
           borderRadius: "16px",
           bgcolor: "var(--bg-primary)",
-          border: "1px solid var(--border-color)",
-          p: 2,
-          display: "flex",
-          flexDirection: "column",
-          gap: 1.5,
-          transition: "all 0.2s ease",
+          borderColor: isSelected ? "var(--brand-primary)" : "var(--border-color)",
+          boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 12px 24px rgba(0,0,0,0.15)" : "none",
           "&:hover": {
             transform: "translateY(-4px)",
-            boxShadow: "0 12px 24px rgba(0,0,0,0.1)",
+            boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 16px 32px rgba(0,0,0,0.2)" : "0 12px 24px rgba(0,0,0,0.1)",
             borderColor: "var(--brand-primary)"
           },
           cursor: "pointer",
-          scrollSnapAlign: "start"
+          scrollSnapAlign: "start",
+          position: "relative"
         }}
-        onClick={() => item.url && window.open(item.url, '_blank')}
+        onClick={() => {
+          if (selectable && onSelect) {
+            onSelect(item.ebay_id || "");
+          } else if (item.url) {
+            window.open(item.url, '_blank');
+          }
+        }}
       >
         <Box sx={{ position: "relative", width: "100%", aspectRatio: "4/3", borderRadius: "10px", overflow: "hidden", bgcolor: "var(--bg-secondary)", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {!imageError && item.image_url ? (
@@ -147,6 +159,36 @@ export default function SearchResultCard({
               sellerName={item.seller_name}
             />
           </Box>
+
+          {/* Selection Overlay for Compact View */}
+          {selectable && (
+             <Box 
+               sx={{ 
+                 position: "absolute", 
+                 top: 8, 
+                 left: 8, 
+                 zIndex: 20,
+                 bgcolor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.8)",
+                 color: isSelected ? "#fff" : "var(--text-secondary)",
+                 borderRadius: "50%",
+                 width: 28,
+                 height: 28,
+                 display: "flex",
+                 alignItems: "center",
+                 justifyContent: "center",
+                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                 border: `2px solid ${isSelected ? "#fff" : "transparent"}`,
+                 transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+                 "&:hover": { transform: "scale(1.1)" }
+               }}
+               onClick={(e) => {
+                 e.stopPropagation();
+                 onSelect?.(item.ebay_id || "");
+               }}
+             >
+               {isSelected ? <CheckCircleIcon sx={{ fontSize: 18 }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 18 }} />}
+             </Box>
+          )}
 
           {/* Restored Dropdown Menu */}
           <IconButton
@@ -206,7 +248,7 @@ export default function SearchResultCard({
           </Menu>
 
 
-          {index < 2 && rankingPct && rankingPct > 0.6 && (
+          {!selectable && index < 2 && rankingPct && rankingPct > 0.6 && (
             <Chip
               label="PICK"
               size="small"
@@ -329,8 +371,46 @@ export default function SearchResultCard({
         borderBottom: "1px solid var(--border-color)",
         "&:last-child": { borderBottom: "none" },
         "&:first-of-type": { pt: 0.5 },
+        position: "relative",
+        transition: "all 0.2s ease",
+        px: selectable ? 2 : 0,
+        mx: selectable ? -2 : 0,
+        borderRadius: "12px",
+        bgcolor: isSelected ? "rgba(0, 100, 210, 0.04)" : "transparent",
+        "&:hover": {
+          bgcolor: isSelected ? "rgba(0, 100, 210, 0.08)" : "rgba(0, 0, 0, 0.02)"
+        }
+      }}
+      onClick={() => {
+        if (selectable && onSelect) {
+          onSelect(item.ebay_id || "");
+        }
       }}
     >
+      {/* Selection Indicator for List View */}
+      {selectable && (
+        <Box 
+          sx={{ 
+            position: "absolute", 
+            top: 12, 
+            left: 12, 
+            zIndex: 20,
+            bgcolor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.9)",
+            color: isSelected ? "#fff" : "var(--text-secondary)",
+            borderRadius: "50%",
+            width: 24,
+            height: 24,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+            border: `2px solid ${isSelected ? "#fff" : "transparent"}`,
+          }}
+        >
+          {isSelected ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 16 }} />}
+        </Box>
+      )}
+
       <Box
         component={item.url ? "a" : "div"}
         href={item.url}
