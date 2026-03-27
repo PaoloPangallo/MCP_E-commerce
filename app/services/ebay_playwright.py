@@ -2,13 +2,19 @@
 ebay_playwright.py
 Servizio di browser scraping per eBay.it usando Playwright.
 Non dipende dall'API eBay: naviga la pagina pubblica con un browser headless reale.
+
+NOTA WINDOWS: Playwright richiede ProactorEventLoop per lanciare sottoprocessi.
+Uvicorn usa SelectorEventLoop su Windows, quindi eseguiamo Playwright in un
+thread dedicato con il proprio ProactorEventLoop.
 """
 
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import re
+import sys
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -19,10 +25,7 @@ logger = logging.getLogger(__name__)
 
 EBAY_SEARCH_URL = "https://www.ebay.it/sch/i.html?_nkw={query}&_ipg=48&LH_BIN=1"
 
-# Selettore container prodotto su eBay.it (ispezionato da HTML live)
 _PRODUCT_CONTAINER = "li:has(.su-card-container)"
-
-# Child selectors dentro ogni card
 _LINK_SEL      = "a.s-card__link"
 _TITLE_SEL     = ".s-card__title span, .s-card__title"
 _PRICE_SEL     = ".s-card__price .s-price-format, .s-card__price"
@@ -31,6 +34,11 @@ _CONDITION_SEL = ".s-card__specifics-list"
 _SHIPPING_SEL  = ".s-card__delivery"
 _SELLER_SEL    = ".s-card__seller-info"
 _LOCATION_SEL  = ".s-card__item-location"
+
+# Thread pool dedicato: Playwright gira nel suo thread con ProactorEventLoop
+_PLAYWRIGHT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="playwright"
+)
 
 
 # ─────────────────────────────────────────────
@@ -48,43 +56,19 @@ def _parse_price(raw: str) -> Optional[float]:
 
 
 # ─────────────────────────────────────────────
-# Core scraping function
+# Core async scraping (deve girare in ProactorEventLoop)
 # ─────────────────────────────────────────────
 
-async def scrape_ebay_search(
+async def _async_scrape(
     query: str,
-    max_results: int = 10,
-    headless: bool = True,
-    timeout_ms: int = 25_000,
+    max_results: int,
+    headless: bool,
+    timeout_ms: int,
 ) -> List[Dict[str, Any]]:
-    """
-    Naviga su eBay.it e ritorna una lista di prodotti trovati.
-
-    Args:
-        query:       Testo da cercare su eBay.
-        max_results: Numero massimo di risultati da restituire (default 10).
-        headless:    Se True, lancia il browser senza UI (default True).
-        timeout_ms:  Timeout in ms per il caricamento della pagina.
-
-    Returns:
-        Lista di dict con campi: title, price, price_raw, url,
-        image_url, condition, seller, location, shipping.
-    """
+    """Logica Playwright pura — chiamare solo da dentro un ProactorEventLoop."""
     try:
         from playwright.async_api import async_playwright
-        import sys
-        import asyncio
-        if sys.platform == 'win32':
-             # Playwright requires ProactorEventLoop on Windows for subprocesses
-             try:
-                 asyncio.get_child_watcher() 
-             except (NotImplementedError, AttributeError):
-                 # Se siamo su Windows e asyncio.create_subprocess_exec fallisce,
-                 # è spesso colpa del loop Selector vs Proactor.
-                 pass
-
     except ImportError as exc:
-        logger.error("Playwright non disponibile: %s", exc)
         raise RuntimeError(
             "Playwright non è installato. Esegui: pip install playwright && playwright install chromium"
         ) from exc
@@ -93,9 +77,10 @@ async def scrape_ebay_search(
     logger.info("Playwright scraper | url=%s | max_results=%d", url, max_results)
 
     results: List[Dict[str, Any]] = []
+    _launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        browser = await p.chromium.launch(headless=headless, args=_launch_args)
         context = await browser.new_context(
             locale="it-IT",
             user_agent=(
@@ -107,11 +92,10 @@ async def scrape_ebay_search(
         page = await context.new_page()
 
         try:
-            await page.goto(url, timeout=timeout_ms, wait_until="networkidle")
+            await page.goto(url, timeout=timeout_ms, wait_until="load")
         except Exception as exc:
-            logger.warning("Playwright: goto networkidle timeout, proceeding anyway | %s", exc)
+            logger.warning("Playwright: goto load timeout, proceeding anyway | %s", exc)
 
-        # Aspetta che almeno una card prodotto sia visibile
         try:
             await page.wait_for_selector(".su-card-container", timeout=10_000)
         except Exception as exc:
@@ -119,7 +103,6 @@ async def scrape_ebay_search(
             await browser.close()
             return results
 
-        # Prendi tutti gli li che contengono una card prodotto
         items = await page.query_selector_all(_PRODUCT_CONTAINER)
         logger.info("Playwright: trovati %d elementi prodotto", len(items))
 
@@ -128,52 +111,41 @@ async def scrape_ebay_search(
                 break
 
             try:
-                # --- URL (anchor principale) ---
                 link_el = await item.query_selector(_LINK_SEL)
                 if not link_el:
-                    # Fallback: qualsiasi anchor col link ad un item eBay
                     link_el = await item.query_selector("a[href*='/itm/']")
                 url_raw = await link_el.get_attribute("href") if link_el else ""
                 if not url_raw or "/itm/" not in url_raw:
-                    continue  # Non è un vero prodotto
-                item_url = url_raw.split("?")[0]  # rimuovi tracking params
+                    continue
+                item_url = url_raw.split("?")[0]
 
-                # --- Title ---
                 title_el = await item.query_selector(_TITLE_SEL)
                 title = (await title_el.inner_text()).strip() if title_el else ""
                 if not title:
-                    # Fallback: testo del link
                     title = (await link_el.inner_text()).strip()[:100] if link_el else ""
                 if not title or "shop on ebay" in title.lower():
                     continue
 
-                # --- Price ---
                 price_el = await item.query_selector(_PRICE_SEL)
                 price_raw = (await price_el.inner_text()).strip() if price_el else ""
                 price = _parse_price(price_raw)
 
-                # --- Image ---
                 img_el = await item.query_selector(_IMAGE_SEL)
                 image_url = ""
                 if img_el:
-                    # Usa src o data-src (lazy loading)
                     image_url = await img_el.get_attribute("src") or ""
                     if not image_url or "gif" in image_url:
                         image_url = await img_el.get_attribute("data-src") or ""
 
-                # --- Condition ---
                 cond_el = await item.query_selector(_CONDITION_SEL)
                 condition = (await cond_el.inner_text()).strip() if cond_el else ""
 
-                # --- Seller ---
                 seller_el = await item.query_selector(_SELLER_SEL)
                 seller = (await seller_el.inner_text()).strip() if seller_el else ""
 
-                # --- Location ---
                 loc_el = await item.query_selector(_LOCATION_SEL)
                 location = (await loc_el.inner_text()).strip() if loc_el else ""
 
-                # --- Shipping ---
                 ship_el = await item.query_selector(_SHIPPING_SEL)
                 shipping = (await ship_el.inner_text()).strip() if ship_el else ""
 
@@ -199,3 +171,68 @@ async def scrape_ebay_search(
 
     logger.info("Playwright scraper completato | risultati=%d", len(results))
     return results
+
+
+# ─────────────────────────────────────────────
+# Thread worker: ProactorEventLoop isolato
+# ─────────────────────────────────────────────
+
+def _run_in_proactor_loop(
+    query: str,
+    max_results: int,
+    headless: bool,
+    timeout_ms: int,
+) -> List[Dict[str, Any]]:
+    """
+    Crea un ProactorEventLoop nel thread corrente ed esegue lo scraping.
+    Necessario su Windows perché uvicorn gira con SelectorEventLoop che non
+    supporta asyncio.create_subprocess_exec() (usato da Playwright).
+    """
+    if sys.platform == "win32":
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
+
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_async_scrape(query, max_results, headless, timeout_ms))
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+
+# ─────────────────────────────────────────────
+# Public API
+# ─────────────────────────────────────────────
+
+async def scrape_ebay_search(
+    query: str,
+    max_results: int = 10,
+    headless: bool = True,
+    timeout_ms: int = 25_000,
+) -> List[Dict[str, Any]]:
+    """
+    Naviga su eBay.it e ritorna una lista di prodotti trovati.
+
+    Esegue Playwright in un thread dedicato con ProactorEventLoop per
+    compatibilità con Windows + uvicorn (che usa SelectorEventLoop).
+
+    Args:
+        query:       Testo da cercare su eBay.
+        max_results: Numero massimo di risultati (default 10).
+        headless:    Se True, browser invisibile (default True).
+        timeout_ms:  Timeout in ms per il caricamento della pagina.
+
+    Returns:
+        Lista di dict con: title, price, price_raw, url,
+        image_url, condition, seller, location, shipping.
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _PLAYWRIGHT_EXECUTOR,
+        _run_in_proactor_loop,
+        query,
+        max_results,
+        headless,
+        timeout_ms,
+    )

@@ -675,12 +675,17 @@ class ReactPlanner:
         elif action == "ebay_scrape":
             # Estraiamo la query pulendo i tag UI se presenti
             raw_q = action_input.get("query") or memory.user_query
+            # Mostra il browser solo se esplicitamente richiesto nel messaggio o nell'input
+            visible_requested = (
+                "modalità visibile" in (raw_q or "").lower()
+                or action_input.get("visible", False)
+            )
             clean_q = re.sub(r"Cerca su eBay con Playwright \(MODALITÀ VISIBILE\):", "", raw_q, flags=re.IGNORECASE).strip()
             clean_q = clean_q.replace("🌐", "").strip()
-            
+
             return {
                 "query": clean_q,
-                "visible": action_input.get("visible", True)
+                "visible": visible_requested,
             }
             
         return action_input

@@ -37,7 +37,7 @@ async def ebay_scrape(
     visible: Annotated[
         bool,
         Field(description="Se true, mostra la finestra del browser (utile per debug o demo)"),
-    ] = True,
+    ] = False,
     session_id: Annotated[
         str,
         Field(description="ID di sessione utente (fornito dal sistema)"),
