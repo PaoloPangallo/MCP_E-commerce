@@ -39,16 +39,25 @@ class EbayReactAgent:
         mcp_server_url: Optional[str] = None,
         strict_mcp: Optional[bool] = None,
         prefer_mcp: bool = True,
+        mcp_mode: str = "standard",
     ) -> None:
         self.db = db
         self.user = user
         self.memory_service = MemoryService()
         self.prefer_mcp = bool(prefer_mcp)
+        self.mcp_mode = mcp_mode
 
+        # Resolve MCP server URL from mcp_mode if not explicitly provided
+        _DEFAULT_URLS = {
+            "standard": os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8050/standard/mcp"),
+            "playwright_browser": os.getenv(
+                "MCP_PLAYWRIGHT_URL", "http://127.0.0.1:8050/playwright/mcp"
+            ),
+        }
         self.mcp_server_url = (
             mcp_server_url
-            or os.getenv("MCP_SERVER_URL")
-            or "http://127.0.0.1:8050/mcp/mcp"
+            or _DEFAULT_URLS.get(mcp_mode)
+            or _DEFAULT_URLS["standard"]
         )
 
         if strict_mcp is None:
@@ -70,10 +79,11 @@ class EbayReactAgent:
         )
 
         logger.info(
-            "EbayReactAgent initialized | prefer_mcp=%s | strict_mcp=%s | mcp_server_url=%s",
+            "EbayReactAgent initialized | prefer_mcp=%s | strict_mcp=%s | mcp_server_url=%s | mcp_mode=%s",
             self.prefer_mcp,
             self.strict_mcp,
             self.mcp_server_url,
+            self.mcp_mode,
         )
 
     async def run(self, request: AgentRequest) -> AgentResponse:
@@ -149,6 +159,7 @@ class EbayReactAgent:
         )
         if vision_desc_temp:
             memory.vision_description = vision_desc_temp
+        memory.mcp_mode = self.mcp_mode
 
         try:
             tasks = decompose_query(request.query, request.llm_engine)
