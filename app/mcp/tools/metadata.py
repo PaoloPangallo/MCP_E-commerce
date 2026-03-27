@@ -7,10 +7,10 @@ from app.services.ebay_metadata import get_marketplace_metadata as service_get_m
 
 logger = logging.getLogger(__name__)
 
-@mcp.tool(
-    name="get_marketplace_metadata",
-    description="Recupera i metadata tecnici e le policy eBay (condizioni usato, regole restituzione). NON usare per cercare prodotti o offerte."
-)
+# @mcp.tool(
+#     name="get_marketplace_metadata",
+#     description="Recupera i metadata tecnici e le policy eBay (condizioni usato, regole restituzione). NON usare per cercare prodotti o offerte."
+# )
 async def get_marketplace_metadata(
     policy_type: Annotated[str, Field(description="Tipo query metadata ('item_conditions', 'return_policies', 'listing_structure')")] = "item_conditions",
     marketplace_id: Annotated[str, Field(description="ID del marketplace (es. 'EBAY_IT')")] = "",

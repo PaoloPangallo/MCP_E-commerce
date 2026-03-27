@@ -87,9 +87,9 @@ POLICY STRUMENTI:
 - `analyze_seller`: Affidabilità, reputazione, trust.
 - `get_item_details`: Specifiche tecniche profonde di un `item_id` già trovato.
 - `get_shipping_costs`: Costi di spedizione esatti (serve CAP).
-- `get_marketplace_metadata`: Politiche eBay (condizioni, resi).
 - `market_trends`: Prezzi medi sul web e trend di interesse (usa Google Shopping e Trends tramite SerpApi).
 - `get_ebay_deals`: Recupera le migliori offerte, sconti e promozioni a tempo limitato da eBay. Usalo quando l'utente cerca risparmio o occasioni. Se il messaggio dell'utente contiene un ID categoria esplicito (es: "(ID: 9355)"), DEVI passarlo come parametro `category_id` al tool.
+- `ebay_scrape`: Ricerca avanzata tramite browser (Playwright). Usalo **MANDATORIAMENTE** se l'utente menziona "Playwright", "mostra browser", "browser reale" o "visibile". Se l'utente scrive "MODALITÀ VISIBILE", imposta il parametro `visible=true`.
 - `manage_wishlist`: Gestisce i prodotti salvati dell'utente. Usalo per aggiungere, rimuovere o elencare i preferiti (wishlist).
 - `contact_seller`: Genera un link diretto per contattare un venditore eBay. Usalo quando l'utente vuole scrivere al venditore, fare domande sull'oggetto, trattare il prezzo o chiedere disponibilità. Richiede `seller_name` e opzionalmente `item_id`.
 - `conversation`: SOLO se la richiesta è puramente chiacchiericcio senza alcun intento di acquisto o ricerca.
@@ -97,7 +97,7 @@ POLICY STRUMENTI:
 SCHEMA DI USCITA:
 {
   "thought": "Spiega brevemente la tua strategia in ITALIANO",
-  "intent": "conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping|metadata|market_trends|deals|wishlist|contact_seller",
+  "intent": "conversation|seller_analysis|product_search|hybrid|comparison|item_details|shipping|market_trends|deals|wishlist|contact_seller|playwright_search",
   "action": "tool_name|finish",
   "action_input": {},
   "final_answer": null
@@ -202,10 +202,8 @@ def _compact_scratchpad_for_prompt(scratchpad: Dict[str, Any]) -> Dict[str, Any]
         "has_search_payload": scratchpad.get("has_search_payload"),
         "has_seller_payload": scratchpad.get("has_seller_payload"),
         "has_search_results": scratchpad.get("has_search_results"),
-        "has_metadata_payload": scratchpad.get("has_metadata_payload"),
         "last_seller_name": scratchpad.get("last_seller_name"),
         "top_results": scratchpad.get("top_results") or [],
-        "metadata": scratchpad.get("metadata"),
         "deals": scratchpad.get("deals"),
         "seller_summary": scratchpad.get("seller_summary"),
         "search_analysis": scratchpad.get("search_analysis"),
@@ -254,7 +252,6 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
         "intent": final_data.get("intent"),
         "search": compact_search,
         "deals": final_data.get("deals"),
-        "metadata": final_data.get("metadata"),
         "seller": compact_seller,
         "compare": final_data.get("compare"),
         "top_result": final_data.get("top_result"),

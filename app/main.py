@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+import sys
+import asyncio
+
+if sys.platform == 'win32':
+    # FORCE PROACTOR AT THE ABSOLUTE TOP level
+    policy = asyncio.WindowsProactorEventLoopPolicy()
+    asyncio.set_event_loop_policy(policy)
+    # logger non ancora pronto, usiamo print
+    print(">>> CRITICAL WINDOWS FIX: Setting asyncio ProactorEventLoopPolicy for Playwright support.")
+
 import logging
 import os
 

@@ -40,6 +40,10 @@ _QUERY_PATTERNS: Dict[str, tuple[str, ...]] = {
         r"\b(trattare il prezzo|trattare|chiedere al venditore|parla con il venditore)\b",
         r"\b(domanda al venditore|ask the seller)\b",
     ),
+    "playwright": (
+        r"\b(playwright|browser|visibile|mostra|schermo|reale)\b",
+        r"modalit[aà]\s+visibile",
+    ),
 }
 
 def analyze_user_query(query: str) -> Dict[str, Any]:
@@ -79,6 +83,10 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
         re.search(pattern, lowered, re.IGNORECASE)
         for pattern in _QUERY_PATTERNS["contact"]
     )
+    playwright_signal = any(
+        re.search(pattern, lowered, re.IGNORECASE)
+        for pattern in _QUERY_PATTERNS["playwright"]
+    )
 
     cleaned_search_query = clean_search_query(text)
     has_budget_signal = bool(re.search(r"\b\d+[\.,]?\d*\s*(euro|eur|€)\b", lowered))
@@ -94,6 +102,7 @@ def analyze_user_query(query: str) -> Dict[str, Any]:
         "market_signal": market_signal,
         "deals_signal": deals_signal,
         "contact_signal": contact_signal,
+        "playwright_signal": playwright_signal,
         "multi_signal": multi_signal,
         "has_budget_signal": has_budget_signal,
     }

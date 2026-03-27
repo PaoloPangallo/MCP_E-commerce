@@ -12,7 +12,10 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  Paper
+  DialogActions,
+  Paper,
+  TextField,
+  Button
 } from "@mui/material"
 import { EBAY_CATEGORIES } from "../search/constants"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
@@ -21,6 +24,7 @@ import AddIcon from "@mui/icons-material/Add"
 import SellIcon from "@mui/icons-material/Sell"
 import CloseIcon from "@mui/icons-material/Close"
 import StarsIcon from "@mui/icons-material/Stars"
+import TravelExploreIcon from "@mui/icons-material/TravelExplore"
 
 
 interface Props {
@@ -45,6 +49,10 @@ export default function ChatInput({
 
   // Deals Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
+
+  // Playwright Modal State
+  const [isPlaywrightModalOpen, setIsPlaywrightModalOpen] = useState(false)
+  const [playwrightQuery, setPlaywrightQuery] = useState("")
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -100,6 +108,22 @@ export default function ChatInput({
     }, 100);
   }
 
+  const handlePlaywrightClick = () => {
+    handleMenuClose()
+    setPlaywrightQuery(value.trim())
+    setIsPlaywrightModalOpen(true)
+  }
+
+  const handlePlaywrightConfirm = () => {
+    const query = playwrightQuery.trim()
+    if (!query) return
+    
+    setIsPlaywrightModalOpen(false)
+    onSend(`Cerca su eBay con Playwright (MODALITÀ VISIBILE): ${query} 🌐`, undefined)
+    setPlaywrightQuery("")
+    if (value.trim() === query) setValue("")
+  }
+
 
   const canSend = (!!value.trim() || !!image) && !disabled && !isProcessing
 
@@ -152,6 +176,21 @@ mt: -1,
           <ListItemText 
             primary="eBay Deals" 
             primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }} 
+          />
+        </MenuItem>
+
+        <MenuItem 
+          onClick={handlePlaywrightClick} 
+          sx={{ py: 1.5, px: 2 }}
+        >
+          <ListItemIcon sx={{ color: '#3b82f6' }}>
+            <TravelExploreIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText 
+            primary="Cerca con Playwright" 
+            secondary="Mostra il browser (Debug)"
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#3b82f6' }} 
+            secondaryTypographyProps={{ fontSize: 10, color: 'var(--text-secondary)' }}
           />
         </MenuItem>
       </Menu>
@@ -365,6 +404,94 @@ mt: -1,
           </Box>
         </DialogContent>
       </Dialog>
+
+      {/* Playwright Query Modal */}
+      <Dialog 
+        open={isPlaywrightModalOpen} 
+        onClose={() => setIsPlaywrightModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "20px",
+            bgcolor: "var(--bg-primary)",
+            backgroundImage: "none",
+            boxShadow: "0 24px 48px -12px rgba(0,0,0,0.15)",
+            border: "1px solid var(--border-color)",
+            p: 1
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          pt: 3, 
+          pb: 1, 
+          px: 3, 
+          color: "var(--text-primary)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 1
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <TravelExploreIcon sx={{ color: '#3b82f6', fontSize: 28 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>Ricerca Live Browser</Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: "var(--text-secondary)", fontWeight: 500, opacity: 0.8 }}>
+            Cosa vuoi cercare con il browser reale in tempo reale?
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, pb: 1, pt: 2 }}>
+          <TextField
+            fullWidth
+            autoFocus
+            placeholder="Es: iPhone 15 Pro Max..."
+            variant="outlined"
+            value={playwrightQuery}
+            onChange={(e) => setPlaywrightQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handlePlaywrightConfirm()
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '12px',
+                bgcolor: 'var(--bg-secondary)',
+                '& fieldset': { borderColor: 'var(--border-color)' },
+                '&:hover fieldset': { borderColor: 'var(--text-secondary)' },
+                '&.Mui-focused fieldset': { borderColor: '#3b82f6' },
+              },
+              '& .MuiInputBase-input': {
+                color: 'var(--text-primary)',
+                fontSize: '15px'
+              }
+            }}
+          />
+        </DialogContent>
+
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button 
+            onClick={() => setIsPlaywrightModalOpen(false)}
+            sx={{ color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'none' }}
+          >
+            Annulla
+          </Button>
+          <Button 
+            onClick={handlePlaywrightConfirm}
+            variant="contained"
+            disableElevation
+            disabled={!playwrightQuery.trim()}
+            sx={{ 
+              borderRadius: '10px', 
+              bgcolor: '#3b82f6', 
+              textTransform: 'none',
+              fontWeight: 700,
+              px: 3,
+              '&:hover': { bgcolor: '#2563eb' }
+            }}
+          >
+            Avvia Ricerca
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
-}
+}

@@ -210,3 +210,32 @@ def extract_explicit_seller(text: str) -> str | None:
         return candidate
 
     return None
+
+
+def _normalize_playwright_output(raw: Dict[str, Any]) -> Dict[str, Any]:
+    results = raw.get("results") or []
+    count = raw.get("results_count", len(results))
+    query = raw.get("query", "")
+
+    if count <= 0:
+        summary = f"Ricerca Playwright completata per '{query}' ma senza risultati."
+        status = "no_data"
+    else:
+        top = results[0]
+        title = _clean_text(top.get("title", ""))
+        price_raw = _clean_text(top.get("price_raw", ""))
+        summary = f"Trovati {count} prodotti su eBay per '{query}'."
+        if title:
+            summary += f" Miglior risultato: '{title}'"
+            if price_raw:
+                summary += f" a {price_raw}"
+            summary += "."
+        status = "ok"
+
+    return {
+        "status": status,
+        "query": query,
+        "results_count": count,
+        "results": results,
+        "summary": summary,
+    }

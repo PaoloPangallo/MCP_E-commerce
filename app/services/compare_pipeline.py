@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import re
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -139,12 +140,11 @@ async def run_compare_pipeline(
     queries = [q.strip() for q in queries if q and q.strip()] if queries else []
     ebay_ids = [i.strip() for i in ebay_ids if i and i.strip()] if ebay_ids else []
 
-    if len(queries) < 2 and len(ebay_ids) < 2:
+    if not queries and len(ebay_ids) < 2:
         return {
             "status": "error",
-            "error": "Servono almeno 2 prodotti (tramite query o ID) per il confronto.",
+            "error": "Fornisci almeno 2 prodotti (tramite query o ID) per il confronto.",
         }
-
     # ── Resolve input: Queries or Explicit IDs ───────────────────────────
     resolved_candidates: List[Dict[str, Any]] = []
 
@@ -159,7 +159,6 @@ async def run_compare_pipeline(
                 continue
             
             # Re-normalize to the format expected by the pipeline
-            # Note: get_item_details returns more fields, we map them back
             resolved_candidates.append({
                 "query": f"ID:{item.get('item_id')}",
                 "ebay_id": item.get("item_id"),
@@ -169,12 +168,35 @@ async def run_compare_pipeline(
                 "condition": item.get("condition", "N/A"),
                 "seller_name": item.get("seller", {}).get("username"),
                 "seller_rating": float(item.get("seller", {}).get("feedbackPercentage") or 0),
-                "trust_score": float(item.get("seller", {}).get("feedbackPercentage") or 100) / 100.0, # Guess trust from rating if missing
-                "ranking_score": 1.0, # Direct selection has max relevance
+                "trust_score": float(item.get("seller", {}).get("feedbackPercentage") or 100) / 100.0,
+                "ranking_score": 1.0,
                 "url": item.get("item_url"),
                 "image_url": item.get("image", {}).get("imageUrl"),
             })
-    else:
+    
+    elif len(queries) == 1:
+        # Special case: single query -> take multiple results from that search
+        from app.services.search_pipeline import run_search_pipeline
+        search_res = await run_search_pipeline(query=queries[0], db=db, llm_engine=llm_engine, session_id=session_id)
+        items = search_res.get("results") or []
+        
+        for top in items[:max_queries]:
+            resolved_candidates.append({
+                "query": queries[0],
+                "ebay_id": top.get("ebay_id"),
+                "title": top.get("title", "N/A"),
+                "price": top.get("price"),
+                "currency": top.get("currency", "EUR"),
+                "condition": top.get("condition", "N/A"),
+                "seller_name": top.get("seller_name"),
+                "seller_rating": top.get("seller_rating"),
+                "trust_score": top.get("trust_score"),
+                "ranking_score": top.get("ranking_score"),
+                "url": top.get("url"),
+                "image_url": top.get("image_url"),
+            })
+    
+    elif len(queries) > 1:
         # Run all searches in parallel
         search_tasks = [
             _run_single_search(q, db, llm_engine, session_id=session_id)

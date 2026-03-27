@@ -16,7 +16,7 @@ from app.services.parser import extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "metadata", "market_trends", "deals", "wishlist", "contact_seller"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -69,12 +69,7 @@ DETAILS_CUES = {
     "scheda", "descrizione", "info", "informazioni", "memoria", "gb", "tb"
 }
 
-METADATA_CUES = {
-    "regole", "regola", "politica", "politiche", "policy", "policies",
-    "condizioni", "condizione", "reso", "resi", "restituzione",
-    "varianti", "variante", "metadata", "categorie", "categoria",
-    "listino", "struttura", "marketplace", "ebay", "regolamento"
-}
+METADATA_CUES = set()
 MARKET_CUES = {
     "trend", "trends", "mercato", "analisi", "statistica", "andamento", "storico",
     "serpapi", "google", "prezzo", "medio", "prezzi", "medi", "interesse", "popolarità", "popolarita",
@@ -87,6 +82,9 @@ CONTACT_CUES = {
     "contatta", "contattare", "messaggio", "messaggi", "scrivi", "scrivere", "scrivergli", "scriverle", "parla", "parlare",
     "chiedere", "chiedi", "trattare", "tratta", "prezzo", "proposta", "comunicare", "comunica", "invia", "inviami",
     "informazioni", "informazione", "info", "messaggiare", "contatto"
+}
+PLAYWRIGHT_CUES = {
+    "playwright", "browser", "visibile", "mostra", "schermo", "reale", "vediamo", "vedere", "finestra"
 }
 
 PERSONAL_PRONOUNS = {
@@ -119,11 +117,10 @@ class IntentEvidence:
     comparison: float = 0.0
     shipping: float = 0.0
     item_details: float = 0.0
-    metadata: float = 0.0
     reasons: Dict[str, list[str]] = field(
         default_factory=lambda: {
             "product": [], "seller": [], "conversation": [], "comparison": [],
-            "shipping": [], "item_details": [], "metadata": [], "market_trends": [], "deals": [], "wishlist": [],
+            "shipping": [], "item_details": [], "market_trends": [], "deals": [], "wishlist": [],
             "contact_seller": []
         }
     )
@@ -131,6 +128,7 @@ class IntentEvidence:
     deals: float = 0.0
     wishlist: float = 0.0
     contact_seller: float = 0.0
+    playwright: float = 0.0
 
     # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
     _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
@@ -142,11 +140,15 @@ class IntentEvidence:
         "comparison": "comparison",
         "shipping": "shipping",
         "item_details": "item_details",
-        "metadata": "metadata",
         "market_trends": "market",
         "wishlist": "wishlist",
         "contact_seller": "contact_seller",
+        "playwright_search": "playwright",
     })
+
+    def __post_init__(self):
+        # Initialize playwright score for explicit __init__ calls
+        self.playwright = 0.0
 
     def add(self, label: str, value: float, reason: str) -> None:
         field_name = self._LABEL_TO_FIELD.get(label, label)
@@ -158,13 +160,13 @@ class IntentEvidence:
     def top_two(self) -> tuple:
         ordered = sorted(
             [
+                ("playwright_search", getattr(self, "playwright", 0.0)),
                 ("product_search", self.product),
                 ("seller_analysis", self.seller),
                 ("conversation", self.conversation),
                 ("comparison", self.comparison),
                 ("shipping", self.shipping),
                 ("item_details", self.item_details),
-                ("metadata", self.metadata),
                 ("market_trends", self.market),
                 ("deals", getattr(self, "deals", 0.0)),
                 ("wishlist", getattr(self, "wishlist_score", 0.0)),
@@ -203,6 +205,15 @@ class ReactPlanner:
         explicit_seller = extract_explicit_seller(memory.user_query)
         if explicit_seller and not memory.last_seller_name:
             memory.last_seller_name = explicit_seller
+
+        # NUCLEAR OVERRIDE: Playwright deve vincere sempre, anche sulla coda dei task pre-pianificati.
+        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
+        if intent == "playwright_search" and confidence >= self.intent_threshold:
+            logger.info("Playwright override triggered: bypassing task queue.")
+            # Se siamo qui, il determinismo di Playwright ha la precedenza
+            decision = self._deterministic_decide(memory)
+            if decision:
+                return decision
 
         if memory.has_pending_tasks():
             decision = self._decide_from_task_queue(memory)
@@ -661,6 +672,17 @@ class ReactPlanner:
                         action_input["seller_name"] = top.get("seller_name")
                     logger.info("Auto-extracted product details for manage_wishlist 'add' from scratchpad: %s", action_input["ebay_id"])
 
+        elif action == "ebay_scrape":
+            # Estraiamo la query pulendo i tag UI se presenti
+            raw_q = action_input.get("query") or memory.user_query
+            clean_q = re.sub(r"Cerca su eBay con Playwright \(MODALITÀ VISIBILE\):", "", raw_q, flags=re.IGNORECASE).strip()
+            clean_q = clean_q.replace("🌐", "").strip()
+            
+            return {
+                "query": clean_q,
+                "visible": action_input.get("visible", True)
+            }
+            
         return action_input
 
     def _intent_is_satisfied(self, memory: AgentMemory, intent: str) -> bool:
@@ -696,8 +718,6 @@ class ReactPlanner:
             return ["get_item_details"] if explicit_id else [search_tool, "get_item_details"]
         if intent == "shipping":
             return ["get_shipping_costs"] if explicit_id else [search_tool, "get_shipping_costs"]
-        if intent == "metadata":
-            return ["get_marketplace_metadata"]
         if intent == "hybrid":
             ordered = [search_tool, seller_tool, "get_item_details", "get_shipping_costs"]
             return ordered
@@ -707,6 +727,8 @@ class ReactPlanner:
             return ["get_ebay_deals"]
         if intent == "wishlist":
             return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
+        if intent == "playwright_search":
+            return ["ebay_scrape"]
         return []
 
     def _tool_state_is_terminal(self, memory: AgentMemory, tool_name: str) -> bool:
@@ -724,6 +746,17 @@ class ReactPlanner:
         return self._infer_intent_with_confidence(memory)[0]
 
     def _infer_intent_with_confidence(self, memory: AgentMemory) -> tuple[str, float, IntentEvidence]:
+        query = memory.user_query
+        evidence = self._score_query(query, memory)
+        
+        playwright_score = getattr(evidence, "playwright", 0.0)
+        logger.info(f"PLANNER: query='{query}' | playwright_score={playwright_score} | threshold={self.intent_threshold}")
+        
+        # NUCLEAR OVERRIDE: Playwright always wins if present
+        if playwright_score >= self.intent_threshold:
+            logger.info("PLANNER: Correctly using Playwright override.")
+            return "playwright_search", playwright_score, evidence
+
         if memory.tasks:
             tools = [str(task.get("tool") or "").strip() for task in memory.tasks]
             has_seller = any(self._tool_matches_any_tag(tool, {"seller", "trust", "feedback"}) for tool in tools)
@@ -735,16 +768,15 @@ class ReactPlanner:
                 return "seller_analysis", 1.0, IntentEvidence(seller=1.0)
             if has_search:
                 return "product_search", 1.0, IntentEvidence(product=1.0)
-
-        evidence = self._score_query(memory.user_query or "", memory)
         
-        # PRIORITÀ ASSOLUTA: Se l'utente vuole contattare, deve vincere su tutto
+        # Consolidation: Use the already calculated evidence
         if evidence.contact_seller >= 0.5:
             return "contact_seller", evidence.contact_seller, evidence
             
         top, second = evidence.top_two()
         label, score = top
         margin = score - second[1]
+        logger.info(f"PLANNER: Top intent is '{label}' with score {score} | margin={margin}")
 
         if evidence.product >= self.hybrid_threshold and evidence.seller >= self.hybrid_threshold:
             return "hybrid", min(evidence.product, evidence.seller), evidence
@@ -760,8 +792,6 @@ class ReactPlanner:
             return label, evidence.shipping, evidence
         if label == "item_details" and evidence.item_details >= self.intent_threshold:
             return label, evidence.item_details, evidence
-        if label == "metadata" and getattr(evidence, "metadata", 0.0) >= self.intent_threshold:
-            return label, getattr(evidence, "metadata", 0.0), evidence
         if label == "market_trends" and evidence.market >= self.intent_threshold:
             return label, evidence.market, evidence
         if label == "contact_seller" and evidence.contact_seller >= 0.5:
@@ -821,10 +851,6 @@ class ReactPlanner:
             # Riduciamo search se deals è molto probabile
             if ev.deals > 0.8:
                 ev.product = max(0.0, ev.product - 0.4)
-
-        metadata_hits = len(token_set & METADATA_CUES)
-        if metadata_hits:
-            ev.add("metadata", min(0.40 + 0.20 * metadata_hits, 0.9), "metadata_lexicon")
 
         wishlist_hits = len(token_set & WISHLIST_CUES)
         if wishlist_hits:
@@ -922,6 +948,21 @@ class ReactPlanner:
             ev.add("product", 0.45, "hybrid_implication_product")
             ev.add("seller", 0.45, "hybrid_implication_seller")
 
+        playwright_hits = len(token_set & PLAYWRIGHT_CUES)
+        if playwright_hits:
+            ev.add("playwright_search", min(0.85 + 0.15 * playwright_hits, 0.99), "playwright_lexicon")
+            if "visibile" in token_set or "reale" in token_set:
+                ev.add("playwright_search", 0.2, "visible_browser_request")
+            
+            # PRIORITÀ ASSOLUTA: Se è Playwright, annulliamo TUTTI gli altri segnali per evitare conflitti
+            ev.product = 0.0
+            ev.seller = 0.0
+            ev.market = 0.0
+            ev.deals = 0.0
+            ev.comparison = 0.0
+            ev.shipping = 0.0
+            ev.item_details = 0.0
+
         return ev
 
     def _reason_summary(self, intent: str, evidence: IntentEvidence) -> str:
@@ -932,7 +973,6 @@ class ReactPlanner:
             "comparison": evidence.reasons.get("comparison", []),
             "shipping": evidence.reasons.get("shipping", []),
             "item_details": evidence.reasons.get("item_details", []),
-            "metadata": evidence.reasons.get("metadata", []),
             "hybrid": evidence.reasons.get("seller", []) + evidence.reasons.get("product", []),
         }
         reasons = [r for r in mapping.get(intent, []) if r]
@@ -948,8 +988,6 @@ class ReactPlanner:
             return f"La richiesta richiede dettagli specifici ({compact})."
         if intent == "comparison":
             return f"La richiesta ha struttura da comparazione prodotti ({compact})."
-        if intent == "metadata":
-            return f"La richiesta riguarda metadata e policy del marketplace ({compact})."
         if intent == "product_search":
             return f"La richiesta ha struttura da ricerca prodotto ({compact})."
         if intent == "seller_analysis":

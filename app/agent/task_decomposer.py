@@ -39,10 +39,15 @@ def should_decompose_query(query: str) -> bool:
     return any(connector in lowered for connector in MULTI_STEP_CONNECTORS)
 
 
-def _select_capability_tools() -> Dict[str, str | None]:
+def _select_capability_tools(query: str) -> Dict[str, str | None]:
+    profile = analyze_user_query(query)
+    search_tool = "search_products"
+    if profile.get("playwright_signal"):
+        search_tool = "ebay_scrape"
+        
     return {
         "seller": "analyze_seller",
-        "search": "search_products",
+        "search": search_tool,
         "compare": "compare_products",
     }
 
@@ -53,7 +58,7 @@ def _normalize_task(tool_name: str, action_input: Dict, query: str, explicit_sel
 
 def _build_deterministic_tasks(query: str) -> List[Dict]:
     profile = analyze_user_query(query)
-    tools = _select_capability_tools()
+    tools = _select_capability_tools(query)
 
     seller_tool = tools["seller"]
     search_tool = tools["search"]
@@ -84,9 +89,14 @@ def _build_deterministic_tasks(query: str) -> List[Dict]:
     # Nei casi ibridi espliciti vogliamo prima la ricerca, poi il controllo seller.
     if profile["search_signal"] and search_tool:
         # Se abbiamo già un compare_tool pianificato, non aggiungiamo search generico
+        # Se è Playwright, passiamo anche il flag visible=True se presente nel testo
+        action_input = {"query": profile["cleaned_search_query"] or query}
+        if search_tool == "ebay_scrape" and ("visibile" in query.lower() or "browser" in query.lower()):
+            action_input["visible"] = True
+            
         normalized = _normalize_task(
             search_tool,
-            {"query": profile["cleaned_search_query"] or query},
+            action_input,
             query=query,
             explicit_seller=explicit_seller,
         )
