@@ -2,12 +2,15 @@ import { Box, Typography, Chip, Tooltip, Divider } from "@mui/material"
 import { useSettingsStore } from "./store/settingsStore"
 import LocalOfferIcon from "@mui/icons-material/LocalOffer"
 import MonetizationOnIcon from "@mui/icons-material/MonetizationOn"
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import ShoppingBagIcon from "@mui/icons-material/ShoppingBag"
 import VerifiedIcon from "@mui/icons-material/Verified"
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"
 import PublicIcon from "@mui/icons-material/Public"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiFetch } from "../../api/apiClient"
+import { useChatStore } from "./store/chatStore"
+import type { SearchBlock } from "../search/types"
 
 interface EbayInfo {
   username?: string
@@ -38,6 +41,8 @@ function formatYear(isoDate?: string): string | null {
 
 export default function ProfileBadge() {
   const { settings } = useSettingsStore()
+  const sessions = useChatStore((s) => s.sessions)
+  const activeSessionId = useChatStore((s) => s.activeSessionId)
   const [ebayInfo, setEbayInfo] = useState<EbayInfo | null>(null)
 
   useEffect(() => {
@@ -75,6 +80,31 @@ export default function ProfileBadge() {
 
   const registrationYear = formatYear(ebayInfo?.registration_date)
   const siteLabel = ebayInfo?.site ? (SITE_LABELS[ebayInfo.site] ?? `🌍 ${ebayInfo.site}`) : null
+
+  // 🔹 CONTEXTUAL BUDGET LOGIC
+  const activeSession = sessions.find(s => s.id === (activeSessionId || sessions[0]?.id))
+  const lastSearch = useMemo(() => {
+    if (!activeSession) return null
+    return [...activeSession.chat].reverse().find(c => c.type === "search") as { type: "search", search: SearchBlock } | undefined
+  }, [activeSession])
+
+  const contextualBudgetsMap = useMemo(() => {
+    if (!settings.contextualBudgets) return {}
+    try {
+      return JSON.parse(settings.contextualBudgets)
+    } catch {
+      return {}
+    }
+  }, [settings.contextualBudgets])
+
+  const activeContext = useMemo(() => {
+    const pq = lastSearch?.search?.metadata?.parsed_query
+    if (!pq) return null
+    // Priorità al prodotto specifico (es "iPhone"), poi al brand (es "Apple")
+    return pq.product || (pq.brands && pq.brands[0]) || null
+  }, [lastSearch])
+
+  const activeContextBudget = activeContext ? contextualBudgetsMap[activeContext] : null
 
   return (
     <Box
@@ -187,13 +217,24 @@ export default function ProfileBadge() {
         </Box>
       )}
 
-      {/* Price budget */}
-      {settings.pricePreference && (
+      {/* Price budget (Global fallback or Contextual) */}
+      {(settings.pricePreference || activeContextBudget) && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <MonetizationOnIcon sx={{ fontSize: 14, color: "#10b981" }} />
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>
-            Budget ~{settings.pricePreference}€
-          </Typography>
+          {activeContextBudget ? (
+             <>
+               <AutoAwesomeIcon sx={{ fontSize: 13, color: "#8b5cf6" }} />
+               <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>
+                 Budget {activeContext} ~{activeContextBudget}€
+               </Typography>
+             </>
+          ) : (
+            <>
+              <MonetizationOnIcon sx={{ fontSize: 14, color: "#10b981" }} />
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>
+                Budget ~{settings.pricePreference}€
+              </Typography>
+            </>
+          )}
         </Box>
       )}
     </Box>

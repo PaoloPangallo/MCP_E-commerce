@@ -7,6 +7,7 @@ export interface UserSettings {
   customInstructions: string
   favoriteBrands: string
   pricePreference: string
+  contextualBudgets?: string
 }
 
 interface SettingsState {
@@ -17,7 +18,7 @@ interface SettingsState {
   setOpen: (open: boolean) => void
   updateLocalSettings: (partial: Partial<UserSettings>) => void
   saveSettingsToBackend: (token: string, newSettings: UserSettings) => Promise<void>
-  loadSettingsFromAuth: (theme?: string, tone?: string, instructions?: string, brands?: string, price?: string) => void
+  loadSettingsFromAuth: (theme?: string, tone?: string, instructions?: string, brands?: string, price?: string, budgets?: string) => void
   refreshSettings: () => Promise<void>
 }
 
@@ -27,7 +28,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     conversationTone: 'neutral',
     customInstructions: '',
     favoriteBrands: '',
-    pricePreference: ''
+    pricePreference: '',
+    contextualBudgets: ''
   },
   isOpen: false,
   isSaving: false,
@@ -40,14 +42,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }))
   },
 
-  loadSettingsFromAuth: (theme, tone, instructions, brands, price) => {
+  loadSettingsFromAuth: (theme, tone, instructions, brands, price, budgets) => {
     set(() => ({
       settings: {
         theme: (theme as 'light'|'dark') || 'light',
         conversationTone: (tone as any) || 'neutral',
         customInstructions: instructions || '',
         favoriteBrands: brands || '',
-        pricePreference: price || ''
+        pricePreference: price || '',
+        contextualBudgets: budgets || ''
       }
     }))
     
@@ -70,7 +73,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           conversation_tone: newSettings.conversationTone,
           custom_instructions: newSettings.customInstructions,
           favorite_brands: newSettings.favoriteBrands,
-          price_preference: newSettings.pricePreference
+          price_preference: newSettings.pricePreference,
+          contextual_budgets: newSettings.contextualBudgets
         })
       })
 
@@ -82,7 +86,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           conversationTone: data.conversation_tone || 'neutral',
           customInstructions: data.custom_instructions || '',
           favoriteBrands: data.favorite_brands || '',
-          pricePreference: data.price_preference || ''
+          pricePreference: data.price_preference || '',
+          contextualBudgets: data.contextual_budgets || ''
         },
         isSaving: false 
       })
@@ -110,7 +115,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           conversationTone: resp.conversation_tone || 'neutral',
           customInstructions: resp.custom_instructions || '',
           favoriteBrands: resp.favorite_brands || '',
-          pricePreference: resp.price_preference || ''
+          pricePreference: resp.price_preference || '',
+          contextualBudgets: resp.contextual_budgets || ''
         }
       }))
       

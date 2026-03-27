@@ -8,6 +8,7 @@ export interface AuthResponse {
   favorite_brands?: string | null
   price_preference?: string | null
   custom_instructions?: string | null
+  contextual_budgets?: string | null
 
   token_type: string
   user_id: number

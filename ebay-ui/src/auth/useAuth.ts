@@ -20,6 +20,7 @@ export interface AuthUser {
   custom_instructions?: string | null
   theme?: string | null
   conversation_tone?: string | null
+  contextual_budgets?: string | null
 }
 
 export function useAuth() {
@@ -68,7 +69,8 @@ export function useAuth() {
             (data as any).conversation_tone,
             (data as any).custom_instructions,
             (data as any).favorite_brands,
-            (data as any).price_preference
+            (data as any).price_preference,
+            (data as any).contextual_budgets
           )
           // Load wishlist items when session is restored
           useWishlistStore.getState().loadItems()
@@ -104,7 +106,8 @@ export function useAuth() {
         price_preference: res.price_preference,
         custom_instructions: res.custom_instructions,
         theme: (res as any).theme,
-        conversation_tone: (res as any).conversation_tone
+        conversation_tone: (res as any).conversation_tone,
+        contextual_budgets: (res as any).contextual_budgets
       })
 
       useSettingsStore.getState().loadSettingsFromAuth(
@@ -112,7 +115,8 @@ export function useAuth() {
         (res as any).conversation_tone,
         (res as any).custom_instructions,
         (res as any).favorite_brands,
-        (res as any).price_preference
+        (res as any).price_preference,
+        (res as any).contextual_budgets
       )
       // Load wishlist items after login
       useWishlistStore.getState().loadItems()

@@ -134,6 +134,7 @@ async def register(
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
+        contextual_budgets=user.contextual_budgets,
     )
 
 
@@ -190,6 +191,7 @@ async def login(
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
+        contextual_budgets=user.contextual_budgets,
     )
 
 
@@ -234,6 +236,7 @@ async def token(
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
+        contextual_budgets=user.contextual_budgets,
     )
 
 
@@ -261,6 +264,7 @@ def get_me(user: User = Depends(get_current_user)):
         custom_instructions=user.custom_instructions,
         theme=user.theme,
         conversation_tone=user.conversation_tone,
+        contextual_budgets=user.contextual_budgets,
     )
 
 class UserPreferencesUpdate(BaseModel):
