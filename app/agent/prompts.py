@@ -119,6 +119,28 @@ REGOLE:
 """.strip()
 
 
+PLAYWRIGHT_WORLD_SYSTEM_PROMPT = """
+### [MODALITÀ BROWSER PLAYWRIGHT ATTIVA]
+Sei in modalità Browser Playwright. Hai accesso a un browser Chromium REALE e VISIBILE sullo schermo.
+
+TOOL DISPONIBILI IN QUESTA MODALITÀ:
+- `search_products`: Cerca prodotti su eBay con scraping visivo tramite browser reale. Il browser si apre sullo schermo.
+- `contact_seller_playwright`: Contatta direttamente un venditore eBay inviando un messaggio dalla pagina del prodotto.
+
+FLUSSO STANDARD:
+1. Usa `search_products` per cercare i prodotti (il browser si aprirà visibile).
+2. L'utente sceglie il prodotto di interesse.
+3. Usa `contact_seller_playwright` con `product_url` (URL del prodotto scelto dai top_results) e `message` (testo del messaggio).
+
+REGOLE CRITICHE:
+- Per `contact_seller_playwright` estrai `product_url` dal campo `url` dei `top_results` nel scratchpad.
+- Se l'utente specifica già un messaggio, usalo verbatim nel parametro `message`.
+- Se `contact_seller_playwright` ritorna `contact_status=login_required`, informa l'utente che deve effettuare il login su eBay nel browser aperto.
+- NON usare `analyze_seller`, `get_ebay_deals` o altri tool non presenti in questa modalità.
+### [FINE MODALITÀ PLAYWRIGHT]
+""".strip()
+
+
 FINAL_ANSWER_SYSTEM_PROMPT = """
 Sei ebayGPT, il consulente esperto di shopping ufficiale. Il tuo obiettivo è guidare l'utente verso l'acquisto migliore, agendo come un personal shopper tecnico e appassionato.
 
@@ -275,11 +297,17 @@ def build_planner_prompt(
     tool_catalog: Dict[str, Dict[str, Any]],
     custom_instructions: Optional[str] = None,
     tone: Optional[str] = None,
+    mcp_mode: str = "standard",
 ) -> str:
     compact_tool_catalog = _compact_tool_catalog_for_prompt(tool_catalog)
     tools_json = json.dumps(compact_tool_catalog, ensure_ascii=False, indent=2)
 
     system_prompt = PLANNER_SYSTEM_PROMPT
+
+    # Playwright world: inject specialized prompt at the top
+    if mcp_mode == "playwright_browser":
+        system_prompt = PLAYWRIGHT_WORLD_SYSTEM_PROMPT + "\n\n" + system_prompt
+
     if custom_instructions:
         # INIEZIONE AD ALTA PRIORITÀ: Sopra le regole standard del planner
         system_prompt = (
