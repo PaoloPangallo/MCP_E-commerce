@@ -84,6 +84,7 @@ class AuthResponse(BaseModel):
     custom_instructions: Optional[str] = None
     theme: Optional[str] = "light"
     conversation_tone: Optional[str] = "neutral"
+    contextual_budgets: Optional[str] = None
 
 
 # ---------------------------------------------------
@@ -248,6 +249,7 @@ class UserResponse(BaseModel):
     custom_instructions: Optional[str] = None
     theme: Optional[str] = "light"
     conversation_tone: Optional[str] = "neutral"
+    contextual_budgets: Optional[str] = None
 
 @router.get("/me", response_model=UserResponse)
 def get_me(user: User = Depends(get_current_user)):
@@ -267,6 +269,7 @@ class UserPreferencesUpdate(BaseModel):
     custom_instructions: Optional[str] = None
     favorite_brands: Optional[str] = None
     price_preference: Optional[str] = None
+    contextual_budgets: Optional[str] = None
 
 @router.patch("/me/preferences")
 def update_preferences(
@@ -285,6 +288,8 @@ def update_preferences(
             user.favorite_brands = request.favorite_brands
         if request.price_preference is not None:
             user.price_preference = request.price_preference
+        if request.contextual_budgets is not None:
+            user.contextual_budgets = request.contextual_budgets
         
         db.commit()
         db.refresh(user)
@@ -294,7 +299,8 @@ def update_preferences(
             "conversation_tone": user.conversation_tone,
             "custom_instructions": user.custom_instructions,
             "favorite_brands": user.favorite_brands,
-            "price_preference": user.price_preference
+            "price_preference": user.price_preference,
+            "contextual_budgets": user.contextual_budgets
         }
     except Exception as e:
         db.rollback()

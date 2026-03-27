@@ -22,8 +22,10 @@ export interface AgentStep {
   step: number
   thought?: string
   action?: string
+  tool?: string
   action_input?: Record<string, any>
   observation_summary?: string
+  observation_data?: any
   status?: "thinking" | "running" | "ok" | "error" | "final"
   ebay_query?: string
 }

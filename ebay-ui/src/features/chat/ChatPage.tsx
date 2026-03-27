@@ -66,11 +66,11 @@ export default function ChatPage() {
     // degli eventi di scroll che rovinano la logica sticky. Usare "auto" per pinning perfetto stile ChatGPT.
     container.scrollTo({ top: container.scrollHeight, behavior: "auto" })
     
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        isAutoScrollingRef.current = false
-      }, 50)
-    })
+    const timeoutId = setTimeout(() => {
+      isAutoScrollingRef.current = false
+    }, 50)
+
+    return () => clearTimeout(timeoutId)
   }, [chat, steps, running, loadingQuery, finalPayload?.finalAnswer])
 
   useEffect(() => {
@@ -92,23 +92,29 @@ export default function ChatPage() {
       return
     }
 
+    const timers: ReturnType<typeof setTimeout>[] = []
+
     // Cerchiamo passi di tipo contact_seller che hanno un link
     // e che non abbiamo ancora "aperto" in questa esecuzione.
-    typedSteps.forEach((step: any) => {
+    typedSteps.forEach((step: AgentStep) => {
       const toolName = step.tool?.toLowerCase() || ""
       const isContact = toolName.includes("contact_seller")
-      const resultData = step.observation_data?.data || step.observation_data
+      const obsData = step.observation_data as any
+      const resultData = obsData?.data || obsData
       const contactUrl = resultData?.contact_url
 
       if (isContact && contactUrl && !openedLinksRef.current.has(step.step.toString())) {
         openedLinksRef.current.add(step.step.toString())
         
         // Piccola pausa per lasciare che l'utente veda il pill del tool prima del popup
-        setTimeout(() => {
+        const t = setTimeout(() => {
           window.open(contactUrl, "_blank")
         }, 300)
+        timers.push(t)
       }
     })
+
+    return () => timers.forEach(clearTimeout)
   }, [typedSteps, running])
 
   // Reset del Set quando la query cambia o finisce

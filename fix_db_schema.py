@@ -1,0 +1,32 @@
+import os
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    print("DATABASE_URL is not set.")
+    exit(1)
+
+engine = create_engine(DATABASE_URL)
+
+def run_migration():
+    commands = [
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS previous_price FLOAT;",
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;"
+    ]
+    
+    with engine.connect() as conn:
+        for cmd in commands:
+            print(f"Executing: {cmd}")
+            try:
+                conn.execute(text(cmd))
+                conn.commit()
+                print("Success.")
+            except Exception as e:
+                print(f"Failed: {e}")
+
+if __name__ == "__main__":
+    run_migration()

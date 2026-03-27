@@ -63,12 +63,14 @@ async def list_wishlist(user=Depends(get_current_user), db: Session = Depends(ge
                 "ebay_id": item.ebay_id,
                 "title": item.title,
                 "price": item.price,
+                "previous_price": item.previous_price,
                 "currency": item.currency,
                 "condition": item.condition,
                 "image_url": item.image_url,
                 "url": item.url,
                 "seller_name": item.seller_name,
                 "added_at": item.added_at.isoformat() if item.added_at else None,
+                "last_checked_at": item.last_checked_at.isoformat() if item.last_checked_at else None,
             }
             for item in items
         ],

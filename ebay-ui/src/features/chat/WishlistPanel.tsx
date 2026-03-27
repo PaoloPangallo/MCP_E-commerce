@@ -1,8 +1,9 @@
-import { Box, Typography, IconButton, Tooltip, List, ListItem, ListItemText, Fade } from "@mui/material"
+import { Box, Typography, IconButton, Tooltip, List, ListItem, ListItemText, Fade, Chip } from "@mui/material"
 import FavoriteIcon from "@mui/icons-material/Favorite"
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
 import CloseIcon from "@mui/icons-material/Close"
+import TrendingDownIcon from "@mui/icons-material/TrendingDown"
 import { useWishlistStore } from "./store/wishlistStore"
 import { useAuth } from "../../auth/useAuth"
 
@@ -179,9 +180,33 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                     secondary={
                       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
                         {item.price != null && (
-                          <Typography sx={{ fontSize: 14, color: "#059669", fontWeight: 800 }}>
-                            {item.price.toLocaleString("it-IT", { style: "currency", currency: item.currency ?? "EUR" })}
-                          </Typography>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                            <Typography sx={{ fontSize: 14, color: "#059669", fontWeight: 800 }}>
+                              {item.price.toLocaleString("it-IT", { style: "currency", currency: item.currency ?? "EUR" })}
+                            </Typography>
+                            {item.previous_price != null && item.previous_price > item.price && (
+                              <Chip
+                                icon={<TrendingDownIcon sx={{ fontSize: "13px !important", color: "#059669 !important" }} />}
+                                label={`-${(item.previous_price - item.price).toLocaleString("it-IT", { style: "currency", currency: item.currency ?? "EUR" })}`}
+                                size="small"
+                                sx={{
+                                  height: 20,
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  bgcolor: "rgba(5, 150, 105, 0.1)",
+                                  color: "#059669",
+                                  border: "1px solid rgba(5, 150, 105, 0.3)",
+                                  ".MuiChip-icon": { ml: "4px" },
+                                  animation: "pricePop 0.4s ease-out",
+                                  "@keyframes pricePop": {
+                                    "0%": { transform: "scale(0.8)", opacity: 0 },
+                                    "70%": { transform: "scale(1.05)" },
+                                    "100%": { transform: "scale(1)", opacity: 1 },
+                                  }
+                                }}
+                              />
+                            )}
+                          </Box>
                         )}
                         {item.seller_name && (
                           <Typography sx={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>

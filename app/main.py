@@ -54,8 +54,8 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Could not connect to Redis: %s. Session memory/history will fallback to local memory.", e)
 
-    from app.services import ebay
-    await ebay.init_http_client()
+    from app.services.ebay import init_http_client, close_http_client
+    await init_http_client()
     logger.info("eBay shared HTTP client initialized.")
 
     from sqlalchemy import text
@@ -66,10 +66,16 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Database warmup failed: %s", e)
 
+    # Start the background price tracking loop
+    from app.services.price_tracker import price_tracking_loop
+    _tracker_task = asyncio.create_task(price_tracking_loop())
+    logger.info("Price tracking background task started.")
+
     async with mcp_app.router.lifespan_context(app):
         yield
 
-    await ebay.close_http_client()
+    _tracker_task.cancel()
+    await close_http_client()
     logger.info("App shutdown complete.")
 
 
@@ -115,12 +121,6 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    logger.info(f"Incoming request: {request.method} {request.url.path}")
-    response = await call_next(request)
-    logger.info(f"Response status: {response.status_code}")
-    return response
 
 logger.info("Mounting MCP Server at /mcp")
 app.mount("/mcp", mcp_app)

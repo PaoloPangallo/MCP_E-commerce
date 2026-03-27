@@ -6,12 +6,14 @@ export interface WishlistItem {
   ebay_id: string
   title: string | null
   price: number | null
+  previous_price: number | null
   currency: string | null
   condition: string | null
   image_url: string | null
   url: string | null
   seller_name: string | null
   added_at: string | null
+  last_checked_at: string | null
 }
 
 interface WishlistState {
@@ -19,7 +21,7 @@ interface WishlistState {
   isLoading: boolean
 
   loadItems: () => Promise<void>
-  addItem: (item: Omit<WishlistItem, "id" | "added_at">) => Promise<void>
+  addItem: (item: Omit<WishlistItem, "id" | "added_at" | "previous_price" | "last_checked_at">) => Promise<void>
   removeItem: (ebayId: string) => Promise<void>
   isInWishlist: (ebayId: string) => boolean
 }

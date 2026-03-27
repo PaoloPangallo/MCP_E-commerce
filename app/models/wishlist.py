@@ -16,6 +16,7 @@ class WishlistItem(Base):
     ebay_id = Column(String(100), nullable=False)
     title = Column(String(500), nullable=True)
     price = Column(Float, nullable=True)
+    previous_price = Column(Float, nullable=True)  # Stores last price before a drop
     currency = Column(String(10), nullable=True, default="EUR")
     condition = Column(String(100), nullable=True)
     image_url = Column(String(1000), nullable=True)
@@ -24,3 +25,4 @@ class WishlistItem(Base):
 
     # Metadata
     added_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_checked_at = Column(DateTime(timezone=True), nullable=True)  # Last price check timestamp

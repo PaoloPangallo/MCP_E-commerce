@@ -28,7 +28,7 @@ function formatPrice(price?: number, currency?: string) {
 }
 
 function ScoreBar({ label, score, color }: { label: string, score: number, color: string }) {
-  const pct = Math.round(score * 100)
+  const pct = Math.min(100, Math.round(score * 100))
   return (
     <Box sx={{ width: "100%" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>

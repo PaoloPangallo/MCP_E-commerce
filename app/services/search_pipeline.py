@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import math
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,6 +25,7 @@ from app.services.rag.reranker import rerank_products
 from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
 # from app.services.user_profiling import update_user_profile (Disabled: using explicit MCP updates)
+from app.llm.client import call_llm
 from app.services.ebay_metadata import get_return_policies
 from app.services.nlp_ner import extract_attributes_batch
 from app.services.rag.qdrant_store import index_search_items
@@ -303,6 +306,27 @@ def _apply_final_ranking(
         trust = float(item.get("trust_score") or 0)
         price = item.get("price") or 0
 
+        # Compute value_score (Value-for-money heuristic)
+        condition_str = (item.get("condition") or "").lower()
+        condition_score = 0.5
+        if any(w in condition_str for w in ["nuovo", "new"]):
+            condition_score = 1.0
+        elif any(w in condition_str for w in ["ricondizionato", "refurbished"]):
+            condition_score = 0.7
+        elif any(w in condition_str for w in ["usato", "used", "gebraucht"]):
+            condition_score = 0.4
+            
+        val_trust = trust if trust > 0 else 0.5  # Use average trust if not computed yet
+        quality = 0.6 * val_trust + 0.4 * condition_score
+        price_val = float(price)
+        if price_val > 0:
+            # Diminishing returns on price: cheaper is better
+            price_factor = 1.0 / (1.0 + math.log1p(price_val / 100))
+            # Normalise roughly to 0-1 range
+            item["value_score"] = round(min(1.0, quality * (0.5 + price_factor)), 4)
+        else:
+            item["value_score"] = 0.0
+
         ranking_score = base_relevance
 
         explanations = []
@@ -324,14 +348,45 @@ def _apply_final_ranking(
                         explanations.append(f"This item matches your preferred brand '{b}'.")
                         break
 
-            price_pref = getattr(user, "price_preference", None)
-            if price_pref and price:
+            # Granular Budget Matching
+            contextual_budgets = {}
+            if user and getattr(user, "contextual_budgets", None):
                 try:
-                    pref = float(price_pref)
-                    if float(price) <= pref:
-                        ranking_score += 0.05
+                    contextual_budgets = json.loads(user.contextual_budgets)
+                except Exception:
+                    pass
+            
+            # Prefer contextual over global
+            best_pref = None
+            
+            # Check for current product type budget
+            # We assume query features or metadata might have the intent
+            intent_product = item.get("intent_product_type") or ""
+            cat_key = f"product:{intent_product.lower()}"
+            if cat_key in contextual_budgets:
+                best_pref = float(contextual_budgets[cat_key])
+            else:
+                # Check for brand-specific budget
+                title_lower = (item.get("title") or "").lower()
+                for b_key, b_val in contextual_budgets.items():
+                    if b_key.startswith("brand:") and b_key.split(":")[1] in title_lower:
+                        best_pref = float(b_val)
+                        break
+            
+            # Fallback to global if no context match
+            if best_pref is None:
+                price_pref = getattr(user, "price_preference", None)
+                if price_pref:
+                    try:
+                        best_pref = float(price_pref)
+                    except Exception: pass
+            
+            if best_pref and price:
+                try:
+                    if float(price) <= best_pref:
+                        ranking_score += 0.08 # Increased bonus for contextual match
                         item["price_match"] = True
-                        explanations.append("This product falls within your typical price range.")
+                        explanations.append(f"Matching your budget profile for this category (~{int(best_pref)}€).")
                 except Exception:
                     pass
 
@@ -340,12 +395,105 @@ def _apply_final_ranking(
         elif trust >= 0.6:
             explanations.append("Seller shows generally positive feedback.")
 
-        item["ranking_score"] = int(float(ranking_score) * 1000) / 1000.0
+        item["ranking_score"] = round(min(1.0, float(ranking_score)), 4)
         if explanations:
             item["explanations"] = explanations
 
     # Sort one final time to respect user preferences (like brand match bonuses) injected above
     items.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
+
+
+async def _compute_llm_value_scores(
+    top_items: List[Dict[str, Any]],
+    all_items: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Usa l'LLM (Ollama) per valutare il 'Value for Money' dei top prodotti.
+    Passa le statistiche di mercato calcolate dall'intera SERP eBay corrente
+    come contesto — nessuna chiamata API esterna aggiuntiva.
+    """
+    if not top_items:
+        return {}
+
+    # ── Calcola statistiche di mercato dai risultati eBay completi ──────────
+    prices = [float(it["price"]) for it in all_items if isinstance(it.get("price"), (int, float)) and it["price"] > 0]
+    
+    market_ctx: Dict[str, Any] = {}
+    if prices:
+        market_ctx["count"] = len(prices)
+        market_ctx["avg_price"]    = round(sum(prices) / len(prices), 2)
+        market_ctx["min_price"]    = round(min(prices), 2)
+        market_ctx["max_price"]    = round(max(prices), 2)
+        sorted_p = sorted(prices)
+        mid = len(sorted_p) // 2
+        market_ctx["median_price"] = round(
+            sorted_p[mid] if len(sorted_p) % 2 else (sorted_p[mid - 1] + sorted_p[mid]) / 2, 2
+        )
+
+    # Distribuzione condizioni per contestualizzare l'LLM
+    from collections import Counter
+    cond_counter = Counter(
+        (it.get("condition") or "unknown").lower()
+        for it in all_items
+    )
+    market_ctx["condition_distribution"] = dict(cond_counter.most_common(5))
+
+    # ── Prepara i candidati da valutare ─────────────────────────────────────
+    candidates = []
+    for item in top_items:
+        price = item.get("price")
+        price_vs_avg = None
+        if prices and isinstance(price, (int, float)):
+            avg = market_ctx["avg_price"]
+            price_vs_avg = f"{round((price - avg) / avg * 100, 1):+.1f}% rispetto alla media"
+        
+        candidates.append({
+            "id":            item.get("ebay_id"),
+            "title":         (item.get("title") or "")[:70],
+            "price":         f"{price} {item.get('currency', 'EUR')}",
+            "price_vs_avg":  price_vs_avg,
+            "condition":     item.get("condition"),
+            "seller_trust":  item.get("trust_score"),
+            "seller_rating": item.get("seller_rating"),
+        })
+
+    prompt = f"""Sei un esperto di mercato eBay. Valuta il rapporto qualità-prezzo di questi annunci.
+
+CONTESTO MERCATO (prezzi reali dalla ricerca corrente):
+- Prodotti trovati: {market_ctx.get('count', '?')}
+- Prezzo medio: {market_ctx.get('avg_price', '?')} EUR
+- Range prezzi: {market_ctx.get('min_price', '?')} – {market_ctx.get('max_price', '?')} EUR
+- Prezzo mediano: {market_ctx.get('median_price', '?')} EUR
+- Condizioni presenti: {market_ctx.get('condition_distribution', {})}
+
+ANNUNCI DA VALUTARE:
+{json.dumps(candidates, ensure_ascii=False, indent=2)}
+
+ISTRUZIONI:
+- Usa il contesto mercato per dare un punteggio relativo, non assoluto.
+- Un articolo sotto la mediana in buone condizioni merita 0.75+.
+- Un articolo sopra la media senza vantaggi evidenti merita < 0.45.
+- seller_trust 0–1 (più alto = più affidabile); None = non valutato (penalizzare leggermente).
+- "reason" deve essere breve (max 10 parole, in italiano).
+
+Rispondi SOLO con un array JSON valido:
+[{{"id": "...", "value_score": 0.XX, "reason": "..."}}]"""
+
+    try:
+        response, _ = await call_llm(prompt)
+        if not response:
+            return {}
+        match = re.search(r"\[.*?\]", response, re.DOTALL)
+        if match:
+            data = json.loads(match.group(0))
+            return {
+                s["id"]: {"score": float(s["value_score"]), "reason": s.get("reason")}
+                for s in data
+                if "id" in s and "value_score" in s
+            }
+    except Exception as e:
+        logger.warning("LLM value score computation failed: %s", e)
+    return {}
 
 
 def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict], query: str = "", parsed: Dict = None) -> List[Dict]:
@@ -380,6 +528,37 @@ def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict], quer
             if match_count < required:
                 continue
 
+        # Filtro forte 3: Prezzo (se presente nel parsed)
+        price_val = item.get("price")
+        if parsed and parsed.get("constraints") and price_val:
+            try:
+                p_float = float(price_val)
+                for c in parsed["constraints"]:
+                    if c.get("type") == "price":
+                        op = c.get("operator")
+                        val = c.get("value")
+                        if op == "<=" and p_float > float(val):
+                            continue
+                        if op == ">=" and p_float < float(val):
+                            continue
+                        if op == "between" and isinstance(val, list):
+                            if p_float < float(val[0]) or p_float > float(val[1]):
+                                continue
+            except Exception:
+                pass
+
+        # Filtro forte 4: Condizione (se presente nel parsed)
+        if parsed and parsed.get("constraints"):
+            item_cond = (item.get("condition") or "").lower()
+            for c in parsed["constraints"]:
+                if c.get("type") == "condition":
+                    target_cond = str(c.get("value", "")).lower()
+                    # Mapping base: new, used, refurbished
+                    if target_cond == "new" and not any(w in item_cond for w in ["nuovo", "new"]):
+                        continue
+                    if target_cond == "used" and not any(w in item_cond for w in ["usato", "used", "gebraucht"]):
+                        continue
+                        
         item["_source_memory"] = True
         item["_memory_rank"] = i + 1
         merged_map[eid] = item
@@ -668,6 +847,26 @@ async def run_search_pipeline(
     logger.info("PIPELINE STEP 8: final_ranking")
 
     _apply_final_ranking(results_out, user=user)
+
+    # ------------------------------------------------------------
+    # 7.5) LLM VALUATION (TOP-K REFINEMENT)
+    # ------------------------------------------------------------
+    logger.info("PIPELINE STEP 8.5: llm_value_refinement")
+    top_n_for_llm = results_out[:8]
+    if top_n_for_llm:
+        llm_valuations = await _compute_llm_value_scores(
+            top_items=top_n_for_llm,
+            all_items=results_out,  # Mercato = intera SERP eBay corrente, zero costi extra
+        )
+        for item in results_out:
+            eid = item.get("ebay_id")
+            if eid and eid in llm_valuations:
+                val = llm_valuations[eid]
+                item["value_score"] = val["score"]
+                if val.get("reason"):
+                    explanations = list(item.get("explanations") or [])
+                    item["explanations"] = [f"💡 {val['reason']}"] + explanations[:5]
+
     
     # Attach RAG feedback
     logger.info("PIPELINE STEP 9: rag_attach")
