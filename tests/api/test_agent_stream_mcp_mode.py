@@ -16,3 +16,8 @@ def test_stream_request_invalid_mcp_mode_defaults_to_standard():
     assert _resolve_mcp_mode("unknown_value") == "standard"
     assert _resolve_mcp_mode("playwright_browser") == "playwright_browser"
     assert _resolve_mcp_mode("standard") == "standard"
+
+
+def test_stream_request_invalid_mcp_mode_normalised_by_model():
+    req = StreamRequest(query="iphone", mcp_mode="unknown_value")
+    assert req.mcp_mode == "standard"

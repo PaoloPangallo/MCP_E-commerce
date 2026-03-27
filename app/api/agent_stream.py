@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.agent.ebay_agent import EbayReactAgent
 from app.agent.schemas import AgentRequest
@@ -324,6 +324,11 @@ class StreamRequest(BaseModel):
     image: Optional[str] = None
     mcp_mode: str = "standard"
 
+    @field_validator("mcp_mode")
+    @classmethod
+    def validate_mcp_mode(cls, v: str) -> str:
+        return _resolve_mcp_mode(v)
+
 async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: str, user: Any, image: Optional[str] = None, mcp_mode: str = "standard"):
 
     if _looks_like_event_stream_payload(clean_query):
@@ -374,6 +379,7 @@ async def agent_stream(
     query: str = Query(..., min_length=1),
     llm_engine: str = Query("ollama_cloud"),
     user=Depends(get_optional_user),
+    # mcp_mode is not exposed on the legacy GET endpoint; always uses the standard world.
 ):
     clean_query = _sanitize_query(query)
 
