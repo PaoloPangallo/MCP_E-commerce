@@ -30,6 +30,11 @@ from app.llm.client import call_ollama_cloud, call_llm_stream
 
 logger = logging.getLogger(__name__)
 
+_MCP_DEFAULT_URLS: dict[str, str] = {
+    "standard": os.getenv("MCP_SERVER_URL") or "http://127.0.0.1:8050/standard/mcp",
+    "playwright_browser": os.getenv("MCP_PLAYWRIGHT_URL") or "http://127.0.0.1:8050/playwright/mcp",
+}
+
 
 class EbayReactAgent:
     def __init__(
@@ -48,16 +53,10 @@ class EbayReactAgent:
         self.mcp_mode = mcp_mode
 
         # Resolve MCP server URL from mcp_mode if not explicitly provided
-        _DEFAULT_URLS = {
-            "standard": os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8050/standard/mcp"),
-            "playwright_browser": os.getenv(
-                "MCP_PLAYWRIGHT_URL", "http://127.0.0.1:8050/playwright/mcp"
-            ),
-        }
         self.mcp_server_url = (
             mcp_server_url
-            or _DEFAULT_URLS.get(mcp_mode)
-            or _DEFAULT_URLS["standard"]
+            or _MCP_DEFAULT_URLS.get(mcp_mode)
+            or _MCP_DEFAULT_URLS["standard"]
         )
 
         if strict_mcp is None:
