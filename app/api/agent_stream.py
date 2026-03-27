@@ -77,6 +77,14 @@ def _normalize_llm_engine(llm_engine: str) -> str:
     return "ollama_cloud"
 
 
+_VALID_MCP_MODES = {"standard", "playwright_browser"}
+
+
+def _resolve_mcp_mode(mcp_mode: str) -> str:
+    mode = (mcp_mode or "standard").strip().lower()
+    return mode if mode in _VALID_MCP_MODES else "standard"
+
+
 def _sanitize_query(query: str) -> str:
     q = str(query or "").strip()
     if not q:
@@ -197,8 +205,10 @@ async def agent_event_generator(
     llm_engine: str,
     user: Any,
     image: Optional[str] = None,
+    mcp_mode: str = "standard",
 ):
     llm_engine = _normalize_llm_engine(llm_engine)
+    mcp_mode = _resolve_mcp_mode(mcp_mode)
     query = _sanitize_query(query)
 
     if not query and not image:
@@ -221,7 +231,7 @@ async def agent_event_generator(
         db = None
         try:
             db = SessionLocal()
-            agent = EbayReactAgent(db=db, user=user)
+            agent = EbayReactAgent(db=db, user=user, mcp_mode=mcp_mode)
             
             logger.info(
                 "Agent created for stream [VER: QUEUE_HBEAT_FIX] | user=%s",
@@ -312,8 +322,9 @@ class StreamRequest(BaseModel):
     query: str
     llm_engine: str = "ollama_cloud"
     image: Optional[str] = None
+    mcp_mode: str = "standard"
 
-async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: str, user: Any, image: Optional[str] = None):
+async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: str, user: Any, image: Optional[str] = None, mcp_mode: str = "standard"):
 
     if _looks_like_event_stream_payload(clean_query):
         raise HTTPException(
@@ -336,7 +347,7 @@ async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: s
         logger.info("ANONYMOUS REQUEST (no GEMS).")
 
     return StreamingResponse(
-        agent_event_generator(request, clean_query, llm_engine, user, image),
+        agent_event_generator(request, clean_query, llm_engine, user, image, mcp_mode),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -355,7 +366,7 @@ async def agent_stream_post(
     if not clean_query and not body.image:
         raise HTTPException(status_code=400, detail="Query o immagine necessaria.")
     
-    return await _handle_agent_stream(request, clean_query, body.llm_engine, user, body.image)
+    return await _handle_agent_stream(request, clean_query, body.llm_engine, user, body.image, body.mcp_mode)
 
 @router.get("/stream")
 async def agent_stream(
