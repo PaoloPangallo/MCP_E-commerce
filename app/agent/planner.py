@@ -16,7 +16,7 @@ from app.services.parser import extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search", "contact_seller_playwright"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -437,7 +437,8 @@ class ReactPlanner:
             max_steps=max_steps,
             tool_catalog=tool_catalog,
             custom_instructions=custom_instructions,
-            tone=tone
+            tone=tone,
+            mcp_mode=getattr(memory, "mcp_mode", "standard"),
         )
 
         raw = await self._call_llm(prompt)
@@ -687,7 +688,24 @@ class ReactPlanner:
                 "query": clean_q,
                 "visible": visible_requested,
             }
-            
+
+        elif action == "contact_seller_playwright":
+            if not action_input.get("product_url"):
+                # Extract product URL from search results in memory
+                scratchpad = memory.scratchpad()
+                top_results = scratchpad.get("top_results") or []
+                if top_results and top_results[0].get("url"):
+                    action_input["product_url"] = top_results[0]["url"]
+                else:
+                    search = getattr(memory, "_search_payload", None) or {}
+                    results = search.get("results") or []
+                    if results and results[0].get("url"):
+                        action_input["product_url"] = results[0]["url"]
+                    else:
+                        return None  # Cannot proceed without a product URL
+            if not action_input.get("message"):
+                action_input["message"] = memory.user_query
+
         return action_input
 
     def _intent_is_satisfied(self, memory: AgentMemory, intent: str) -> bool:
@@ -734,6 +752,8 @@ class ReactPlanner:
             return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
         if intent == "playwright_search":
             return ["ebay_scrape"]
+        if intent == "contact_seller_playwright":
+            return ["contact_seller_playwright"]
         return []
 
     def _tool_state_is_terminal(self, memory: AgentMemory, tool_name: str) -> bool:
