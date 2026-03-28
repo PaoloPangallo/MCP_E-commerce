@@ -25,15 +25,34 @@ logger = logging.getLogger(__name__)
 
 EBAY_SEARCH_URL = "https://www.ebay.it/sch/i.html?_nkw={query}&_ipg=48&LH_BIN=1"
 
-_PRODUCT_CONTAINER = "li:has(.su-card-container)"
-_LINK_SEL      = "a.s-card__link"
-_TITLE_SEL     = ".s-card__title span, .s-card__title"
-_PRICE_SEL     = ".s-card__price .s-price-format, .s-card__price"
-_IMAGE_SEL     = ".su-image img, .s-card img"
-_CONDITION_SEL = ".s-card__specifics-list"
-_SHIPPING_SEL  = ".s-card__delivery"
-_SELLER_SEL    = ".s-card__seller-info"
-_LOCATION_SEL  = ".s-card__item-location"
+# eBay search result containers — multiple selectors for resilience across layout changes
+_PRODUCT_CONTAINERS = [
+    "li.s-item",                         # primary modern layout
+    "li:has(.s-item__info)",             # fallback A
+    "li:has(.su-card-container)",        # fallback B (older layout)
+    "div.s-item",                        # grid layout
+]
+_LINK_SELS      = ["a.s-item__link", "a[href*='/itm/']", "a.s-card__link"]
+_TITLE_SELS     = [
+    ".s-item__title",
+    ".s-item__title span",
+    ".s-card__title span",
+    ".s-card__title",
+]
+_PRICE_SELS     = [
+    ".s-item__price",
+    ".s-item__price .POSITIVE",
+    ".s-card__price .s-price-format",
+    ".s-card__price",
+]
+_IMAGE_SELS     = [".s-item__image img", ".su-image img", ".s-card img"]
+_CONDITION_SELS = [".SECONDARY_INFO", ".s-item__subtitle", ".s-card__specifics-list"]
+_SHIPPING_SELS  = [".s-item__shipping", ".s-item__logisticsCost", ".s-card__delivery"]
+_SELLER_SELS    = [".s-item__seller-info", ".s-card__seller-info"]
+_LOCATION_SELS  = [".s-item__location", ".s-card__item-location"]
+
+# Wait-for selector — first one that matches means the page has product cards
+_WAIT_SELS = [".s-item", ".su-card-container", "li[data-view]"]
 
 # Thread pool dedicato: Playwright gira nel suo thread con ProactorEventLoop
 _PLAYWRIGHT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
@@ -79,6 +98,26 @@ async def _async_scrape(
     results: List[Dict[str, Any]] = []
     _launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
 
+    async def _first(element, selectors: List[str]) -> Optional[Any]:
+        """Return the first matching child element, trying each selector in order."""
+        for sel in selectors:
+            try:
+                el = await element.query_selector(sel)
+                if el:
+                    return el
+            except Exception:
+                continue
+        return None
+
+    async def _text(element, selectors: List[str]) -> str:
+        el = await _first(element, selectors)
+        if not el:
+            return ""
+        try:
+            return (await el.inner_text()).strip()
+        except Exception:
+            return ""
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, args=_launch_args)
         context = await browser.new_context(
@@ -96,58 +135,73 @@ async def _async_scrape(
         except Exception as exc:
             logger.warning("Playwright: goto load timeout, proceeding anyway | %s", exc)
 
-        try:
-            await page.wait_for_selector(".su-card-container", timeout=10_000)
-        except Exception as exc:
-            logger.warning("Playwright: nessuna card prodotto trovata | %s", exc)
+        # Wait for any known product container to appear
+        page_loaded = False
+        for wait_sel in _WAIT_SELS:
+            try:
+                await page.wait_for_selector(wait_sel, timeout=10_000)
+                logger.info("Playwright: page ready via selector=%s", wait_sel)
+                page_loaded = True
+                break
+            except Exception:
+                continue
+
+        if not page_loaded:
+            logger.warning("Playwright: nessuna card prodotto trovata su %s", url)
             await browser.close()
             return results
 
-        items = await page.query_selector_all(_PRODUCT_CONTAINER)
-        logger.info("Playwright: trovati %d elementi prodotto", len(items))
+        # Find which container selector works for this page
+        items: List[Any] = []
+        for container_sel in _PRODUCT_CONTAINERS:
+            try:
+                found = await page.query_selector_all(container_sel)
+                if found:
+                    items = found
+                    logger.info("Playwright: trovati %d elementi via selector=%s", len(found), container_sel)
+                    break
+            except Exception:
+                continue
+
+        if not items:
+            logger.warning("Playwright: nessun container prodotto trovato")
+            await browser.close()
+            return results
 
         for item in items:
             if len(results) >= max_results:
                 break
 
             try:
-                link_el = await item.query_selector(_LINK_SEL)
-                if not link_el:
-                    link_el = await item.query_selector("a[href*='/itm/']")
+                link_el = await _first(item, _LINK_SELS)
                 url_raw = await link_el.get_attribute("href") if link_el else ""
                 if not url_raw or "/itm/" not in url_raw:
                     continue
                 item_url = url_raw.split("?")[0]
 
-                title_el = await item.query_selector(_TITLE_SEL)
-                title = (await title_el.inner_text()).strip() if title_el else ""
-                if not title:
-                    title = (await link_el.inner_text()).strip()[:100] if link_el else ""
+                title = await _text(item, _TITLE_SELS)
+                if not title and link_el:
+                    try:
+                        title = (await link_el.inner_text()).strip()[:120]
+                    except Exception:
+                        pass
                 if not title or "shop on ebay" in title.lower():
                     continue
 
-                price_el = await item.query_selector(_PRICE_SEL)
-                price_raw = (await price_el.inner_text()).strip() if price_el else ""
+                price_raw = await _text(item, _PRICE_SELS)
                 price = _parse_price(price_raw)
 
-                img_el = await item.query_selector(_IMAGE_SEL)
+                img_el = await _first(item, _IMAGE_SELS)
                 image_url = ""
                 if img_el:
                     image_url = await img_el.get_attribute("src") or ""
                     if not image_url or "gif" in image_url:
                         image_url = await img_el.get_attribute("data-src") or ""
 
-                cond_el = await item.query_selector(_CONDITION_SEL)
-                condition = (await cond_el.inner_text()).strip() if cond_el else ""
-
-                seller_el = await item.query_selector(_SELLER_SEL)
-                seller = (await seller_el.inner_text()).strip() if seller_el else ""
-
-                loc_el = await item.query_selector(_LOCATION_SEL)
-                location = (await loc_el.inner_text()).strip() if loc_el else ""
-
-                ship_el = await item.query_selector(_SHIPPING_SEL)
-                shipping = (await ship_el.inner_text()).strip() if ship_el else ""
+                condition = await _text(item, _CONDITION_SELS)
+                seller = await _text(item, _SELLER_SELS)
+                location = await _text(item, _LOCATION_SELS)
+                shipping = await _text(item, _SHIPPING_SELS)
 
                 results.append({
                     "title": title,

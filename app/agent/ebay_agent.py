@@ -31,8 +31,8 @@ from app.llm.client import call_ollama_cloud, call_llm_stream
 logger = logging.getLogger(__name__)
 
 _MCP_DEFAULT_URLS: dict[str, str] = {
-    "standard": os.getenv("MCP_SERVER_URL") or "http://127.0.0.1:8050/standard/mcp",
-    "playwright_browser": os.getenv("MCP_PLAYWRIGHT_URL") or "http://127.0.0.1:8050/playwright/mcp",
+    "standard": os.getenv("MCP_SERVER_URL") or "http://127.0.0.1:8050/mcp/standard/mcp",
+    "playwright_browser": os.getenv("MCP_PLAYWRIGHT_URL") or "http://127.0.0.1:8050/mcp/playwright/mcp",
 }
 
 

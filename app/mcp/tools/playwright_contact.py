@@ -5,7 +5,7 @@ Apre Chromium visibile, naviga su una pagina prodotto eBay e tenta di
 contattare il venditore compilando il form di messaggistica.
 
 NOTA: eBay richiede login per inviare messaggi. Se l'utente non è loggato,
-ritorna status="login_required" con istruzioni.
+il browser rimane APERTO così l'utente può fare login e riprovare.
 """
 from __future__ import annotations
 
@@ -74,25 +74,30 @@ async def _async_contact_seller(
 
         current_url = page.url
         if "signin" in current_url or "login" in current_url:
-            await browser.close()
+            # IMPORTANT: leave browser open so user can log in manually
+            logger.info("PW contact_seller: login required — browser left open for manual login")
             return _build_contact_result(
                 product_url=product_url,
                 success=False,
                 status="login_required",
                 detail=(
                     "eBay richiede il login per contattare i venditori. "
-                    "Effettua il login su eBay.it nel browser che si è aperto, "
-                    "poi riprova l'operazione."
+                    "Il browser è rimasto aperto: effettua il login su eBay.it, "
+                    "poi naviga al prodotto e clicca 'Contatta il venditore'."
                 ),
             )
 
         contact_selectors = [
             "a[href*='contactseller']",
             "a[href*='contact_seller']",
+            "a[href*='vi/contact']",
             "a:has-text('Contatta il venditore')",
             "a:has-text('Contact seller')",
             "button:has-text('Contatta il venditore')",
+            "button:has-text('Contact seller')",
             "[data-testid*='contact']",
+            "[data-testid='contact-seller']",
+            ".vi-VR-cvipFreeShipping a",
         ]
 
         contact_link = None
@@ -101,20 +106,21 @@ async def _async_contact_seller(
                 el = await page.query_selector(selector)
                 if el:
                     contact_link = el
+                    logger.info("PW contact_seller: found contact button via selector=%s", selector)
                     break
             except Exception:
                 continue
 
         if not contact_link:
-            await browser.close()
+            # Leave browser open — user can navigate manually
+            logger.info("PW contact_seller: contact button not found — browser left open")
             return _build_contact_result(
                 product_url=product_url,
                 success=False,
                 status="contact_button_not_found",
                 detail=(
                     "Non ho trovato il pulsante 'Contatta il venditore' su questa pagina. "
-                    "Potrebbe essere che il venditore non accetti messaggi, "
-                    "o che la pagina abbia una struttura diversa."
+                    "Il browser è rimasto aperto: cerca il pulsante manualmente e clicca tu."
                 ),
             )
 
@@ -127,14 +133,15 @@ async def _async_contact_seller(
 
         current_url = page.url
         if "signin" in current_url or "login" in current_url:
-            await browser.close()
+            # Leave browser open for manual login
+            logger.info("PW contact_seller: redirect to login after click — browser left open")
             return _build_contact_result(
                 product_url=product_url,
                 success=False,
                 status="login_required",
                 detail=(
                     "eBay richiede il login per inviare messaggi. "
-                    "Effettua il login su eBay.it e riprova."
+                    "Il browser è rimasto aperto: effettua il login e riprova."
                 ),
             )
 
@@ -143,6 +150,8 @@ async def _async_contact_seller(
             "textarea[id*='message']",
             "textarea[placeholder*='messaggio']",
             "textarea[placeholder*='message']",
+            "#message-to-seller-textarea",
+            ".msg-form__contenteditable",
             "textarea",
         ]
 
@@ -152,20 +161,22 @@ async def _async_contact_seller(
                 el = await page.query_selector(sel)
                 if el:
                     textarea = el
+                    logger.info("PW contact_seller: found textarea via selector=%s", sel)
                     break
             except Exception:
                 continue
 
         if not textarea:
-            await browser.close()
+            # Leave browser open — page is on contact form, user can type manually
+            logger.info("PW contact_seller: textarea not found — browser left open on contact page")
             return _build_contact_result(
                 product_url=product_url,
                 success=False,
                 status="message_form_not_found",
                 detail=(
                     "La pagina di contatto è aperta nel browser. "
-                    "Non ho trovato il campo di testo in modo automatico. "
-                    "Puoi compilare e inviare il messaggio manualmente nel browser."
+                    "Non ho trovato il campo di testo automaticamente — "
+                    "scrivi e invia il messaggio tu direttamente nel browser aperto."
                 ),
             )
 
@@ -177,6 +188,8 @@ async def _async_contact_seller(
             "button:has-text('Invia')",
             "button:has-text('Send')",
             "button:has-text('Invia messaggio')",
+            "button:has-text('Send message')",
+            "[data-testid='send-message']",
         ]
 
         submit_btn = None
@@ -185,20 +198,21 @@ async def _async_contact_seller(
                 el = await page.query_selector(sel)
                 if el:
                     submit_btn = el
+                    logger.info("PW contact_seller: found submit btn via selector=%s", sel)
                     break
             except Exception:
                 continue
 
         if not submit_btn:
-            await browser.close()
+            # Message is filled, leave browser open for manual submit
+            logger.info("PW contact_seller: submit button not found — browser left open with message filled")
             return _build_contact_result(
                 product_url=product_url,
                 success=False,
                 status="submit_button_not_found",
                 detail=(
                     "Ho compilato il messaggio nel form. "
-                    "Non ho trovato il bottone di invio automaticamente — "
-                    "clicca tu stesso 'Invia' nel browser aperto."
+                    "Il browser è rimasto aperto: clicca tu 'Invia' per inviare."
                 ),
                 message_sent=message,
             )
@@ -248,7 +262,7 @@ def _run_contact_in_proactor_loop(
         "Naviga automaticamente alla pagina del prodotto, trova il pulsante 'Contatta il venditore', "
         "compila il form e invia il messaggio. "
         "NOTA: richiede che l'utente sia loggato su eBay nel browser che si apre. "
-        "Se non loggato, il tool restituirà istruzioni per effettuare il login."
+        "Se non loggato, il browser rimane aperto così l'utente può fare login manualmente."
     ),
 )
 async def contact_seller_playwright(
@@ -263,7 +277,7 @@ async def contact_seller_playwright(
 ) -> Dict[str, Any]:
     try:
         logger.info("MCP contact_seller_playwright START | url=%s", product_url)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             _PLAYWRIGHT_EXECUTOR,
             _run_contact_in_proactor_loop,

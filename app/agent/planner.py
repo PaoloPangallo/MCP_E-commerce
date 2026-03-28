@@ -700,7 +700,7 @@ class ReactPlanner:
                     action_input["product_url"] = top_results[0]["url"]
                 else:
                     # 2. Current-turn raw search payload
-                    search = getattr(memory, "_search_payload", None) or {}
+                    search = memory.search_payload or {}
                     results = search.get("results") or []
                     if results and results[0].get("url"):
                         action_input["product_url"] = results[0]["url"]
