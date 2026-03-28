@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useReducer } from "react"
 import { streamAgent } from "../api/stream"
+import { useSettingsStore } from '../../chat/store/settingsStore'
 import { parseSSEEvent, type AgentState } from "../services/SSEParser"
 import type {
   AgentEvent,
@@ -62,6 +63,7 @@ export function useAgentStream(options?: {
   sessionId?: string | null
   onDone?: (payload: FinalPayload, originalQuery: string) => void
 }) {
+  const mcpMode = useSettingsStore((state) => state.settings.mcpMode)
   const [state, dispatch] = useReducer(agentReducer, initialState)
   
   // We use a Ref to track the current state because SSE events arrive asynchronously
@@ -146,10 +148,10 @@ export function useAgentStream(options?: {
            }, 0)
         }
       }
-    })
+    }, undefined, mcpMode)
 
     sourceRef.current = nextSource
-  }, [reset, options?.sessionId])
+  }, [reset, options?.sessionId, mcpMode])
 
   useEffect(() => {
     return () => {

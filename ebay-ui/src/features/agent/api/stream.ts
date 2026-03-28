@@ -14,7 +14,8 @@ export function streamAgent(
   query: string,
   image: string | undefined,
   onEvent: (event: AgentEvent) => void,
-  llmEngine = "ollama_cloud"
+  llmEngine = "ollama_cloud",
+  mcpMode: 'standard' | 'playwright_browser' = 'standard'
 ) {
   const token = getToken()
   const url = `${API_BASE}/agent/stream`
@@ -36,7 +37,8 @@ export function streamAgent(
     body: JSON.stringify({
       query,
       image,
-      llm_engine: llmEngine
+      llm_engine: llmEngine,
+      mcp_mode: mcpMode,
     }),
     signal: controller.signal,
     openWhenHidden: true, // Keep connection alive even when tab is in background
