@@ -79,8 +79,10 @@ WISHLIST_CUES = {
     "wishlist", "preferiti", "salva", "salvami", "aggiungi", "preferito", "lista", "desideri", "scelta", "voglio", "desiderio"
 }
 CONTACT_CUES = {
-    "contatta", "contattare", "messaggio", "messaggi", "scrivi", "scrivere", "scrivergli", "scriverle", "parla", "parlare",
-    "chiedere", "chiedi", "trattare", "tratta", "prezzo", "proposta", "comunicare", "comunica", "invia", "inviami",
+    "contatta", "contattare", "contattalo", "contattala", "contattali", "contattale",
+    "messaggio", "messaggi", "scrivi", "scrivere", "scrivergli", "scriverle", "parla", "parlare",
+    "chiedere", "chiedi", "trattare", "tratta", "prezzo", "proposta", "comunicare", "comunica",
+    "invia", "inviami", "mandagli", "mandagliene", "fallo", "vai", "apri",
     "informazioni", "informazione", "info", "messaggiare", "contatto"
 }
 PLAYWRIGHT_CUES = {
@@ -691,18 +693,24 @@ class ReactPlanner:
 
         elif action == "contact_seller_playwright":
             if not action_input.get("product_url"):
-                # Extract product URL from search results in memory
+                # 1. Current-turn search results (same request)
                 scratchpad = memory.scratchpad()
                 top_results = scratchpad.get("top_results") or []
                 if top_results and top_results[0].get("url"):
                     action_input["product_url"] = top_results[0]["url"]
                 else:
+                    # 2. Current-turn raw search payload
                     search = getattr(memory, "_search_payload", None) or {}
                     results = search.get("results") or []
                     if results and results[0].get("url"):
                         action_input["product_url"] = results[0]["url"]
                     else:
-                        return None  # Cannot proceed without a product URL
+                        # 3. Cross-turn: products persisted in session memory from a previous turn
+                        recent = getattr(memory.session_memory, "recent_products", []) or []
+                        if recent and recent[0].get("url"):
+                            action_input["product_url"] = recent[0]["url"]
+                        else:
+                            return None  # Cannot proceed without a product URL
             if not action_input.get("message"):
                 action_input["message"] = memory.user_query
 
@@ -751,7 +759,9 @@ class ReactPlanner:
         if intent == "wishlist":
             return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
         if intent == "playwright_search":
-            return ["ebay_scrape"]
+            # Playwright server exposes search_products (not ebay_scrape)
+            mcp_mode = getattr(memory, "mcp_mode", "standard") if memory else "standard"
+            return ["search_products"] if mcp_mode == "playwright_browser" else ["ebay_scrape"]
         if intent == "contact_seller_playwright":
             return ["contact_seller_playwright"]
         return []

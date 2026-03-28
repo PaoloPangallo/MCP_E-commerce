@@ -622,6 +622,9 @@ class RequestState:
     def scratchpad(self) -> Dict[str, Any]:
         results = (self.search_payload or {}).get("results") or []
         top_results = [_compact_result(item) for item in results[:3] if isinstance(item, dict)]
+        # Fallback: use products persisted from previous turns if current turn has no results
+        if not top_results:
+            top_results = list(getattr(self.session_memory, "recent_products", []) or [])[:3]
 
         seller_summary = None
         if self.seller_payload:
