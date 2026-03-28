@@ -91,7 +91,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           favoriteBrands: data.favorite_brands || '',
           pricePreference: data.price_preference || '',
           contextualBudgets: data.contextual_budgets || '',
-          mcpMode: 'standard', // not persisted — always reset after backend save
+          mcpMode: newSettings.mcpMode, // local-only: preserve the value the user just set
         },
         isSaving: false
       })
