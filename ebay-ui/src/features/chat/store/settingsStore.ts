@@ -8,6 +8,7 @@ export interface UserSettings {
   favoriteBrands: string
   pricePreference: string
   contextualBudgets?: string
+  mcpMode: 'standard' | 'playwright_browser'
 }
 
 interface SettingsState {
@@ -29,7 +30,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     customInstructions: '',
     favoriteBrands: '',
     pricePreference: '',
-    contextualBudgets: ''
+    contextualBudgets: '',
+    mcpMode: 'standard',
   },
   isOpen: false,
   isSaving: false,
@@ -50,7 +52,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         customInstructions: instructions || '',
         favoriteBrands: brands || '',
         pricePreference: price || '',
-        contextualBudgets: budgets || ''
+        contextualBudgets: budgets || '',
+        mcpMode: 'standard', // always reset to standard on auth load — local only
       }
     }))
     
@@ -80,16 +83,17 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
       const data = resp;
       
-      set({ 
+      set({
         settings: {
           theme: data.theme || 'light',
           conversationTone: data.conversation_tone || 'neutral',
           customInstructions: data.custom_instructions || '',
           favoriteBrands: data.favorite_brands || '',
           pricePreference: data.price_preference || '',
-          contextualBudgets: data.contextual_budgets || ''
+          contextualBudgets: data.contextual_budgets || '',
+          mcpMode: 'standard', // not persisted — always reset after backend save
         },
-        isSaving: false 
+        isSaving: false
       })
 
       // Applica il tema
@@ -116,7 +120,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           customInstructions: resp.custom_instructions || '',
           favoriteBrands: resp.favorite_brands || '',
           pricePreference: resp.price_preference || '',
-          contextualBudgets: resp.contextual_budgets || ''
+          contextualBudgets: resp.contextual_budgets || '',
+          mcpMode: 'standard', // not persisted — always reset on refresh
         }
       }))
       
