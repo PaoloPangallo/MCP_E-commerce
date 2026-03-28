@@ -730,10 +730,20 @@ class ReactPlanner:
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
     def _ordered_tools_for_intent(self, intent: str, memory: Optional[AgentMemory] = None) -> list[str]:
+        # In Playwright mode only two tools exist on the server: search_products and contact_seller_playwright.
+        # Any search-related intent maps to search_products; contact goes to contact_seller_playwright.
+        if memory and getattr(memory, "mcp_mode", "standard") == "playwright_browser":
+            if intent in {"contact_seller_playwright"}:
+                return ["contact_seller_playwright"]
+            if intent in {"conversation"}:
+                return []
+            # All other intents (product_search, comparison, hybrid, playwright_search, etc.) → search
+            return ["search_products"]
+
         seller_tool = "analyze_seller"
         search_tool = "search_products"
         compare_tool = "compare_products"
-        
+
         explicit_id = False
         if memory and memory.user_query:
             if EBAY_ID_RE.search(memory.user_query):
