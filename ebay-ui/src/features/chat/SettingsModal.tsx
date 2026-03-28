@@ -202,6 +202,40 @@ export default function SettingsModal() {
 
         <Divider sx={{ borderColor: 'var(--border-color)' }} />
 
+        {/* MONDO MCP */}
+        <Box>
+          <Typography fontWeight={600} fontSize={15} gutterBottom>Mondo MCP</Typography>
+          <Typography variant="body2" color="var(--text-secondary)" mb={2}>
+            Scegli come l'agente accede a eBay
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography fontSize={14} fontWeight={500}>
+                {localSettings.mcpMode === 'playwright_browser'
+                  ? '🌐 Browser Playwright (Visibile)'
+                  : '⚡ Standard (API eBay)'}
+              </Typography>
+              <Typography variant="body2" color="var(--text-secondary)" mt={0.5}>
+                {localSettings.mcpMode === 'playwright_browser'
+                  ? 'Chromium si aprirà visibile — permette di cercare e contattare venditori'
+                  : 'API ufficiali eBay, veloce e affidabile'}
+              </Typography>
+            </Box>
+            <Switch
+              checked={localSettings.mcpMode === 'playwright_browser'}
+              onChange={(e) =>
+                setLocalSettings({
+                  ...localSettings,
+                  mcpMode: e.target.checked ? 'playwright_browser' : 'standard',
+                })
+              }
+              color="primary"
+            />
+          </Box>
+        </Box>
+
+        <Divider sx={{ borderColor: 'var(--border-color)' }} />
+
         {/* EXPORT CHAT */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box>
