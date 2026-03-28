@@ -796,6 +796,8 @@ class ReactPlanner:
         
         # Consolidation: Use the already calculated evidence
         if evidence.contact_seller >= 0.5:
+            if getattr(memory, "mcp_mode", "standard") == "playwright_browser":
+                return "contact_seller_playwright", evidence.contact_seller, evidence
             return "contact_seller", evidence.contact_seller, evidence
             
         top, second = evidence.top_two()
@@ -820,6 +822,8 @@ class ReactPlanner:
         if label == "market_trends" and evidence.market >= self.intent_threshold:
             return label, evidence.market, evidence
         if label == "contact_seller" and evidence.contact_seller >= 0.5:
+            if getattr(memory, "mcp_mode", "standard") == "playwright_browser":
+                return "contact_seller_playwright", evidence.contact_seller, evidence
             return label, evidence.contact_seller, evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
