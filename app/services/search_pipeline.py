@@ -24,7 +24,7 @@ from app.services.rag.retriever import retrieve_context
 from app.services.rag.reranker import rerank_products
 from app.services.rag.query_expansion import expand_query
 from app.services.trust import compute_trust_score
-# from app.services.user_profiling import update_user_profile (Disabled: using explicit MCP updates)
+from app.services.user_profiling import update_user_profile, get_dominant_condition
 from app.llm.client import call_llm
 from app.services.ebay_metadata import get_return_policies
 from app.services.nlp_ner import extract_attributes_batch
@@ -343,48 +343,81 @@ def _apply_final_ranking(
                 title = (item.get("title") or "").lower()
                 for b in brands_pref:
                     if b in title:
-                        ranking_score += 0.10
+                        ranking_score += 0.15  # Increased from 0.10
                         item["brand_match"] = True
                         explanations.append(f"This item matches your preferred brand '{b}'.")
                         break
 
-            # Granular Budget Matching
+            # ── Condition preference bonus ──────────────────────────────
+            try:
+                dominant_condition = get_dominant_condition(user)
+                if dominant_condition:
+                    item_cond = (item.get("condition") or "").lower()
+                    cond_match = (
+                        (dominant_condition == "new" and any(w in item_cond for w in ["nuovo", "new"]))
+                        or (dominant_condition == "used" and any(w in item_cond for w in ["usato", "used", "gebraucht"]))
+                        or (dominant_condition == "refurbished" and any(w in item_cond for w in ["ricondizionato", "refurbished"]))
+                    )
+                    if cond_match:
+                        ranking_score += 0.08
+                        item["condition_match"] = True
+                        explanations.append(f"Matches your usual condition preference ({dominant_condition}).")
+            except Exception:
+                pass
+
+            # ── Granular Budget Matching ────────────────────────────────
             contextual_budgets = {}
             if user and getattr(user, "contextual_budgets", None):
                 try:
                     contextual_budgets = json.loads(user.contextual_budgets)
                 except Exception:
                     pass
-            
-            # Prefer contextual over global
+
+            # Prefer contextual budget (auto_ or manual) over global
             best_pref = None
-            
-            # Check for current product type budget
-            # We assume query features or metadata might have the intent
-            intent_product = item.get("intent_product_type") or ""
-            cat_key = f"product:{intent_product.lower()}"
-            if cat_key in contextual_budgets:
-                best_pref = float(contextual_budgets[cat_key])
-            else:
-                # Check for brand-specific budget
-                title_lower = (item.get("title") or "").lower()
+            title_lower = (item.get("title") or "").lower()
+
+            # 1. Manual brand key (brand:nike → set via MCP)
+            for b_key, b_val in contextual_budgets.items():
+                if b_key.startswith("brand:") and b_key.split(":", 1)[1] in title_lower:
+                    best_pref = float(b_val)
+                    break
+
+            # 2. Auto brand key (auto_brand:nike)
+            if best_pref is None:
                 for b_key, b_val in contextual_budgets.items():
-                    if b_key.startswith("brand:") and b_key.split(":")[1] in title_lower:
+                    if b_key.startswith("auto_brand:") and b_key.split(":", 1)[1] in title_lower:
                         best_pref = float(b_val)
                         break
-            
-            # Fallback to global if no context match
+
+            # 3. Auto category key (auto_cat:cellulari)
+            if best_pref is None:
+                item_cat = (item.get("category_name") or "").lower()
+                for b_key, b_val in contextual_budgets.items():
+                    if b_key.startswith("auto_cat:") and b_key.split(":", 1)[1] in item_cat:
+                        best_pref = float(b_val)
+                        break
+
+            # 4. Legacy manual product key (product:main)
+            if best_pref is None:
+                intent_product = item.get("intent_product_type") or ""
+                cat_key = f"product:{intent_product.lower()}"
+                if cat_key in contextual_budgets:
+                    best_pref = float(contextual_budgets[cat_key])
+
+            # 5. Fallback to global price_preference
             if best_pref is None:
                 price_pref = getattr(user, "price_preference", None)
                 if price_pref:
                     try:
                         best_pref = float(price_pref)
-                    except Exception: pass
-            
+                    except Exception:
+                        pass
+
             if best_pref and price:
                 try:
                     if float(price) <= best_pref:
-                        ranking_score += 0.08 # Increased bonus for contextual match
+                        ranking_score += 0.10  # Increased from 0.08
                         item["price_match"] = True
                         explanations.append(f"Matching your budget profile for this category (~{int(best_pref)}€).")
                 except Exception:
@@ -763,13 +796,28 @@ async def run_search_pipeline(
     seller_docs = [d for d in rag_docs if d.get("type") == "seller_feedback"]
 
     # ============================================================
-    # 3) USER PROFILE UPDATE (Disabled legacy automatic profiling)
+    # 3) USER PROFILE AUTO-UPDATE (coexists with manual MCP overrides)
     # ============================================================
-    # if user:
-    #     try:
-    #         update_user_profile(user, parsed, db)
-    #     except Exception:
-    #         logger.warning("User profiling update failed")
+    if user:
+        try:
+            # Determine dominant category name for contextual budgets
+            _dominant_cat_name: Optional[str] = None
+            if items:
+                cat_names = [it.get("category_name") for it in items if it.get("category_name")]
+                if cat_names:
+                    _dominant_cat_name = max(set(cat_names), key=cat_names.count)
+            changed = update_user_profile(
+                user=user,
+                parsed=parsed,
+                db=db,
+                dominant_category_name=_dominant_cat_name,
+                items=items[:10] if items else None,
+                action="search",
+            )
+            if changed:
+                logger.info("Auto-profiling updated user %s (cat=%s)", getattr(user, 'id', '?'), _dominant_cat_name)
+        except Exception as _prof_err:
+            logger.warning("User auto-profiling update failed: %s", _prof_err)
 
     # ============================================================
     # 4) SELLER TRUST  (deve venire PRIMA del rerank per alimentarlo)

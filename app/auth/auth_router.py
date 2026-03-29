@@ -85,6 +85,9 @@ class AuthResponse(BaseModel):
     theme: Optional[str] = "light"
     conversation_tone: Optional[str] = "neutral"
     contextual_budgets: Optional[str] = None
+    condition_preference: Optional[str] = None
+    interaction_depth: Optional[str] = None
+    category_affinities: Optional[str] = None
 
 
 # ---------------------------------------------------
@@ -135,6 +138,9 @@ async def register(
         theme=user.theme,
         conversation_tone=user.conversation_tone,
         contextual_budgets=getattr(user, "contextual_budgets", None),
+        condition_preference=getattr(user, "condition_preference", None),
+        interaction_depth=getattr(user, "interaction_depth", None),
+        category_affinities=getattr(user, "category_affinities", None),
     )
 
 
@@ -192,6 +198,9 @@ async def login(
         theme=user.theme,
         conversation_tone=user.conversation_tone,
         contextual_budgets=getattr(user, "contextual_budgets", None),
+        condition_preference=getattr(user, "condition_preference", None),
+        interaction_depth=getattr(user, "interaction_depth", None),
+        category_affinities=getattr(user, "category_affinities", None),
     )
 
 
@@ -237,6 +246,9 @@ async def token(
         theme=user.theme,
         conversation_tone=user.conversation_tone,
         contextual_budgets=getattr(user, "contextual_budgets", None),
+        condition_preference=getattr(user, "condition_preference", None),
+        interaction_depth=getattr(user, "interaction_depth", None),
+        category_affinities=getattr(user, "category_affinities", None),
     )
 
 
@@ -253,6 +265,9 @@ class UserResponse(BaseModel):
     theme: Optional[str] = "light"
     conversation_tone: Optional[str] = "neutral"
     contextual_budgets: Optional[str] = None
+    condition_preference: Optional[str] = None
+    interaction_depth: Optional[str] = None
+    category_affinities: Optional[str] = None
 
 @router.get("/me", response_model=UserResponse)
 def get_me(user: User = Depends(get_current_user)):
@@ -265,6 +280,9 @@ def get_me(user: User = Depends(get_current_user)):
         theme=user.theme,
         conversation_tone=user.conversation_tone,
         contextual_budgets=getattr(user, "contextual_budgets", None),
+        condition_preference=getattr(user, "condition_preference", None),
+        interaction_depth=getattr(user, "interaction_depth", None),
+        category_affinities=getattr(user, "category_affinities", None),
     )
 
 class UserPreferencesUpdate(BaseModel):

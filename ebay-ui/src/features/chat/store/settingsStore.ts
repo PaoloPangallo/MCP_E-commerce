@@ -8,6 +8,9 @@ export interface UserSettings {
   favoriteBrands: string
   pricePreference: string
   contextualBudgets?: string
+  conditionPreference?: string
+  interactionDepth?: string
+  categoryAffinities?: string
   mcpMode: 'standard' | 'playwright_browser'
 }
 
@@ -19,7 +22,7 @@ interface SettingsState {
   setOpen: (open: boolean) => void
   updateLocalSettings: (partial: Partial<UserSettings>) => void
   saveSettingsToBackend: (token: string, newSettings: UserSettings) => Promise<void>
-  loadSettingsFromAuth: (theme?: string, tone?: string, instructions?: string, brands?: string, price?: string, budgets?: string) => void
+  loadSettingsFromAuth: (theme?: string, tone?: string, instructions?: string, brands?: string, price?: string, budgets?: string, condition?: string, depth?: string, affinities?: string) => void
   refreshSettings: () => Promise<void>
 }
 
@@ -31,6 +34,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     favoriteBrands: '',
     pricePreference: '',
     contextualBudgets: '',
+    conditionPreference: '',
+    interactionDepth: '',
+    categoryAffinities: '',
     mcpMode: 'standard',
   },
   isOpen: false,
@@ -44,7 +50,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }))
   },
 
-  loadSettingsFromAuth: (theme, tone, instructions, brands, price, budgets) => {
+  loadSettingsFromAuth: (theme, tone, instructions, brands, price, budgets, condition, depth, affinities) => {
     set(() => ({
       settings: {
         theme: (theme as 'light'|'dark') || 'light',
@@ -53,6 +59,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         favoriteBrands: brands || '',
         pricePreference: price || '',
         contextualBudgets: budgets || '',
+        conditionPreference: condition || '',
+        interactionDepth: depth || '',
+        categoryAffinities: affinities || '',
         mcpMode: 'standard', // always reset to standard on auth load — local only
       }
     }))
@@ -91,6 +100,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           favoriteBrands: data.favorite_brands || '',
           pricePreference: data.price_preference || '',
           contextualBudgets: data.contextual_budgets || '',
+          conditionPreference: data.condition_preference || '',
+          interactionDepth: data.interaction_depth || '',
+          categoryAffinities: data.category_affinities || '',
           mcpMode: newSettings.mcpMode, // local-only: preserve the value the user just set
         },
         isSaving: false
@@ -121,6 +133,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           favoriteBrands: resp.favorite_brands || '',
           pricePreference: resp.price_preference || '',
           contextualBudgets: resp.contextual_budgets || '',
+          conditionPreference: resp.condition_preference || '',
+          interactionDepth: resp.interaction_depth || '',
+          categoryAffinities: resp.category_affinities || '',
           mcpMode: 'standard', // not persisted — always reset on refresh
         }
       }))

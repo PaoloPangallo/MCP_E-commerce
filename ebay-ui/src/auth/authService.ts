@@ -9,6 +9,9 @@ export interface AuthResponse {
   price_preference?: string | null
   custom_instructions?: string | null
   contextual_budgets?: string | null
+  condition_preference?: string | null
+  interaction_depth?: string | null
+  category_affinities?: string | null
 
   token_type: string
   user_id: number

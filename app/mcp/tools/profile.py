@@ -20,7 +20,9 @@ async def update_user_preferences(
     price_preference: Annotated[Optional[str], Field(description="Preferenza di prezzo o budget (es. 'economico', 'Sotto 100€', 'premium')")] = None,
     custom_instructions: Annotated[Optional[str], Field(description="Istruzioni aggiuntive su come vuoi che l'agente interagisca con l'utente")] = None,
     theme: Annotated[Optional[str], Field(description="Tema UI preferito (es. 'light', 'dark')")] = None,
-    conversation_tone: Annotated[Optional[str], Field(description="Tono della conversazione (es. 'neutral', 'friendly', 'professional', 'zen')")] = None
+    conversation_tone: Annotated[Optional[str], Field(description="Tono della conversazione (es. 'neutral', 'friendly', 'professional', 'zen')")] = None,
+    condition_preference: Annotated[Optional[str], Field(description="Preferenza di condizione prodotto (es. 'new', 'used', 'refurbished'). Sovrascrive l'apprendimento automatico.")] = None,
+    reset_category_affinities: Annotated[Optional[bool], Field(description="Se True, azzera le affinità di categoria auto-apprese.")] = None,
 ) -> Dict[str, Any]:
     """
     Update the user's preferences in the database.
@@ -55,6 +57,20 @@ async def update_user_preferences(
             if conversation_tone is not None:
                 user.conversation_tone = conversation_tone
                 updates.append(f"conversation_tone={conversation_tone}")
+
+            # New fields — manual override of auto-learned profiling
+            if condition_preference is not None:
+                # Store as legacy flat value (no counter), marking it as manually set
+                valid_conditions = {"new", "used", "refurbished"}
+                cond_clean = condition_preference.strip().lower()
+                if cond_clean in valid_conditions:
+                    # Use a high count to dominate the counter (manual override)
+                    user.condition_preference = f"{cond_clean}:99"
+                    updates.append(f"condition_preference={cond_clean} (manual override)")
+
+            if reset_category_affinities:
+                user.category_affinities = "{}"
+                updates.append("category_affinities=reset")
             
             if updates:
                 db.commit()

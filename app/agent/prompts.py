@@ -374,35 +374,59 @@ def build_final_answer_prompt(
         
     pref_str = ""
     # Estrai le preferenze utente dalla long_term_memory nello scratchpad
-    # (build_final_answer_prompt riceve final_data che include long_term_memory)
     ltm = compact_final_data.get("long_term_memory") or {}
     if ltm:
         prefs = ltm.get("user_preferences") or {}
+        behaviour = ltm.get("user_behaviour") or {}
         pref_parts: List[str] = []
-        
-        # Preferenze DB (Le più affidabili)
+
+        # ── Brand preferences (DB is ground truth) ──────────────────────
         db_brands = prefs.get("db_favorite_brands")
         if db_brands:
-            pref_parts.append(f"Brand preferiti consolidati (DB): {db_brands}")
-            
+            pref_parts.append(f"Brand preferiti (confermati): {db_brands}")
+
+        # Validated brands from parser (more reliable than legacy brand_hints)
+        validated_brands = prefs.get("validated_brands") or []
+        if isinstance(validated_brands, list) and validated_brands:
+            pref_parts.append(f"Brand cercati di recente: {', '.join(str(b) for b in validated_brands[:3])}")
+        elif prefs.get("recent_brand_hints"):
+            hints = prefs.get("recent_brand_hints") or []
+            if isinstance(hints, list):
+                pref_parts.append(f"Interessi recenti: {', '.join(str(b) for b in hints[:3])}")
+
+        # ── Price / budget ────────────────────────────────────────────────
         db_price = prefs.get("db_price_preference")
         if db_price:
-            pref_parts.append(f"Fascia di prezzo abituale (DB): ~{db_price}€")
+            pref_parts.append(f"Budget medio abituale: ~{db_price}\u20ac")
 
+        # ── Condition preference ──────────────────────────────────────────
+        db_condition = prefs.get("db_condition_preference")
+        if db_condition:
+            cond_label = {"new": "nuovo", "used": "usato", "refurbished": "ricondizionato"}.get(db_condition, db_condition)
+            pref_parts.append(f"Condizione preferita: {cond_label}")
+
+        # ── Category affinities ───────────────────────────────────────────
+        category_history = prefs.get("category_history") or []
+        if isinstance(category_history, list) and category_history:
+            pref_parts.append(f"Categorie di interesse: {', '.join(str(c) for c in category_history[:3])}")
+
+        # ── Interaction depth ─────────────────────────────────────────────
+        depth = prefs.get("db_interaction_depth")
+        if depth and depth != "browser":
+            depth_label = {"researcher": "utente approfondito", "power_buyer": "acquirente esperto"}.get(depth, depth)
+            pref_parts.append(f"Profilo comportamentale: {depth_label}")
+
+        # ── Sellers ───────────────────────────────────────────────────────
         if prefs.get("favorite_sellers"):
             sellers = prefs.get("favorite_sellers") or []
             if isinstance(sellers, list):
-                pref_parts.append(f"Venditori preferiti: {', '.join(str(s) for s in [sellers[i] for i in range(len(sellers)) if i < 3])}")
-        
-        if prefs.get("recent_brand_hints"):
-            hints = prefs.get("recent_brand_hints") or []
-            if isinstance(hints, list):
-                pref_parts.append(f"Interessi recenti: {', '.join(str(b) for b in [hints[i] for i in range(len(hints)) if i < 3])}")
-            
+                pref_parts.append(f"Venditori preferiti: {', '.join(str(s) for s in sellers[:3])}")
+
+        # ── Previous searches ─────────────────────────────────────────────
         prev = ltm.get("previous_searches") or []
-        if isinstance(prev, list):
-            pref_parts.append(f"Ricerche precedenti: {', '.join(str(q) for q in [prev[i] for i in range(len(prev)) if i < 3])}")
-            
+        if isinstance(prev, list) and prev:
+            pref_parts.append(f"Ricerche precedenti: {', '.join(str(q) for q in prev[:3])}")
+
         if pref_parts:
             pref_str = "\n".join(pref_parts)
 

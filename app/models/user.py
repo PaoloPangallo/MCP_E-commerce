@@ -65,8 +65,29 @@ class User(Base):
     )
 
     contextual_budgets = Column(
-        String(2000), # JSON encoded category/brand budgets
+        String(2000), # JSON encoded {category:budget, brand:budget}
         nullable=True
+    )
+
+    # -------------------------
+    # Auto-learned Profiling (retrocompatible, server_default=NULL)
+    # -------------------------
+    category_affinities = Column(
+        String(2000),  # JSON: {"Cellulari & smartphone": 12, "Scarpe": 5}
+        nullable=True,
+        server_default=None,
+    )
+
+    condition_preference = Column(
+        String(20),    # "new" | "used" | "refurbished" | null
+        nullable=True,
+        server_default=None,
+    )
+
+    interaction_depth = Column(
+        String(20),    # "browser" | "researcher" | "power_buyer"
+        nullable=True,
+        server_default=None,
     )
 
     # -------------------------

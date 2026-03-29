@@ -230,6 +230,7 @@ class LongTermMemory:
         self.user_preferences["favorite_sellers"] = sellers[:10]
 
     def remember_brand_hint(self, query: str) -> None:
+        """Legacy method: extracts token candidates from raw query. Prefer remember_validated_brands."""
         tokens = _token_candidates_for_brand_hints(query)
         if not tokens:
             return
@@ -240,6 +241,37 @@ class LongTermMemory:
             brands.insert(0, token)
 
         self.user_preferences["recent_brand_hints"] = brands[:10]
+
+    def remember_validated_brands(self, parsed_brands: list) -> None:
+        """Record brands validated by the query parser — reliable, not noisy."""
+        if not parsed_brands:
+            return
+        brands = list(self.user_preferences.get("validated_brands") or [])
+        for brand in parsed_brands[:3]:
+            brand = str(brand).strip()
+            if not brand:
+                continue
+            brands = [b for b in brands if str(b).lower() != brand.lower()]
+            brands.insert(0, brand)
+        self.user_preferences["validated_brands"] = brands[:15]
+
+    def remember_category(self, category_name: str) -> None:
+        """Track the eBay category encountered in a search result."""
+        cat = str(category_name or "").strip()
+        if not cat:
+            return
+        history = list(self.user_preferences.get("category_history") or [])
+        history = [c for c in history if c.lower() != cat.lower()]
+        history.insert(0, cat)
+        self.user_preferences["category_history"] = history[:15]
+
+    def track_interaction(self, action: str) -> None:
+        """Track user engagement actions: search/detail/compare/seller/contact."""
+        counts = dict(self.user_behaviour.get("interaction_counts") or {})
+        counts[action] = int(counts.get(action, 0)) + 1
+        self.user_behaviour["interaction_counts"] = counts
+        # Also keep a simple total
+        self.user_behaviour["search_count"] = int(self.user_behaviour.get("search_count", 0)) + (1 if action == "search" else 0)
 
     def snapshot(self) -> Dict[str, Any]:
         return {
@@ -295,6 +327,13 @@ class MemoryService:
         if user:
             long_term_memory.user_preferences["db_favorite_brands"] = getattr(user, "favorite_brands", None)
             long_term_memory.user_preferences["db_price_preference"] = getattr(user, "price_preference", None)
+            # Nuovi campi auto-appresi (retrocompatibili: None se colonna non esiste)
+            try:
+                from app.services.user_profiling import get_dominant_condition
+                long_term_memory.user_preferences["db_condition_preference"] = get_dominant_condition(user)
+            except Exception:
+                pass
+            long_term_memory.user_preferences["db_interaction_depth"] = getattr(user, "interaction_depth", None)
 
         clean_query = sanitize_user_query_for_memory(user_query)
 
@@ -345,9 +384,36 @@ class MemoryService:
             if isinstance(products, list):
                 state.session_memory.add_products(products)
 
+            # Aggiorna LTM con brand validati dal parser (più affidabili dei token casuali)
+            parsed_q = state.search_payload.get("parsed_query") or {}
+            validated_brands = parsed_q.get("brands") or []
+            if validated_brands:
+                state.long_term_memory.remember_validated_brands(validated_brands)
+
+            # Aggiorna LTM con la categoria dominante dei risultati
+            cat_names = [p.get("category_name") for p in products[:5] if isinstance(p, dict) and p.get("category_name")]
+            if cat_names:
+                dominant_cat = max(set(cat_names), key=cat_names.count)
+                state.long_term_memory.remember_category(dominant_cat)
+
+            # Traccia l'azione di ricerca nel comportamento utente
+            state.long_term_memory.track_interaction("search")
+
+        # Traccia interazioni di approfondimento per l'interaction_depth
+        for obs in state.observations:
+            tool = getattr(obs, "tool", "")
+            if tool == "get_item_details":
+                state.long_term_memory.track_interaction("detail")
+            elif tool == "compare_products":
+                state.long_term_memory.track_interaction("compare")
+            elif tool == "analyze_seller":
+                state.long_term_memory.track_interaction("seller")
+            elif tool in ("contact_seller", "contact_seller_playwright"):
+                state.long_term_memory.track_interaction("contact")
+
         for observation in state.observations[-5:]:
             state.session_memory.add_tool_result(observation.tool, observation.summary)
-            
+
         state.session_memory.vision_description = state.vision_description
         self.save_session_memory(state.session_memory)
         self.save_long_term_memory(state.long_term_memory)

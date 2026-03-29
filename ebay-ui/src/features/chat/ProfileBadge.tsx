@@ -7,6 +7,8 @@ import ShoppingBagIcon from "@mui/icons-material/ShoppingBag"
 import VerifiedIcon from "@mui/icons-material/Verified"
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"
 import PublicIcon from "@mui/icons-material/Public"
+import HistoryIcon from "@mui/icons-material/History"
+import InsightsIcon from "@mui/icons-material/Insights"
 import { useEffect, useMemo, useState } from "react"
 import { apiFetch } from "../../api/apiClient"
 import { useChatStore } from "./store/chatStore"
@@ -79,11 +81,47 @@ export default function ProfileBadge() {
   const activeContext = useMemo(() => {
     const pq = lastSearch?.search?.metadata?.parsed_query
     if (!pq) return null
-    // Priorità al prodotto specifico (es "iPhone"), poi al brand (es "Apple")
-    return pq.product || (pq.brands && pq.brands[0]) || null
+    // Priorità al prodotto specifico (es "iPhone"), poi al brand (es "Apple"), poi alla categoria
+    return {
+      product: pq.product?.toLowerCase(),
+      brand: (pq.brands && pq.brands[0])?.toLowerCase(),
+      category: lastSearch?.search?.metadata?.ebay_category_id
+    }
   }, [lastSearch])
 
-  const activeContextBudget = activeContext ? contextualBudgetsMap[activeContext] : null
+  const activeContextBudget = useMemo(() => {
+    if (!activeContext) return null
+    
+    // 1. Manual brand override
+    if (activeContext.brand && contextualBudgetsMap[`brand:${activeContext.brand}`]) {
+      return { val: contextualBudgetsMap[`brand:${activeContext.brand}`], label: activeContext.brand }
+    }
+    // 2. Auto brand budget
+    if (activeContext.brand && contextualBudgetsMap[`auto_brand:${activeContext.brand}`]) {
+      return { val: contextualBudgetsMap[`auto_brand:${activeContext.brand}`], label: activeContext.brand, auto: true }
+    }
+    // 3. Auto category budget
+    // Nota: qui dovremmo avere il nome categoria, ma per ora usiamo l'ID se presente in auto_cat:ID
+    if (activeContext.category && contextualBudgetsMap[`auto_cat:${activeContext.category}`]) {
+       return { val: contextualBudgetsMap[`auto_cat:${activeContext.category}`], label: "categoria", auto: true }
+    }
+    
+    return null
+  }, [activeContext, contextualBudgetsMap])
+
+  const dominantCondition = useMemo(() => {
+    if (!settings.conditionPreference) return null
+    return settings.conditionPreference.split(",")[0].split(":")[0]
+  }, [settings.conditionPreference])
+
+  const depthInfo = useMemo(() => {
+    const labels: Record<string, string> = {
+      browser: "Esploratore",
+      researcher: "Ricercatore",
+      power_buyer: "Acquirente Esperto"
+    }
+    return labels[settings.interactionDepth || "browser"] || labels.browser
+  }, [settings.interactionDepth])
 
   if (isEmpty && !ebayInfo) {
     return (
@@ -224,7 +262,7 @@ export default function ProfileBadge() {
              <>
                <AutoAwesomeIcon sx={{ fontSize: 13, color: "#8b5cf6" }} />
                <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>
-                 Budget {activeContext} ~{activeContextBudget}€
+                 Budget {activeContextBudget.label} ~{activeContextBudget.val}€
                </Typography>
              </>
           ) : (
@@ -234,6 +272,42 @@ export default function ProfileBadge() {
                 Budget ~{settings.pricePreference}€
               </Typography>
             </>
+          )}
+        </Box>
+      )}
+
+      {/* AI Learned Indicators (Condition & Depth) */}
+      {(dominantCondition || settings.interactionDepth) && (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
+          {dominantCondition && (
+            <Tooltip title={`Preferenza condizione: ${dominantCondition}`}>
+              <Chip
+                icon={<HistoryIcon sx={{ fontSize: "11px !important" }} />}
+                label={dominantCondition === 'new' ? 'Nuovo' : dominantCondition === 'used' ? 'Usato' : 'Ricond.'}
+                size="small"
+                sx={{
+                  height: 18, fontSize: 9, fontWeight: 600,
+                  bgcolor: "rgba(139, 92, 246, 0.08)", color: "#8b5cf6",
+                  border: "none",
+                  "& .MuiChip-label": { px: 0.75 }
+                }}
+              />
+            </Tooltip>
+          )}
+          {settings.interactionDepth && settings.interactionDepth !== 'browser' && (
+            <Tooltip title={`Livello engagement: ${depthInfo}`}>
+              <Chip
+                icon={<InsightsIcon sx={{ fontSize: "11px !important" }} />}
+                label={depthInfo}
+                size="small"
+                sx={{
+                  height: 18, fontSize: 9, fontWeight: 600,
+                  bgcolor: "rgba(16, 185, 129, 0.08)", color: "#10b981",
+                  border: "none",
+                  "& .MuiChip-label": { px: 0.75 }
+                }}
+              />
+            </Tooltip>
           )}
         </Box>
       )}

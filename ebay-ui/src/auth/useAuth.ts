@@ -21,6 +21,9 @@ export interface AuthUser {
   theme?: string | null
   conversation_tone?: string | null
   contextual_budgets?: string | null
+  condition_preference?: string | null
+  interaction_depth?: string | null
+  category_affinities?: string | null
 }
 
 export function useAuth() {
@@ -64,14 +67,17 @@ export function useAuth() {
         if (data) {
           setUser(data)
           // Sincronizza lo store delle impostazioni
-          useSettingsStore.getState().loadSettingsFromAuth(
-            (data as any).theme,
-            (data as any).conversation_tone,
-            (data as any).custom_instructions,
-            (data as any).favorite_brands,
-            (data as any).price_preference,
-            (data as any).contextual_budgets
-          )
+            useSettingsStore.getState().loadSettingsFromAuth(
+              (data as any).theme,
+              (data as any).conversation_tone,
+              (data as any).custom_instructions,
+              (data as any).favorite_brands,
+              (data as any).price_preference,
+              (data as any).contextual_budgets,
+              (data as any).condition_preference,
+              (data as any).interaction_depth,
+              (data as any).category_affinities
+            )
           // Load wishlist items when session is restored
           useWishlistStore.getState().loadItems()
         } else {
@@ -107,7 +113,10 @@ export function useAuth() {
         custom_instructions: res.custom_instructions,
         theme: (res as any).theme,
         conversation_tone: (res as any).conversation_tone,
-        contextual_budgets: (res as any).contextual_budgets
+        contextual_budgets: (res as any).contextual_budgets,
+        condition_preference: (res as any).condition_preference,
+        interaction_depth: (res as any).interaction_depth,
+        category_affinities: (res as any).category_affinities
       })
 
       useSettingsStore.getState().loadSettingsFromAuth(
@@ -116,7 +125,10 @@ export function useAuth() {
         (res as any).custom_instructions,
         (res as any).favorite_brands,
         (res as any).price_preference,
-        (res as any).contextual_budgets
+        (res as any).contextual_budgets,
+        (res as any).condition_preference,
+        (res as any).interaction_depth,
+        (res as any).category_affinities
       )
       // Load wishlist items after login
       useWishlistStore.getState().loadItems()
