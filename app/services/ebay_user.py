@@ -10,6 +10,7 @@ that exposes Watchlist management for individual buyers.
 
 import logging
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils as saxutils
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -160,12 +161,12 @@ async def send_message_to_seller(item_id: str, body_text: str, question_type: st
     target_id = candidates[0] if candidates else item_id
 
     inner_xml = f"""
-        <ItemID>{target_id}</ItemID>
+        <ItemID>{saxutils.escape(target_id)}</ItemID>
         <MemberMessage>
-            <Body>{body_text}</Body>
+            <Body>{saxutils.escape(body_text)}</Body>
             <DisplayToPublic>false</DisplayToPublic>
             <EmailCopyToSender>true</EmailCopyToSender>
-            <QuestionType>{question_type}</QuestionType>
+            <QuestionType>{saxutils.escape(question_type)}</QuestionType>
         </MemberMessage>
     """
     

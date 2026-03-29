@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from functools import lru_cache
+from math import exp
 from typing import Dict, List, Sequence, Optional
 
 import numpy as np
@@ -93,7 +94,18 @@ def _anchor_vectors():
 # CACHE
 # ============================================================
 
+_SENTIMENT_CACHE_MAX = 1000
 _SENTIMENT_CACHE: Dict[str, float] = {}
+
+
+def _cache_put(key: str, value: float) -> None:
+    """Write to cache, evicting oldest entries when over capacity."""
+    if len(_SENTIMENT_CACHE) >= _SENTIMENT_CACHE_MAX:
+        # Remove oldest 10% to avoid evicting one at a time
+        evict_count = max(1, _SENTIMENT_CACHE_MAX // 10)
+        for k in list(_SENTIMENT_CACHE.keys())[:evict_count]:
+            del _SENTIMENT_CACHE[k]
+    _SENTIMENT_CACHE[key] = value
 
 
 # ============================================================
@@ -112,28 +124,25 @@ _NEG_WORDS = {
 
 
 def _heuristic_sentiment(texts: Sequence[str]) -> float:
-    score = 0.0
-    seen = 0
+    """
+    Keyword-based sentiment using the same sigmoid formula as the embedding path,
+    so scores from both paths live on the same [0, 1] scale.
+    """
+    total_pos = 0
+    total_neg = 0
 
     for text in texts:
         t = text.lower()
-        local = 0.5
+        total_pos += sum(1 for w in _POS_WORDS if w in t)
+        total_neg += sum(1 for w in _NEG_WORDS if w in t)
 
-        pos_hits = sum(1 for w in _POS_WORDS if w in t)
-        neg_hits = sum(1 for w in _NEG_WORDS if w in t)
-
-        if pos_hits > neg_hits:
-            local = 0.8
-        elif neg_hits > pos_hits:
-            local = 0.2
-
-        score += local
-        seen += 1
-
-    if seen == 0:
+    total_hits = total_pos + total_neg
+    if total_hits == 0:
         return 0.5
 
-    return round(score / seen, 4)
+    # ratio in (-1, 1); sigmoid maps it to (0, 1) — same formula used in embedding path
+    ratio = (total_pos - total_neg) / (total_hits + 1)
+    return round(float(1 / (1 + exp(-3 * ratio))), 4)
 
 
 # ============================================================
@@ -165,11 +174,11 @@ def compute_sentiment_score(
     if use_cache and fingerprint in _SENTIMENT_CACHE:
         return _SENTIMENT_CACHE[fingerprint]
 
-    # Fast path for tiny batches
-    if use_fast_path and len(texts) <= 5:
+    # Fast path for small batches (threshold raised so more texts benefit from embeddings)
+    if use_fast_path and len(texts) <= 8:
         val = _heuristic_sentiment(texts)
         if use_cache:
-            _SENTIMENT_CACHE[fingerprint] = val
+            _cache_put(fingerprint, val)
         return val
 
     try:
@@ -196,7 +205,7 @@ def compute_sentiment_score(
         normalized = _heuristic_sentiment(texts)
 
     if use_cache:
-        _SENTIMENT_CACHE[fingerprint] = normalized
+        _cache_put(fingerprint, normalized)
 
     return round(normalized, 4)
 
@@ -236,7 +245,7 @@ async def extract_sentiment_label(text: str) -> str:
             if "NEGATIVE" in res: return "NEGATIVE"
         return "NEUTRAL"
     except Exception as e:
-        logger.warning(f"Extrac_sentiment LLM failed: {e}")
+        logger.warning("extract_sentiment_label LLM failed: %s", e)
         # fallback to heuristic
         pos_hits = sum(1 for w in _POS_WORDS if w in text.lower())
         neg_hits = sum(1 for w in _NEG_WORDS if w in text.lower())

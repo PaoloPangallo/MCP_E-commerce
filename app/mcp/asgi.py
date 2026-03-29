@@ -24,6 +24,10 @@ _playwright_asgi = mcp_playwright.streamable_http_app()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start the task-group for each MCP session manager before accepting requests."""
+    # Sincronizziamo esplicitamente i tool dopo l'avvio degli app per essere sicuri che FastMCP sia pronto
+    from app.mcp.playwright_server import sync_standard_tools
+    sync_standard_tools()
+    
     async with mcp.session_manager.run():
         async with mcp_playwright.session_manager.run():
             yield

@@ -185,6 +185,7 @@ class EbayReactAgent:
             mcp_client=self.mcp_client,
             prefer_mcp=self.prefer_mcp,
             fallback_to_local=not self.strict_mcp,
+            mcp_mode=self.mcp_mode,
         )
 
         trace: List[AgentStep] = []
@@ -425,11 +426,9 @@ class EbayReactAgent:
                 
                 final_answer = full_text or self._fallback_final_answer(memory)
             else:
-                # Se abbiamo già una risposta (es. tool conversation o early stop), assicuriamoci
-                # che venga comunque emessa come AnswerChunk per coerenza UI.
-                async for chunk in self._finalize_stream(memory=memory, llm_engine=request.llm_engine):
-                    if chunk:
-                        yield AnswerChunkEvent(chunk=chunk).model_dump()
+                # Abbiamo già una risposta (es. tool conversation o early stop):
+                # emettiamola direttamente senza richiamare l'LLM.
+                yield AnswerChunkEvent(chunk=final_answer).model_dump()
 
 
             await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)
@@ -597,10 +596,11 @@ class EbayReactAgent:
             try:
                 first = await asyncio.wait_for(gen.__anext__(), timeout=18.0)
                 yield first
-            except (asyncio.TimeoutError, StopAsyncIteration):
-                if isinstance(StopAsyncIteration, Exception): # Just safety
-                    logger.warning("Ollama Cloud stream empty or timed out on first chunk")
+            except asyncio.TimeoutError:
+                logger.warning("Ollama Cloud stream timed out on first chunk")
                 yield "Ho preparato un riepilogo in base alle informazioni raccolte:\n\n"
+                return
+            except StopAsyncIteration:
                 return
 
             # Continua normalmente per il resto

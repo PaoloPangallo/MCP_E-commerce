@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils as saxutils
 from typing import Dict, List, Optional, Any
 
 import httpx
@@ -33,12 +34,13 @@ def _build_headers(call_name: str) -> Dict[str, str]:
 
 
 def _build_body(username: str, page: int, per_page: int) -> str:
+    safe_username = saxutils.escape(username)
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <GetFeedbackRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials>
     <eBayAuthToken>{EBAY_USER_TOKEN}</eBayAuthToken>
   </RequesterCredentials>
-  <UserID>{username}</UserID>
+  <UserID>{safe_username}</UserID>
   <DetailLevel>ReturnAll</DetailLevel>
   <Pagination>
     <EntriesPerPage>{per_page}</EntriesPerPage>

@@ -16,7 +16,7 @@ from app.services.parser import extract_first_json_object
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search", "contact_seller_playwright"}
+VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search"}
 
 QUESTION_WORDS = {
     "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
@@ -86,7 +86,7 @@ CONTACT_CUES = {
     "informazioni", "informazione", "info", "messaggiare", "contatto"
 }
 PLAYWRIGHT_CUES = {
-    "playwright", "browser", "visibile", "mostra", "schermo", "reale", "vediamo", "vedere", "finestra"
+    "playwright", "playwrgiht", "playwight", "playright", "browser", "visibile", "mostra", "schermo", "reale", "vediamo", "vedere", "finestra"
 }
 
 PERSONAL_PRONOUNS = {
@@ -123,7 +123,7 @@ class IntentEvidence:
         default_factory=lambda: {
             "product": [], "seller": [], "conversation": [], "comparison": [],
             "shipping": [], "item_details": [], "market_trends": [], "deals": [], "wishlist": [],
-            "contact_seller": []
+            "contact_seller": [], "playwright_search": []
         }
     )
     market: float = 0.0
@@ -160,22 +160,21 @@ class IntentEvidence:
             self.reasons.setdefault(label, []).append(reason)
 
     def top_two(self) -> tuple:
-        ordered = sorted(
-            [
-                ("playwright_search", getattr(self, "playwright", 0.0)),
-                ("product_search", self.product),
-                ("seller_analysis", self.seller),
-                ("conversation", self.conversation),
-                ("comparison", self.comparison),
-                ("shipping", self.shipping),
-                ("item_details", self.item_details),
-                ("market_trends", self.market),
-                ("deals", getattr(self, "deals", 0.0)),
-                ("wishlist", getattr(self, "wishlist_score", 0.0)),
-            ],
-            key=lambda x: x[1],
-            reverse=True,
-        )
+        # Hardcoded list to guarantee valid intents only
+        candidates = [
+            ("conversation", self.conversation),
+            ("seller_analysis", self.seller),
+            ("product_search", self.product),
+            ("comparison", self.comparison),
+            ("shipping", self.shipping),
+            ("item_details", self.item_details),
+            ("market_trends", self.market),
+            ("deals", getattr(self, "deals", 0.0)),
+            ("wishlist", self.wishlist),
+            ("contact_seller", self.contact_seller),
+            ("playwright_search", getattr(self, "playwright", 0.0)),
+        ]
+        ordered = sorted(candidates, key=lambda x: x[1], reverse=True)
         return ordered[0], ordered[1]
 
 
@@ -208,14 +207,49 @@ class ReactPlanner:
         if explicit_seller and not memory.last_seller_name:
             memory.last_seller_name = explicit_seller
 
-        # NUCLEAR OVERRIDE: Playwright deve vincere sempre, anche sulla coda dei task pre-pianificati.
+        # NUCLEAR OVERRIDE: Playwright deve vincere se non ci sono altri intenti forti,
+        # altrimenti lasciamo che il planner decida normalmente (es. contatto venditore in browser).
         intent, confidence, evidence = self._infer_intent_with_confidence(memory)
         if intent == "playwright_search" and confidence >= self.intent_threshold:
-            logger.info("Playwright override triggered: bypassing task queue.")
-            # Se siamo qui, il determinismo di Playwright ha la precedenza
-            decision = self._deterministic_decide(memory)
-            if decision:
-                return decision
+            # "playwright" usato come modificatore di modalità insieme a cues di contatto/venditore?
+            # → ridirigiamo direttamente a contact_seller con il tool playwright appropriato
+            text_lower = (memory.user_query or "").lower()
+            tokens_set = set(TOKEN_RE.findall(text_lower))
+            has_contact_cues = bool(tokens_set & CONTACT_CUES)
+            has_seller_cues = bool(tokens_set & SELLER_CUES)
+
+            if has_contact_cues or evidence.contact_seller >= 0.30:
+                logger.info("Playwright + contact cues → routing to contact_seller")
+                mcp_mode = getattr(memory, "mcp_mode", "standard")
+                contact_tool = (
+                    "contact_seller_playwright" if mcp_mode == "playwright_browser"
+                    else "contact_seller"
+                )
+                normalized = self._normalize_action_input(contact_tool, {}, memory)
+                # contact_seller_playwright richiede product_url — se manca, fallback ad API
+                if normalized is None and contact_tool == "contact_seller_playwright":
+                    contact_tool = "contact_seller"
+                    normalized = self._normalize_action_input(contact_tool, {}, memory)
+                if normalized is not None:
+                    return PlannerOutput(
+                        thought="Contatto il venditore tramite browser Playwright.",
+                        action=ToolCall(tool=contact_tool, input=normalized),
+                        intent="contact_seller",
+                    )
+            elif has_seller_cues and evidence.seller >= 0.35:
+                logger.info("Playwright + seller cues → routing to seller_analysis")
+                normalized = self._normalize_action_input("analyze_seller", {}, memory)
+                if normalized is not None:
+                    return PlannerOutput(
+                        thought="Analizzo il venditore.",
+                        action=ToolCall(tool="analyze_seller", input=normalized),
+                        intent="seller_analysis",
+                    )
+            elif evidence.contact_seller < 0.35 and (evidence.seller < 0.45 or "elenca" in text_lower):
+                logger.info("Playwright override triggered: bypassing task queue.")
+                decision = self._deterministic_decide(memory)
+                if decision:
+                    return decision
 
         if memory.has_pending_tasks():
             decision = self._decide_from_task_queue(memory)
@@ -334,7 +368,19 @@ class ReactPlanner:
         return None
 
     def _deterministic_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+        """
+        Versione deterministica (senza LLM) basata su euristiche e scoring interno.
+        """
         intent, confidence, evidence = self._infer_intent_with_confidence(memory)
+        
+        # LOGGING DI SICUREZZA
+        logger.info(f"PLANNER DEBUG: Inferito intento '{intent}' con confidenza {confidence}")
+
+        # OVERRIDE RADICALE: Impedisce a qualsiasi stringa non corretta di proseguire
+        # Forza 'contact_seller' se viene rilevata la stringa di tool 'contact_seller_playwright'
+        if intent == "contact_seller_playwright" or (intent and "playwright" in intent and intent != "playwright_search"):
+            logger.warning(f"PLANNER OVERRIDE: Correzione intento invalido '{intent}' -> 'contact_seller'")
+            intent = "contact_seller"
 
         if intent == "conversation" and confidence >= self.intent_threshold:
             return PlannerOutput(
@@ -343,7 +389,9 @@ class ReactPlanner:
                 intent="conversation",
             )
 
+        # Se l'intento non è comunque nella whitelist, falliamo silenziosamente per far subentrare LLM se permesso
         if intent not in VALID_INTENTS:
+            logger.warning(f"PLANNER: Intento '{intent}' non presente in VALID_INTENTS. Fallback.")
             return None
 
         if confidence < self.intent_threshold:
@@ -365,15 +413,21 @@ class ReactPlanner:
             if self._exceeds_tool_budget(memory, tool_name):
                 continue
 
+            # Verifichiamo se l'input può essere normalizzato (es: estrazione ItemID)
             normalized_input = self._normalize_action_input(tool_name, {}, memory)
             if normalized_input is None:
                 continue
 
             why = self._reason_summary(intent, evidence)
+
+            # ULTIMA SICUREZZA: Assicuriamoci che intent sia validato PRIMA di PlannerOutput
+            final_intent = intent if intent in VALID_INTENTS else "conversation"
+
             return PlannerOutput(
                 thought=why or f"Uso il tool più adatto: {tool_name}.",
                 action=ToolCall(tool=tool_name, input=normalized_input),
-                intent=intent,
+                should_stop=False,
+                intent=final_intent, # type: ignore
             )
 
         return None
@@ -597,11 +651,11 @@ class ReactPlanner:
             from app.mcp.normalizers import clean_search_query
             action_input["query"] = clean_search_query(text) or text
 
-        elif action == "analyze_seller" and not action_input.get("seller_name"):
+        elif action in {"analyze_seller", "contact_seller"} and not action_input.get("seller_name"):
             from app.agent.tool_registry import extract_explicit_seller
             seller = extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
             if not seller:
-                return None # Indispensabile per analyze_seller
+                return None  # seller_name è obbligatorio per entrambi i tool
             action_input["seller_name"] = seller
 
         elif action == "compare_products" and not action_input.get("queries"):
@@ -693,24 +747,31 @@ class ReactPlanner:
 
         elif action == "contact_seller_playwright":
             if not action_input.get("product_url"):
-                # 1. Current-turn search results (same request)
-                scratchpad = memory.scratchpad()
-                top_results = scratchpad.get("top_results") or []
-                if top_results and top_results[0].get("url"):
-                    action_input["product_url"] = top_results[0]["url"]
+                from app.agent.tool_registry import extract_explicit_seller
+                seller = extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
+
+                if seller:
+                    # Priorità assoluta: URL diretto del form di contatto eBay per questo seller.
+                    # Non usiamo URL dal scratchpad perché appartengono a ricerche precedenti
+                    # di prodotti diversi e porterebbero alla pagina del prodotto sbagliato.
+                    action_input["product_url"] = (
+                        f"https://www.ebay.it/cnt/IntermediatedFAQ?seller_name={seller}"
+                    )
+                    logger.info("contact_seller_playwright: using IntermediatedFAQ URL for seller=%s", seller)
                 else:
-                    # 2. Current-turn raw search payload
-                    search = memory.search_payload or {}
-                    results = search.get("results") or []
-                    if results and results[0].get("url"):
-                        action_input["product_url"] = results[0]["url"]
+                    # Nessun seller noto — fallback a URL prodotto dal scratchpad corrente
+                    scratchpad = memory.scratchpad()
+                    top_results = scratchpad.get("top_results") or []
+                    if top_results and top_results[0].get("url"):
+                        action_input["product_url"] = top_results[0]["url"]
                     else:
-                        # 3. Cross-turn: products persisted in session memory from a previous turn
-                        recent = getattr(memory.session_memory, "recent_products", []) or []
-                        if recent and recent[0].get("url"):
-                            action_input["product_url"] = recent[0]["url"]
+                        search = memory.search_payload or {}
+                        results = search.get("results") or []
+                        if results and results[0].get("url"):
+                            action_input["product_url"] = results[0]["url"]
                         else:
-                            return None  # Cannot proceed without a product URL
+                            return None  # Nessun URL e nessun seller name
+
             if not action_input.get("message"):
                 action_input["message"] = memory.user_query
 
@@ -730,15 +791,8 @@ class ReactPlanner:
         return any(self._tool_state_is_terminal(memory, tool_name) for tool_name in tools)
 
     def _ordered_tools_for_intent(self, intent: str, memory: Optional[AgentMemory] = None) -> list[str]:
-        # In Playwright mode only two tools exist on the server: search_products and contact_seller_playwright.
-        # Any search-related intent maps to search_products; contact goes to contact_seller_playwright.
-        if memory and getattr(memory, "mcp_mode", "standard") == "playwright_browser":
-            if intent in {"contact_seller_playwright"}:
-                return ["contact_seller_playwright"]
-            if intent in {"conversation"}:
-                return []
-            # All other intents (product_search, comparison, hybrid, playwright_search, etc.) → search
-            return ["search_products"]
+        # In Playwright mode we now have full parity of tools.
+        # We can use the standard mapping.
 
         seller_tool = "analyze_seller"
         search_tool = "search_products"
@@ -755,6 +809,8 @@ class ReactPlanner:
             return [seller_tool]
         if intent == "product_search":
             return [search_tool]
+        if intent == "playwright_search":
+            return ["search_products"]
         if intent == "item_details":
             return ["get_item_details"] if explicit_id else [search_tool, "get_item_details"]
         if intent == "shipping":
@@ -768,12 +824,11 @@ class ReactPlanner:
             return ["get_ebay_deals"]
         if intent == "wishlist":
             return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
-        if intent == "playwright_search":
-            # Playwright server exposes search_products (not ebay_scrape)
+        if intent == "contact_seller":
             mcp_mode = getattr(memory, "mcp_mode", "standard") if memory else "standard"
-            return ["search_products"] if mcp_mode == "playwright_browser" else ["ebay_scrape"]
-        if intent == "contact_seller_playwright":
-            return ["contact_seller_playwright"]
+            if mcp_mode == "playwright_browser" or (memory and "playwright" in memory.user_query.lower()):
+                return ["contact_seller_playwright", "contact_seller"]
+            return ["contact_seller"]
         return []
 
     def _tool_state_is_terminal(self, memory: AgentMemory, tool_name: str) -> bool:
@@ -797,10 +852,7 @@ class ReactPlanner:
         playwright_score = getattr(evidence, "playwright", 0.0)
         logger.info(f"PLANNER: query='{query}' | playwright_score={playwright_score} | threshold={self.intent_threshold}")
         
-        # NUCLEAR OVERRIDE: Playwright always wins if present
-        if playwright_score >= self.intent_threshold:
-            logger.info("PLANNER: Correctly using Playwright override.")
-            return "playwright_search", playwright_score, evidence
+        # (Playwright override moved below to allow contact_seller check first)
 
         if memory.tasks:
             tools = [str(task.get("tool") or "").strip() for task in memory.tasks]
@@ -815,11 +867,6 @@ class ReactPlanner:
                 return "product_search", 1.0, IntentEvidence(product=1.0)
         
         # Consolidation: Use the already calculated evidence
-        if evidence.contact_seller >= 0.5:
-            if getattr(memory, "mcp_mode", "standard") == "playwright_browser":
-                return "contact_seller_playwright", evidence.contact_seller, evidence
-            return "contact_seller", evidence.contact_seller, evidence
-            
         top, second = evidence.top_two()
         label, score = top
         margin = score - second[1]
@@ -842,13 +889,18 @@ class ReactPlanner:
         if label == "market_trends" and evidence.market >= self.intent_threshold:
             return label, evidence.market, evidence
         if label == "contact_seller" and evidence.contact_seller >= 0.5:
-            if getattr(memory, "mcp_mode", "standard") == "playwright_browser":
-                return "contact_seller_playwright", evidence.contact_seller, evidence
             return label, evidence.contact_seller, evidence
         if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
             return label, evidence.conversation, evidence
         if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
+            # Se c'è un forte segnale Playwright, preferiamo l'intento specifico
+            if evidence.playwright > 0.6:
+                return "playwright_search", evidence.playwright, evidence
             return label, evidence.product, evidence
+
+        # NUCLEAR OVERRIDE: Playwright always wins if present and no other specific intent dominates
+        if label == "playwright_search" and score >= self.intent_threshold:
+            return "playwright_search", score, evidence
 
         return label, max(score, 0.0), evidence
 
@@ -1000,17 +1052,15 @@ class ReactPlanner:
         playwright_hits = len(token_set & PLAYWRIGHT_CUES)
         if playwright_hits:
             ev.add("playwright_search", min(0.85 + 0.15 * playwright_hits, 0.99), "playwright_lexicon")
+            
             if "visibile" in token_set or "reale" in token_set:
                 ev.add("playwright_search", 0.2, "visible_browser_request")
             
-            # PRIORITÀ ASSOLUTA: Se è Playwright, annulliamo TUTTI gli altri segnali per evitare conflitti
-            ev.product = 0.0
-            ev.seller = 0.0
-            ev.market = 0.0
-            ev.deals = 0.0
-            ev.comparison = 0.0
-            ev.shipping = 0.0
-            ev.item_details = 0.0
+            # Non azzeriamo più seller e product se l'intento sembra essere altro (es. contatto)
+            # ma diamo un segnale forte che Playwright è richiesto.
+            if ev.contact_seller < 0.4:
+                 ev.product = max(0.0, ev.product - 0.3)
+                 ev.seller = max(0.0, ev.seller - 0.3)
 
         return ev
 

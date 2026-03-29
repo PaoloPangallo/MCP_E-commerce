@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required but not set.")
 SQL_ECHO = os.getenv("SQL_ECHO", "false").strip().lower() in {"true", "1", "yes"}
 
 engine = create_engine(

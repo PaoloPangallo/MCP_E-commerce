@@ -338,9 +338,10 @@ async def _handle_agent_stream(request: Request, clean_query: str, llm_engine: s
         )
 
     logger.info(
-        "Incoming /agent/stream request | query=%s | llm_engine=%s | user=%s",
+        "Incoming /agent/stream request | query=%s | llm_engine=%s | mcp_mode=%s | user=%s",
         clean_query,
         llm_engine,
+        mcp_mode,
         getattr(user, "id", None) if user is not None else None,
     )
 

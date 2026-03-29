@@ -23,9 +23,11 @@ class ToolExecutor:
         context: Optional[Any] = None, # mantengo la firma per retrocompatibilità momentanea
         prefer_mcp: bool = True,
         fallback_to_local: bool = False,
+        mcp_mode: str = "standard",
     ) -> None:
         self.context = context
         self.mcp_client = mcp_client
+        self.mcp_mode = mcp_mode
         self._mcp_tools: Optional[set[str]] = None
 
     async def initialize(self) -> None:
@@ -56,7 +58,7 @@ class ToolExecutor:
                 quality="empty",
             )
 
-        cache_key = self._make_cache_key(tool_call.tool, tool_call.input)
+        cache_key = self._make_cache_key(tool_call.tool, tool_call.input, self.mcp_mode)
         cached = self._get_cached_result(cache_key)
         if cached is not None:
             logger.info("ToolExecutor cache hit | tool=%s", tool_call.tool)
@@ -83,9 +85,11 @@ class ToolExecutor:
             result = await self.mcp_client.call_tool_async(tool_call.tool, tool_call.input)
             result = self._normalize_result_payload(result)
             result.setdefault("_backend", "mcp")
-            
+
             execution_ms = round((time.perf_counter() - start) * 1000.0, 2)
-            self._set_cached_result(cache_key, result)
+            # Non cachare risultati di errore — potrebbero essere transitori
+            if result.get("status") != "error":
+                self._set_cached_result(cache_key, result)
 
             logger.info(
                 "ToolExecutor MCP success | tool=%s | status=%s | execution_ms=%s",
@@ -144,12 +148,12 @@ class ToolExecutor:
     _CACHE_EXCLUDE_KEYS: frozenset = frozenset({"session_id", "conversation_history", "context_info"})
 
     @classmethod
-    def _make_cache_key(cls, tool_name: str, action_input: Dict[str, Any]) -> str:
+    def _make_cache_key(cls, tool_name: str, action_input: Dict[str, Any], mcp_mode: str = "standard") -> str:
         semantic_input = {
             k: v for k, v in (action_input or {}).items()
             if k not in cls._CACHE_EXCLUDE_KEYS
         }
-        return f"{tool_name}:{json.dumps(semantic_input, sort_keys=True, ensure_ascii=False, default=str)}"
+        return f"{mcp_mode}:{tool_name}:{json.dumps(semantic_input, sort_keys=True, ensure_ascii=False, default=str)}"
 
     @staticmethod
     def _normalize_result_payload(result: Any) -> Dict[str, Any]:
@@ -174,8 +178,16 @@ class ToolExecutor:
     ) -> Observation:
         
         status = result.get("status", "ok")
-        quality = "good" if status in {"ok", "no_data"} else "empty"
-        terminal = status in {"ok", "no_data"}
+        # "no_data" = tool ran OK but found nothing → empty quality so agent can consider retrying
+        quality = "good" if status == "ok" else "empty"
+        # I tool playwright che aprono il browser sono terminali anche in caso di errore parziale:
+        # il browser si è già aperto, non ha senso riprovare
+        playwright_terminal_statuses = {
+            "contact_button_not_found", "login_required",
+            "message_form_not_found", "submit_button_not_found", "message_sent",
+        }
+        contact_status = result.get("contact_status", "")
+        terminal = status in {"ok", "no_data"} or contact_status in playwright_terminal_statuses
         summary = result.get("summary", f"Tool {tool_call.tool} completato con status {status}.")
 
         if cache_hit:

@@ -7,20 +7,24 @@ to avoid loading the same model multiple times into memory.
 from __future__ import annotations
 
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 _MODEL = None
+_MODEL_LOCK = threading.Lock()
 
 
 def get_sentence_transformer():
-    """Lazy-load and return the shared SentenceTransformer instance."""
+    """Lazy-load and return the shared SentenceTransformer instance (thread-safe)."""
     global _MODEL
     if _MODEL is None:
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
-        logger.info("Loading shared SentenceTransformer: all-MiniLM-L6-v2")
-        _MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-        logger.info("SentenceTransformer loaded and ready.")
+        with _MODEL_LOCK:
+            if _MODEL is None:
+                from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+                logger.info("Loading shared SentenceTransformer: all-MiniLM-L6-v2")
+                _MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+                logger.info("SentenceTransformer loaded and ready.")
     return _MODEL
 
 

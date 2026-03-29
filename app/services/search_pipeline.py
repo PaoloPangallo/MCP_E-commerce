@@ -104,7 +104,7 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     
     raw_query = " ".join(parts)
     # CRITICAL DEBUG: Vediamo cosa stiamo mandando a eBay
-    print(f"\n[DEBUG] EBAY SEARCH QUERY: '{raw_query}' (Original fallback: '{fallback_query}')\n")
+    logger.debug("EBAY SEARCH QUERY: '%s' (Original fallback: '%s')", raw_query, fallback_query)
     logger.info("EBAY QUERY: %s", raw_query)
     
     for word in raw_query.split():
@@ -533,32 +533,42 @@ def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict], quer
         if parsed and parsed.get("constraints") and price_val:
             try:
                 p_float = float(price_val)
+                price_ok = True
                 for c in parsed["constraints"]:
                     if c.get("type") == "price":
                         op = c.get("operator")
                         val = c.get("value")
                         if op == "<=" and p_float > float(val):
-                            continue
+                            price_ok = False
+                            break
                         if op == ">=" and p_float < float(val):
-                            continue
+                            price_ok = False
+                            break
                         if op == "between" and isinstance(val, list):
                             if p_float < float(val[0]) or p_float > float(val[1]):
-                                continue
+                                price_ok = False
+                                break
+                if not price_ok:
+                    continue
             except Exception:
                 pass
 
         # Filtro forte 4: Condizione (se presente nel parsed)
         if parsed and parsed.get("constraints"):
             item_cond = (item.get("condition") or "").lower()
+            cond_ok = True
             for c in parsed["constraints"]:
                 if c.get("type") == "condition":
                     target_cond = str(c.get("value", "")).lower()
-                    # Mapping base: new, used, refurbished
                     if target_cond == "new" and not any(w in item_cond for w in ["nuovo", "new"]):
-                        continue
+                        cond_ok = False
+                        break
                     if target_cond == "used" and not any(w in item_cond for w in ["usato", "used", "gebraucht"]):
-                        continue
-                        
+                        cond_ok = False
+                        break
+            if not cond_ok:
+                continue
+
         item["_source_memory"] = True
         item["_memory_rank"] = i + 1
         merged_map[eid] = item
@@ -608,7 +618,7 @@ async def run_search_pipeline(
     if not query or not query.strip():
         raise ValueError("Query vuota")
 
-    print(f"\n[PIPELINE] START query='{query}' | user={getattr(user, 'id', 'anonymous')}")
+    logger.debug("PIPELINE START query='%s' | user=%s", query, getattr(user, 'id', 'anonymous'))
     logger.info("PIPELINE START for query: '%s'", query)
     t0 = time.time()
     timings = {}
@@ -943,8 +953,8 @@ async def run_search_pipeline(
     # ============================================================
     # 11) PERSIST TO GLOBAL MEMORY (ASYNC)
     # ============================================================
-        # Index in background to not block response
-        asyncio.create_task(asyncio.to_thread(index_search_items, [results_out[i] for i in range(len(results_out)) if i < 15]))
+    # Index in background to not block response
+    asyncio.create_task(asyncio.to_thread(index_search_items, [results_out[i] for i in range(len(results_out)) if i < 15]))
 
     timings["total_s"] = int(float(time.time() - t0) * 1000) / 1000.0
 
@@ -952,7 +962,7 @@ async def run_search_pipeline(
     results_out = _sanitize_floats(results_out)
     metrics = _sanitize_floats(metrics)
     
-    print(f"[PIPELINE] DONE | results={len(results_out)} | time={timings['total_s']}s")
+    logger.debug("PIPELINE DONE | results=%d | time=%ss", len(results_out), timings['total_s'])
 
     return {
         "parsed_query": parsed,

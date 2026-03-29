@@ -1,5 +1,33 @@
+import re
 from typing import Dict, Any
 from app.utils.text import clean_text as _clean_text
+
+# ============================================================
+# SOGLIE CONDIVISE
+# ============================================================
+
+_TRUST_EXCELLENT = 0.85
+_TRUST_RELIABLE  = 0.70
+
+_SENTIMENT_POSITIVE = 0.70
+_SENTIMENT_NEGATIVE = 0.40
+
+
+def _trust_label(p: float) -> str:
+    if p >= _TRUST_EXCELLENT * 100:
+        return "eccellente"
+    if p >= _TRUST_RELIABLE * 100:
+        return "affidabile"
+    return "scarsa affidabilità"
+
+
+def _sentiment_label(s: float) -> str:
+    if s >= _SENTIMENT_POSITIVE * 100:
+        return "positivi"
+    if s <= _SENTIMENT_NEGATIVE * 100:
+        return "negativi"
+    return "misti"
+
 
 def _normalize_search_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     results = raw.get("results") or raw.get("items") or []
@@ -26,7 +54,8 @@ def _normalize_search_output(raw: Dict[str, Any]) -> Dict[str, Any]:
                 summary += f" (venduto da {seller})"
             if trust is not None:
                 try:
-                    summary += f" con affidabilità {round(float(trust) * 100):.0f}%"
+                    p = round(float(trust) * 100)
+                    summary += f" — affidabilità {_trust_label(p)} ({p}%)"
                 except Exception:
                     pass
             summary += "."
@@ -65,22 +94,28 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         status = "no_data" if status == "ok" else status
     else:
         summary = f"Analisi completata per {seller_name} ({count} feedback)."
-        if trust_score is not None:
-            try:
-                p = round(float(trust_score) * 100)
-                if p >= 85: summary += f" Profilo eccellente (Trust: {p}%)."
-                elif p >= 70: summary += f" Profilo affidabile (Trust: {p}%)."
-                else: summary += f" Attenzione: affidabilità limitata ({p}%)."
-            except Exception:
-                pass
 
-        if sentiment_score is not None:
-            try:
-                s = round(float(sentiment_score) * 100)
-                if s >= 70: summary += " Feedback molto positivi."
-                elif s < 40: summary += " Segnali di insoddisfazione nei commenti."
-            except Exception:
-                pass
+        # Combina trust e sentiment in un'unica valutazione coerente
+        try:
+            trust_pct = round(float(trust_score) * 100) if trust_score is not None else None
+            sent_pct  = round(float(sentiment_score) * 100) if sentiment_score is not None else None
+
+            if trust_pct is not None and sent_pct is not None:
+                trust_lbl = _trust_label(trust_pct)
+                sent_lbl  = _sentiment_label(sent_pct)
+                summary += (
+                    f" Profilo {trust_lbl} (Trust: {trust_pct}%),"
+                    f" feedback {sent_lbl} (Sentiment: {sent_pct}%)."
+                )
+            elif trust_pct is not None:
+                trust_lbl = _trust_label(trust_pct)
+                summary += f" Profilo {trust_lbl} (Trust: {trust_pct}%)."
+            elif sent_pct is not None:
+                sent_lbl = _sentiment_label(sent_pct)
+                summary += f" Feedback {sent_lbl} (Sentiment: {sent_pct}%)."
+        except Exception:
+            pass
+
         summary = summary.strip()
 
     return {
@@ -93,6 +128,7 @@ def _normalize_seller_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "error": raw.get("error"),
         "summary": summary,
     }
+
 
 def _normalize_item_details_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     status = raw.get("status", "ok")
@@ -116,8 +152,11 @@ def _normalize_item_details_output(raw: Dict[str, Any]) -> Dict[str, Any]:
 def _normalize_similar_items_output(raw: Dict[str, Any]) -> Dict[str, Any]:
     status = raw.get("status", "ok")
     count = raw.get("results_count", 0)
-    summary = f"Trovati {count} oggetti simili." if status == "ok" else f"Errore nel recupero oggetti simili: {raw.get('error')}"
-    
+    summary = (
+        f"Trovati {count} oggetti simili."
+        if status == "ok"
+        else f"Errore nel recupero oggetti simili: {raw.get('error')}"
+    )
     return {
         "status": status,
         "item_id": raw.get("item_id"),
@@ -144,7 +183,6 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "summary": summary,
     }
 
-import re
 
 def clean_search_query(query: str) -> str:
     q = _clean_text(query).lower()
@@ -162,23 +200,21 @@ def clean_search_query(query: str) -> str:
         "",
         q,
     )
-    q = re.sub(r"\s+", " ", q)
-    return q.strip()
+    q = re.sub(r"\s+", " ", q).strip()
+
+    if len(q) <= 2 or q in {"il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "per", "di", "del", "dal", "al"}:
+        return _clean_text(query).strip()
+
+    return q
 
 
 _SELLER_NOISE = {
-    "venditore",
-    "seller",
-    "feedback",
-    "recensioni",
-    "reputazione",
-    "trust",
-    "affidabile",
-    "affidabilita",
-    "affidabilità",
-    "utente",
-    "negozio",
-    "store",
+    "venditore", "seller", "feedback", "recensioni", "reputazione", "trust",
+    "affidabile", "affidabilita", "affidabilità", "utente", "negozio", "store",
+    "per", "favore", "prego", "cortesia", "grazie", "ciao",
+    "questo", "questa", "quello", "quella", "suo", "sua", "loro",
+    "lui", "lei", "anche", "pure", "solo", "subito", "adesso", "ora", "poi",
+    "bro", "me", "mi", "ti", "si", "gli", "le",
 }
 
 _SELLER_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -188,7 +224,12 @@ _SELLER_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:è|e)\s+(?:affidabile|sicuro)", re.IGNORECASE),
+    re.compile(
+        r"(?:contatta(?:re|lo|la|li|le|mi)?|scrivi a|scrivi al|messaggio a|messaggia|parla con)\s+([A-Za-z0-9][A-Za-z0-9._-]{2,})",
+        re.IGNORECASE,
+    ),
 )
+
 
 def extract_explicit_seller(text: str) -> str | None:
     raw_text = _clean_text(text)
@@ -196,18 +237,13 @@ def extract_explicit_seller(text: str) -> str | None:
         return None
 
     for pattern in _SELLER_PATTERNS:
-        match = pattern.search(raw_text)
-        if not match:
-            continue
-
-        candidate = _clean_text(match.group(1)).strip(" .,:;!?()[]{}\"'")
-        if not candidate:
-            continue
-
-        if candidate.lower() in _SELLER_NOISE:
-            continue
-
-        return candidate
+        for match in pattern.finditer(raw_text):
+            candidate = _clean_text(match.group(1)).strip(" .,:;!?()[]{}\"'")
+            if not candidate:
+                continue
+            if candidate.lower() in _SELLER_NOISE:
+                continue
+            return candidate
 
     return None
 
