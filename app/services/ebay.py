@@ -255,7 +255,7 @@ def _build_aspect_filter(constraints: List[Dict[str, Any]]) -> List[str]:
     return aspect_filters
 
 
-def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
+def _build_filter_string(constraints: List[Dict[str, Any]], target_seller: Optional[str] = None) -> Optional[str]:
     filters: List[str] = []
 
     price_filter = _build_price_filter(constraints)
@@ -275,6 +275,10 @@ def _build_filter_string(constraints: List[Dict[str, Any]]) -> Optional[str]:
     for c in constraints:
         if c.get("type") == "category_id":
             filters.append(f"categoryId:{{{c.get('value')}}}")
+            
+    # Target Seller Filter (eBay Browse API supporta sellers:{seller1|seller2})
+    if target_seller:
+        filters.append(f"sellers:{{{target_seller}}}")
 
     if not filters:
         return None
@@ -298,12 +302,14 @@ def _build_query(parsed: Dict[str, Any]) -> str:
     if product:
         parts.append(str(product).strip())
         
-    # 2) Includiamo constraints che non sono price/condition (spesso sono feature testuali)
+    # 2) Includiamo constraints che non sono price/condition/seller (spesso sono feature testuali)
     constraints = parsed.get("constraints") or []
+    target_seller = parsed.get("target_seller")
+    
     for c in constraints:
         ctype = c.get("type")
         val = c.get("value")
-        if ctype not in ("price", "condition", "aspect") and val:
+        if ctype not in ("price", "condition", "aspect", "category_id") and val:
             if isinstance(val, list):
                 parts.extend(str(v) for v in val)
             else:
@@ -472,7 +478,9 @@ async def search_items(
 
     constraints = parsed_query.get("constraints") or []
     preferences = parsed_query.get("preferences") or []
-    filter_string = _build_filter_string(constraints)
+    target_seller = parsed_query.get("target_seller")
+    
+    filter_string = _build_filter_string(constraints, target_seller=target_seller)
     sort = _build_sort(preferences)
 
     wanted = max(1, int(limit))

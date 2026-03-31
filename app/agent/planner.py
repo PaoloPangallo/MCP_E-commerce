@@ -18,164 +18,7 @@ logger = logging.getLogger(__name__)
 
 VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search"}
 
-QUESTION_WORDS = {
-    "chi", "cosa", "come", "quando", "dove", "quale", "quali", "perché", "perche",
-}
-
-CONVERSATION_CUES = {
-    "penso", "pensi", "pensate", "credo", "credi", "sapere", "sai", "spiegami",
-    "raccontami", "parliamo", "dimmi", "opinione", "consiglio", "aiutami",
-    "aiuto", "discutiamo", "intendo", "significa", "vuol", "dire", "bro",
-}
-
-GREETING_CUES = {
-    "ciao", "salve", "buongiorno", "buonasera", "hey", "ehi", "hello",
-}
-
-SELLER_CUES = {
-    "seller", "venditore", "negozio", "shop", "feedback", "affidabile",
-    "reputazione", "trust", "recensioni", "serio", "sicuro", "affidabilità",
-}
-
-TRANSACTIONAL_CUES = {
-    "compra", "acquistare", "prezzo", "prezzi", "costo", "budget", "massimo",
-    "minimo", "sotto", "meno", "entro",
-}
-
-DEALS_CUES = {
-    "offerta", "offerte", "deals", "occasioni", "promozioni", "sconti", "sconto", "promozione", "occasione", "deal"
-}
-
-COMPARISON_CUES = {
-    "compara", "compari", "comparami", "confronta", "confrontami", "confronto", "differenza", "differenze",
-    "meglio", "peggio", "versus", "vs", "comparazione",
-}
-
-ATTRIBUTE_CUES = {
-    "taglia", "numero", "misura", "colore", "materiale", "marca", "modello",
-    "uomo", "donna", "bambino", "bambina", "adulto", "adulti", "nuovo", "usato",
-    "con", "senza", "zip", "cappuccio", "manica", "maniche",
-    "nero", "nera", "bianco", "bianca", "blu", "rosso", "rossa",
-    "verde", "grigio", "grigia", "beige", "xl", "xxl", "xs"
-}
-
-SHIPPING_CUES = {
-    "spedizione", "spedirlo", "arriva", "arrivo", "quando", "tempo", "tempi", "consegna",
-    "cap", "provincia", "città", "paese", "costa", "costo", "spedire", "corriere"
-}
-
-DETAILS_CUES = {
-    "dettagli", "specifiche", "ram", "scocca", "materiale", "processore", "cpu", "gpu",
-    "scheda", "descrizione", "info", "informazioni", "memoria", "gb", "tb"
-}
-
-METADATA_CUES = set()
-MARKET_CUES = {
-    "trend", "trends", "mercato", "analisi", "statistica", "andamento", "storico",
-    "serpapi", "google", "prezzo", "medio", "prezzi", "medi", "interesse", "popolarità", "popolarita",
-    "statistiche", "andamento prezzi", "prezzi online", "interesse di ricerca", "popolarità online"
-}
-WISHLIST_CUES = {
-    "wishlist", "preferiti", "salva", "salvami", "aggiungi", "preferito", "lista", "desideri", "scelta", "voglio", "desiderio"
-}
-CONTACT_CUES = {
-    "contatta", "contattare", "contattalo", "contattala", "contattali", "contattale",
-    "messaggio", "messaggi", "scrivi", "scrivere", "scrivergli", "scriverle", "parla", "parlare",
-    "chiedere", "chiedi", "trattare", "tratta", "prezzo", "proposta", "comunicare", "comunica",
-    "invia", "inviami", "mandagli", "mandagliene", "fallo", "vai", "apri",
-    "informazioni", "informazione", "info", "messaggiare", "contatto"
-}
-PLAYWRIGHT_CUES = {
-    "playwright", "playwrgiht", "playwight", "playright", "browser", "visibile", "mostra", "schermo", "reale", "vediamo", "vedere", "finestra"
-}
-
-PERSONAL_PRONOUNS = {
-    "io", "tu", "noi", "voi", "me", "te", "mi", "ti", "mio", "mia", "tuo", "tua",
-}
-
-VERBISH_CUES = {
-    "sei", "sono", "è", "e", "stai", "va", "pensi", "pensa", "credi", "crede",
-    "sai", "sapete", "fai", "fare", "fate", "posso", "puoi", "potresti",
-}
-
-MODEL_CODE_RE = re.compile(r"\b[a-z]{1,10}[\-_\s]?\d{1,5}[a-z0-9\-_]*\b", re.IGNORECASE)
-PRICE_RE = re.compile(r"\b\d{1,5}(?:[.,]\d{1,2})?\s*(?:€|euro)\b", re.IGNORECASE)
-SIZE_RE = re.compile(
-    r"\b(?:taglia|misura|numero|eu|uk|us|it)\s*[a-z]?\d{1,3}\b|\b(?:xs|s|m|l|xl|xxl)\b",
-    re.IGNORECASE,
-)
-ALT_SIZE_RE = re.compile(r"\b\d{1,3}\s*(?:o|oppure|/|-)\s*\d{1,3}\b", re.IGNORECASE)
-PRICE_BOUND_RE = re.compile(r"\b(?:max|massimo|minimo|budget|entro|sotto|meno di|al massimo)\b", re.IGNORECASE)
-TOKEN_RE = re.compile(r"[\wÀ-ÿ]+", re.UNICODE)
 EBAY_ID_RE = re.compile(r"\b(?:v1\|)?\d{12,13}(?:\|\d)?\b|\b\d{12,13}\b", re.IGNORECASE)
-
-
-
-@dataclass
-class IntentEvidence:
-    product: float = 0.0
-    seller: float = 0.0
-    conversation: float = 0.0
-    comparison: float = 0.0
-    shipping: float = 0.0
-    item_details: float = 0.0
-    reasons: Dict[str, list[str]] = field(
-        default_factory=lambda: {
-            "product": [], "seller": [], "conversation": [], "comparison": [],
-            "shipping": [], "item_details": [], "market_trends": [], "deals": [], "wishlist": [],
-            "contact_seller": [], "playwright_search": []
-        }
-    )
-    market: float = 0.0
-    deals: float = 0.0
-    wishlist: float = 0.0
-    contact_seller: float = 0.0
-    playwright: float = 0.0
-
-    # Mappa da label canonico (usato in add()) ai nomi degli attributi del dataclass
-    _LABEL_TO_FIELD: dict = field(default_factory=lambda: {
-        "product": "product",
-        "product_search": "product",
-        "seller": "seller",
-        "seller_analysis": "seller",
-        "conversation": "conversation",
-        "comparison": "comparison",
-        "shipping": "shipping",
-        "item_details": "item_details",
-        "market_trends": "market",
-        "wishlist": "wishlist",
-        "contact_seller": "contact_seller",
-        "playwright_search": "playwright",
-    })
-
-    def __post_init__(self):
-        # Initialize playwright score for explicit __init__ calls
-        self.playwright = 0.0
-
-    def add(self, label: str, value: float, reason: str) -> None:
-        field_name = self._LABEL_TO_FIELD.get(label, label)
-        current = getattr(self, field_name, 0.0)
-        setattr(self, field_name, current + value)
-        if reason:
-            self.reasons.setdefault(label, []).append(reason)
-
-    def top_two(self) -> tuple:
-        # Hardcoded list to guarantee valid intents only
-        candidates = [
-            ("conversation", self.conversation),
-            ("seller_analysis", self.seller),
-            ("product_search", self.product),
-            ("comparison", self.comparison),
-            ("shipping", self.shipping),
-            ("item_details", self.item_details),
-            ("market_trends", self.market),
-            ("deals", getattr(self, "deals", 0.0)),
-            ("wishlist", self.wishlist),
-            ("contact_seller", self.contact_seller),
-            ("playwright_search", getattr(self, "playwright", 0.0)),
-        ]
-        ordered = sorted(candidates, key=lambda x: x[1], reverse=True)
-        return ordered[0], ordered[1]
 
 
 class ReactPlanner:
@@ -207,50 +50,6 @@ class ReactPlanner:
         if explicit_seller and not memory.last_seller_name:
             memory.last_seller_name = explicit_seller
 
-        # NUCLEAR OVERRIDE: Playwright deve vincere se non ci sono altri intenti forti,
-        # altrimenti lasciamo che il planner decida normalmente (es. contatto venditore in browser).
-        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
-        if intent == "playwright_search" and confidence >= self.intent_threshold:
-            # "playwright" usato come modificatore di modalità insieme a cues di contatto/venditore?
-            # → ridirigiamo direttamente a contact_seller con il tool playwright appropriato
-            text_lower = (memory.user_query or "").lower()
-            tokens_set = set(TOKEN_RE.findall(text_lower))
-            has_contact_cues = bool(tokens_set & CONTACT_CUES)
-            has_seller_cues = bool(tokens_set & SELLER_CUES)
-
-            if has_contact_cues or evidence.contact_seller >= 0.30:
-                logger.info("Playwright + contact cues → routing to contact_seller")
-                mcp_mode = getattr(memory, "mcp_mode", "standard")
-                contact_tool = (
-                    "contact_seller_playwright" if mcp_mode == "playwright_browser"
-                    else "contact_seller"
-                )
-                normalized = self._normalize_action_input(contact_tool, {}, memory)
-                # contact_seller_playwright richiede product_url — se manca, fallback ad API
-                if normalized is None and contact_tool == "contact_seller_playwright":
-                    contact_tool = "contact_seller"
-                    normalized = self._normalize_action_input(contact_tool, {}, memory)
-                if normalized is not None:
-                    return PlannerOutput(
-                        thought="Contatto il venditore tramite browser Playwright.",
-                        action=ToolCall(tool=contact_tool, input=normalized),
-                        intent="contact_seller",
-                    )
-            elif has_seller_cues and evidence.seller >= 0.35:
-                logger.info("Playwright + seller cues → routing to seller_analysis")
-                normalized = self._normalize_action_input("analyze_seller", {}, memory)
-                if normalized is not None:
-                    return PlannerOutput(
-                        thought="Analizzo il venditore.",
-                        action=ToolCall(tool="analyze_seller", input=normalized),
-                        intent="seller_analysis",
-                    )
-            elif evidence.contact_seller < 0.35 and (evidence.seller < 0.45 or "elenca" in text_lower):
-                logger.info("Playwright override triggered: bypassing task queue.")
-                decision = self._deterministic_decide(memory)
-                if decision:
-                    return decision
-
         if memory.has_pending_tasks():
             decision = self._decide_from_task_queue(memory)
             if decision:
@@ -273,18 +72,16 @@ class ReactPlanner:
         if conversation_fast_path:
             return conversation_fast_path
 
-        deterministic = self._deterministic_decide(memory)
-        if deterministic:
-            return deterministic
- 
+        # TENTATIVO PRIMARIO: MCP + LLM Native Tool Calling
+        # Sfruttiamo i modelli capaci come Minimax/Qwen etc per parseggiare direttamente il raw user_query in JSON MCP
         llm_decision = await self._llm_decide(memory, step_index, max_steps, custom_instructions=custom_instructions, tone=tone)
         if llm_decision:
             return llm_decision
 
+
         return self._safe_fallback_decide(memory)
 
     def _conversation_fast_path(self, memory: AgentMemory) -> Optional[PlannerOutput]:
-
         text = (memory.user_query or "").strip().lower()
 
         if text in {"ciao", "hey", "hello", "salve"}:
@@ -293,33 +90,6 @@ class ReactPlanner:
                 should_stop=True,
                 intent="conversation",
             )
-
-        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
-
-        if intent != "conversation":
-            return None
-
-        # alta confidenza conversazionale
-        if confidence >= self.intent_threshold:
-            return PlannerOutput(
-                thought="La richiesta è chiaramente conversazionale.",
-                should_stop=True,
-                intent="conversation",
-            )
-
-        # anche con confidenza media, se non ci sono segnali seller/search,
-        # evitiamo di mandare una banalità a Ollama solo per decidere.
-        if (
-                evidence.conversation >= 0.40
-                and evidence.product < 0.20
-                and evidence.seller < 0.20
-        ):
-            return PlannerOutput(
-                thought="La richiesta sembra puramente conversazionale.",
-                should_stop=True,
-                intent="conversation",
-            )
-
         return None
 
     def can_stop_early(self, memory: AgentMemory) -> bool:
@@ -367,70 +137,6 @@ class ReactPlanner:
 
         return None
 
-    def _deterministic_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
-        """
-        Versione deterministica (senza LLM) basata su euristiche e scoring interno.
-        """
-        intent, confidence, evidence = self._infer_intent_with_confidence(memory)
-        
-        # LOGGING DI SICUREZZA
-        logger.info(f"PLANNER DEBUG: Inferito intento '{intent}' con confidenza {confidence}")
-
-        # OVERRIDE RADICALE: Impedisce a qualsiasi stringa non corretta di proseguire
-        # Forza 'contact_seller' se viene rilevata la stringa di tool 'contact_seller_playwright'
-        if intent == "contact_seller_playwright" or (intent and "playwright" in intent and intent != "playwright_search"):
-            logger.warning(f"PLANNER OVERRIDE: Correzione intento invalido '{intent}' -> 'contact_seller'")
-            intent = "contact_seller"
-
-        if intent == "conversation" and confidence >= self.intent_threshold:
-            return PlannerOutput(
-                thought="La richiesta è conversazionale.",
-                should_stop=True,
-                intent="conversation",
-            )
-
-        # Se l'intento non è comunque nella whitelist, falliamo silenziosamente per far subentrare LLM se permesso
-        if intent not in VALID_INTENTS:
-            logger.warning(f"PLANNER: Intento '{intent}' non presente in VALID_INTENTS. Fallback.")
-            return None
-
-        if confidence < self.intent_threshold:
-            logger.info(f"Confidence {confidence} below threshold {self.intent_threshold}")
-            return None
-
-        satisfied = self._intent_is_satisfied(memory, intent)
-        logger.info(f"Intent {intent} satisfied: {satisfied}")
-        if satisfied:
-            return PlannerOutput(
-                thought="Ho già raccolto dati sufficienti.",
-                should_stop=True,
-                intent=intent,
-            )
-
-        for tool_name in self._ordered_tools_for_intent(intent, memory):
-            if self._tool_state_is_terminal(memory, tool_name):
-                continue
-            if self._exceeds_tool_budget(memory, tool_name):
-                continue
-
-            # Verifichiamo se l'input può essere normalizzato (es: estrazione ItemID)
-            normalized_input = self._normalize_action_input(tool_name, {}, memory)
-            if normalized_input is None:
-                continue
-
-            why = self._reason_summary(intent, evidence)
-
-            # ULTIMA SICUREZZA: Assicuriamoci che intent sia validato PRIMA di PlannerOutput
-            final_intent = intent if intent in VALID_INTENTS else "conversation"
-
-            return PlannerOutput(
-                thought=why or f"Uso il tool più adatto: {tool_name}.",
-                action=ToolCall(tool=tool_name, input=normalized_input),
-                should_stop=False,
-                intent=final_intent, # type: ignore
-            )
-
-        return None
 
     def _decide_from_task_queue(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         task = memory.peek_task()
@@ -647,7 +353,7 @@ class ReactPlanner:
         lowered = text.lower()
         
         if action == "search_products" and not action_input.get("query"):
-            # A basic normalizer for search
+            # A basic normalizer for search as fallback
             from app.mcp.normalizers import clean_search_query
             action_input["query"] = clean_search_query(text) or text
 
@@ -843,260 +549,28 @@ class ReactPlanner:
         return any(tag in desc_lower for tag in tags)
 
     def _infer_intent(self, memory: AgentMemory) -> str:
-        return self._infer_intent_with_confidence(memory)[0]
-
-    def _infer_intent_with_confidence(self, memory: AgentMemory) -> tuple[str, float, IntentEvidence]:
-        query = memory.user_query
-        evidence = self._score_query(query, memory)
+        q = (memory.user_query or "").lower().strip()
+        if not q or q in {"ciao", "hey", "hello", "salve"}:
+            return "conversation"
+        if any(w in q for w in ["venditore", "affidabilità", "feedback", "recensioni"]):
+            return "seller_analysis"
+        if any(w in q for w in ["confronta", "compara", "differenza"]):
+            return "comparison"
         
-        playwright_score = getattr(evidence, "playwright", 0.0)
-        logger.info(f"PLANNER: query='{query}' | playwright_score={playwright_score} | threshold={self.intent_threshold}")
-        
-        # (Playwright override moved below to allow contact_seller check first)
-
-        if memory.tasks:
-            tools = [str(task.get("tool") or "").strip() for task in memory.tasks]
-            has_seller = any(self._tool_matches_any_tag(tool, {"seller", "trust", "feedback"}) for tool in tools)
-            has_search = any(self._tool_matches_any_tag(tool, {"search", "product", "catalog"}) for tool in tools)
-
-            if has_search and has_seller:
-                return "hybrid", 1.0, IntentEvidence(product=1.0, seller=1.0)
-            if has_seller:
-                return "seller_analysis", 1.0, IntentEvidence(seller=1.0)
-            if has_search:
-                return "product_search", 1.0, IntentEvidence(product=1.0)
-        
-        # Consolidation: Use the already calculated evidence
-        top, second = evidence.top_two()
-        label, score = top
-        margin = score - second[1]
-        logger.info(f"PLANNER: Top intent is '{label}' with score {score} | margin={margin}")
-
-        # HYBRID LOGIC: Only if both signals are REALLY strong
-        if evidence.product >= 0.8 and evidence.seller >= 0.8:
-            return "hybrid", min(evidence.product, evidence.seller), evidence
-
-        # SELLER ANALYSIS OVERRIDE: If seller signal is dominant, don't fallback to hybrid easily
-        if label == "seller_analysis" and evidence.seller >= 0.7:
-            return "seller_analysis", evidence.seller, evidence
-
-        if score >= self.intent_threshold and margin >= self.margin_threshold:
-            return label, score, evidence
-
-        if label == "seller_analysis" and evidence.seller >= self.intent_threshold:
-            return label, evidence.seller, evidence
-        if label == "comparison" and evidence.comparison >= self.intent_threshold:
-            return label, evidence.comparison, evidence
-        if label == "shipping" and evidence.shipping >= self.intent_threshold:
-            return label, evidence.shipping, evidence
-        if label == "item_details" and evidence.item_details >= self.intent_threshold:
-            return label, evidence.item_details, evidence
-        if label == "market_trends" and evidence.market >= self.intent_threshold:
-            return label, evidence.market, evidence
-        if label == "contact_seller" and evidence.contact_seller >= 0.5:
-            return label, evidence.contact_seller, evidence
-        if label == "conversation" and evidence.conversation >= self.intent_threshold and evidence.product < 0.45:
-            return label, evidence.conversation, evidence
-        if label == "product_search" and evidence.product >= self.intent_threshold and evidence.conversation < 0.45:
-            # Se c'è un forte segnale Playwright, preferiamo l'intento specifico
-            if evidence.playwright > 0.6:
-                return "playwright_search", evidence.playwright, evidence
-            return label, evidence.product, evidence
-
-        # NUCLEAR OVERRIDE: Playwright always wins if present and no other specific intent dominates
-        if label == "playwright_search" and score >= self.intent_threshold:
-            return "playwright_search", score, evidence
-
-        return label, max(score, 0.0), evidence
-
-    def _score_query(self, text: str, memory: AgentMemory) -> IntentEvidence:
-        q = (text or "").strip().lower()
-        ev = IntentEvidence()
-
-        if not q:
-            ev.add("conversation", 0.8, "empty_query")
-            return ev
-
-        tokens = [t for t in TOKEN_RE.findall(q) if t]
-        token_set = set(tokens)
-        token_count = len(tokens)
-
-        explicit_seller = extract_explicit_seller(q)
-        if explicit_seller:
-            ev.add("seller", 0.9, "explicit_seller")
-
-        seller_hits = len(token_set & SELLER_CUES)
-        if seller_hits:
-            ev.add("seller", min(0.25 + 0.12 * seller_hits, 0.6), "seller_lexicon")
-
-        transactional_hits = len(token_set & TRANSACTIONAL_CUES)
-        if transactional_hits:
-            ev.add("product", min(0.18 + 0.08 * transactional_hits, 0.45), "transactional_lexicon")
-
-        comparison_hits = len(token_set & COMPARISON_CUES)
-        if comparison_hits:
-            ev.add("comparison", min(0.45 + 0.15 * comparison_hits, 0.9), "comparison_lexicon")
-            ev.add("product", 0.2, "comparison_implies_product")
-
-        shipping_hits = len(token_set & SHIPPING_CUES)
-        if shipping_hits:
-            ev.add("shipping", min(0.35 + 0.15 * shipping_hits, 0.8), "shipping_lexicon")
-
-        details_hits = len(token_set & DETAILS_CUES)
-        if details_hits:
-            ev.add("item_details", min(0.35 + 0.15 * details_hits, 0.8), "details_lexicon")
-
-        deals_hits = len(token_set & DEALS_CUES)
-        if deals_hits:
-            ev.add("deals", min(0.75 + 0.15 * deals_hits, 0.99), "deals_lexicon")
-            # Segnale forte di interazione frontend (ID categoria tra parentesi)
-            if "(id:" in q:
-                ev.add("deals", 0.3, "frontend_category_selection")
-            # Un segnale di deal spesso implica una ricerca prodotto, ma vogliamo che viga deals
-            ev.add("product", 0.05, "deals_implies_product_minimal")
-            # Riduciamo search se deals è molto probabile
-            if ev.deals > 0.8:
-                ev.product = max(0.0, ev.product - 0.4)
-
-        wishlist_hits = len(token_set & WISHLIST_CUES)
-        if wishlist_hits:
-            # Punteggio basato su parole come "salva", "wishlist", "preferiti"
-            # Se la query è "aggiungi ai preferiti", deve avere un peso alto
-            ev.add("wishlist", min(0.60 + 0.15 * wishlist_hits, 0.95), "wishlist_lexicon")
-            setattr(ev, "wishlist_score", ev.wishlist)
-
-        contact_hits = len(token_set & CONTACT_CUES)
-        if contact_hits:
-            ev.add("contact_seller", min(0.65 + 0.15 * contact_hits, 0.95), "contact_lexicon")
+        seller = extract_explicit_seller(q)
+        if seller:
+            # Se parla anche di prodotti (non solo del venditore), è un hybrid
+            if len(q.split()) > 2:
+                return "hybrid"
+            return "seller_analysis"
             
-            # Se abbiamo parole di contatto E un venditore esplicito, il segnale è fortissimo (0.95+)
-            if explicit_seller:
-                ev.add("contact_seller", 0.5, "contact_with_explicit_seller")
-                # AZZERIAMO la ricerca e l'analisi feedback: l'utente vuole SCRIVERE ora.
-                ev.seller = 0.0
-                ev.product = 0.0
-
-        market_hits = len(token_set & MARKET_CUES)
-        if market_hits:
-            # Punteggio molto alto per segnali di mercato
-            # Se abbiamo molte hit di mercato (es. "trend di mercato", "andamento prezzi"), deve vincere.
-            ev.add("market_trends", min(0.70 + 0.15 * market_hits, 0.98), "market_lexicon")
-            # Se c'è un forte segnale di mercato, riduciamo l'impatto dei segnali di prodotto
-            # per evitare che "search" vinca solo perché l'utente ha descritto bene l'oggetto.
-            ev.product = max(0.0, ev.product - 0.3)
-            ev.add("product", 0.05, "market_implies_product_minimal")
-
-        attribute_hits = len(token_set & ATTRIBUTE_CUES)
-        if attribute_hits:
-            ev.add("product", min(0.12 + 0.06 * attribute_hits, 0.42), "attribute_lexicon")
-
-        greeting_hits = len(token_set & GREETING_CUES)
-        if greeting_hits:
-            ev.add("conversation", min(0.15 + 0.08 * greeting_hits, 0.28), "greeting")
-
-        conversation_hits = len(token_set & CONVERSATION_CUES)
-        if conversation_hits:
-            ev.add("conversation", min(0.2 + 0.08 * conversation_hits, 0.5), "conversation_lexicon")
-
-        pronoun_hits = len(token_set & PERSONAL_PRONOUNS)
-        if pronoun_hits:
-            ev.add("conversation", min(0.08 + 0.04 * pronoun_hits, 0.18), "personal_pronouns")
-
-        if any(tok in QUESTION_WORDS for tok in tokens[:2]):
-            ev.add("conversation", 0.18, "question_word_prefix")
-
-        if q.endswith("?"):
-            ev.add("conversation", 0.08, "question_mark")
-
-        if PRICE_RE.search(q):
-            ev.add("product", 0.34, "price")
-        if PRICE_BOUND_RE.search(q):
-            ev.add("product", 0.24, "price_bound")
-        if SIZE_RE.search(q) or ALT_SIZE_RE.search(q):
-            ev.add("product", 0.26, "size_or_variant")
-        if MODEL_CODE_RE.search(q):
-            ev.add("product", 0.16, "model_code")
-            # Multiple model codes strongly imply comparison
-            if len(MODEL_CODE_RE.findall(q)) >= 2:
-                ev.add("comparison", 0.45, "multiple_model_codes")
-
-        if EBAY_ID_RE.search(q):
-            ev.add("item_details", 0.95, "explicit_ebay_id")
-            # If there's an explicit ID, we usually don't want a generic product search
-            ev.product = max(0.0, ev.product - 0.5)
-
-        if re.search(r"\b(?:con|senza)\b", q) and attribute_hits:
-            ev.add("product", 0.12, "attribute_composition")
-
-        if re.search(r"\b(?:da|per)\s+(?:uomo|donna|bambin[oa]|adult[io])\b", q):
-            ev.add("product", 0.22, "demographic_filter")
-
-        has_conversation_structure = bool(token_set & VERBISH_CUES) or any(tok in QUESTION_WORDS for tok in tokens)
-        has_product_constraints = bool(
-            PRICE_RE.search(q)
-            or PRICE_BOUND_RE.search(q)
-            or SIZE_RE.search(q)
-            or ALT_SIZE_RE.search(q)
-            or (token_set & ATTRIBUTE_CUES)
-            or (token_set & TRANSACTIONAL_CUES)
-        )
-
-        if 2 <= token_count <= 9 and has_product_constraints and not has_conversation_structure:
-            ev.add("product", 0.24, "short_keyword_like_query")
-
-        if token_count >= 5 and has_conversation_structure and not has_product_constraints and not explicit_seller:
-            ev.add("conversation", 0.26, "open_ended_sentence")
-
-        if explicit_seller and has_product_constraints:
-            ev.add("product", 0.18, "seller_plus_product_constraints")
-            
-        if seller_hits > 0 and (transactional_hits > 0 or has_product_constraints):
-            ev.add("product", 0.45, "hybrid_implication_product")
-            ev.add("seller", 0.45, "hybrid_implication_seller")
-
-        playwright_hits = len(token_set & PLAYWRIGHT_CUES)
-        if playwright_hits:
-            ev.add("playwright_search", min(0.85 + 0.15 * playwright_hits, 0.99), "playwright_lexicon")
-            
-            if "visibile" in token_set or "reale" in token_set:
-                ev.add("playwright_search", 0.2, "visible_browser_request")
-            
-            # Non azzeriamo più seller e product se l'intento sembra essere altro (es. contatto)
-            # ma diamo un segnale forte che Playwright è richiesto.
-            if ev.contact_seller < 0.4:
-                 ev.product = max(0.0, ev.product - 0.3)
-                 ev.seller = max(0.0, ev.seller - 0.3)
-
-        return ev
-
-    def _reason_summary(self, intent: str, evidence: IntentEvidence) -> str:
-        mapping = {
-            "product_search": evidence.reasons.get("product", []),
-            "seller_analysis": evidence.reasons.get("seller", []),
-            "conversation": evidence.reasons.get("conversation", []),
-            "comparison": evidence.reasons.get("comparison", []),
-            "shipping": evidence.reasons.get("shipping", []),
-            "item_details": evidence.reasons.get("item_details", []),
-            "hybrid": evidence.reasons.get("seller", []) + evidence.reasons.get("product", []),
-        }
-        reasons = [r for r in mapping.get(intent, []) if r]
-        if not reasons:
-            return "Uso il tool più adatto."
-        compact = ", ".join(reasons[:3])
-
-        if intent == "hybrid":
-            return f"La richiesta combina segnali seller+product ({compact})."
-        if intent == "shipping":
-            return f"La richiesta riguarda la spedizione ({compact})."
-        if intent == "item_details":
-            return f"La richiesta richiede dettagli specifici ({compact})."
-        if intent == "comparison":
-            return f"La richiesta ha struttura da comparazione prodotti ({compact})."
-        if intent == "product_search":
-            return f"La richiesta ha struttura da ricerca prodotto ({compact})."
-        if intent == "seller_analysis":
-            return f"La richiesta ha struttura da analisi venditore ({compact})."
-        return "La richiesta è conversazionale."
+        if any(w in q for w in ["spedizione", "spedirlo", "costa spedire"]):
+            return "shipping"
+        if any(w in q for w in ["contatta", "scrivi", "messaggio"]):
+            return "contact_seller"
+        if ("andamento" in q and "prezz" in q) or "market" in q or "statistiche" in q:
+            return "market_trends"
+        return "product_search"
 
     def _exceeds_tool_budget(self, memory: AgentMemory, tool_name: str) -> bool:
         return memory.tool_call_count(tool_name) >= self.max_calls_per_tool

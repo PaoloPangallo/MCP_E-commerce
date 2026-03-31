@@ -81,6 +81,7 @@ REGOLE DI PIANIFICAZIONE:
 9. **Analisi Vision (CRITICO)**: Se vedi una `vision_description` nel contesto, usala come fonte primaria per i dettagli dell'oggetto. Se la query utente è generica ma hai una descrizione dettagliata dall'immagine, dai priorità ai dettagli dell'immagine per la ricerca.
 10. **Analisi di Mercato (CRITICO)**: Se l'utente chiede trend, prezzi medi sul web, popolarità o interesse nel tempo, DEVI usare `market_trends`. Non confonderlo con la semplice ricerca eBay.
 11. **Contatto Venditore (CRITICO)**: Se l'utente vuole scrivere al venditore, chiedere informazioni, trattare il prezzo o contattare chi vende un oggetto, DEVI usare `contact_seller` passando `seller_name` e, se disponibile, `item_id`.
+12. **Analisi Venditore Target**: Se l'utente menziona un venditore specifico (es: "venduto da pegaso_italia", "di monclick"), DEVI pianificare `analyze_seller` per quel venditore per darne un profilo di affidabilità completo.
 
 POLICY STRUMENTI:
 - `search_products`: Discovery, shopping, prezzi.

@@ -185,71 +185,29 @@ def _normalize_shipping_costs_output(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def clean_search_query(query: str) -> str:
+    # LLM Native parsing: the agent now provides high-quality queries.
+    # We just do basic sanitization without risking information loss.
     q = _clean_text(query).lower()
-    if not q:
-        return ""
-
-    q = re.sub(r"(venditore|seller)\s+[a-zA-Z0-9._-]+", "", q)
-    q = re.sub(
-        r"(feedback|recensioni|reputazione|trust)\s+(del|della|di)\s+[a-zA-Z0-9._-]+",
-        "",
-        q,
-    )
-    q = re.sub(
-        r"(dammi i feedback|analizza il venditore|analizza|controlla il venditore|controlla se vende|verifica se vende|feedback del venditore|controlla l'affidabilità del|controlla l'affidabilità di|controlla l'affidabilità|verifica l'affidabilità|controlla|verifica|affidabilità|reputazione|trust|feedback|confronta|compara|mi serve|trovami|cerca|mostrami|fammi|bro|poi|grazie|per favore|qualsiasi)",
-        "",
-        q,
-    )
-    q = re.sub(r"\s+", " ", q).strip()
-
-    # Rimuoviamo preposizioni e articoli isolati all'inizio e alla fine (residui comuni)
-    q = re.sub(r"^(?:l'|del|di|da|il|lo|la|i|gli|le|un|uno|una|per|al|a)\s+", "", q)
-    q = re.sub(r"\s+(?:l'|del|di|da|il|lo|la|i|gli|le|un|uno|una|per|al|a)$", "", q)
-    
-    if len(q.strip()) <= 2 or q.strip() in {"l'", "del", "dell", "della", "dello", "degli", "delle", "dei"}:
-        return "" 
-
     return q.strip()
 
 
 _SELLER_NOISE = {
     "venditore", "seller", "feedback", "recensioni", "reputazione", "trust",
-    "affidabile", "affidabilita", "affidabilità", "utente", "negozio", "store",
-    "per", "favore", "prego", "cortesia", "grazie", "ciao",
-    "questo", "questa", "quello", "quella", "suo", "sua", "loro",
-    "lui", "lei", "anche", "pure", "solo", "subito", "adesso", "ora", "poi",
-    "bro", "me", "mi", "ti", "si", "gli", "le",
 }
 
-_SELLER_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"(?:venditore|seller)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})", re.IGNORECASE),
-    re.compile(
-        r"(?:feedback|recensioni|reputazione|trust|affidabil(?:e|it[aà]))\s+(?:del|della|di|dell')\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})",
-        re.IGNORECASE,
-    ),
-    re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:è|e)\s+(?:affidabile|sicuro)", re.IGNORECASE),
-    re.compile(
-        r"(?:contatta(?:re|lo|la|li|le|mi)?|scrivi a|scrivi al|messaggio a|messaggia|parla con|affidabilità\s+(?:del|di|dell'))\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})",
-        re.IGNORECASE,
-    ),
-)
-
-
 def extract_explicit_seller(text: str) -> str | None:
+    # Left as a minimal fallback, but LLM extracts seller_name directly now.
     raw_text = _clean_text(text)
     if not raw_text:
         return None
 
-    for pattern in _SELLER_PATTERNS:
-        for match in pattern.finditer(raw_text):
-            candidate = _clean_text(match.group(1)).strip(" .,:;!?()[]{}\"'")
-            if not candidate:
-                continue
-            if candidate.lower() in _SELLER_NOISE:
-                continue
-            return candidate
-
+    # Semplice estrazione post "venditore" o "seller" se presente
+    match = re.search(r"(?:venditore|seller)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})", raw_text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
     return None
+
+
 
 
 def _normalize_playwright_output(raw: Dict[str, Any]) -> Dict[str, Any]:

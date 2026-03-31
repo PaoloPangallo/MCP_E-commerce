@@ -16,8 +16,6 @@ import json
 import logging
 import os
 import re
-import time
-import uuid
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
@@ -97,6 +95,7 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     "compatibilities": {},
     "constraints": [],
     "preferences": [],
+    "target_seller": None,
     "_meta": {
         "llm_enabled": False,
         "llm_success": False,
@@ -105,52 +104,9 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     },
 }
 
-NUM_PATTERN = r"(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)"
-ARTICLE_PATTERN = r"(?:\s+(?:i|le|gli|ai|alle|agli|al|alla|di|a|un))?"
-
-PRICE_RANGE_PATTERNS = [
-    re.compile(
-        rf"\b(?:tra|da){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|a){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE
-    ),
-    re.compile(
-        rf"\b(?:prezzo|costo)\s+(?:minimo|min){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\s+(?:e|ed|a)\s+(?:prezzo|costo)?\s*(?:massimo|max){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE
-    ),
-]
-
-MAX_PRICE_PATTERNS = [
-    re.compile(
-        rf"\b(?:sotto|meno di|massimo|max|fino a|entro|non oltre){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE
-    ),
-]
-
-APPROX_PRICE_PATTERNS = [
-    re.compile(
-        rf"\b(?:circa|intorno a|intorno|sui|sulle|verso){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE
-    ),
-]
-
-MIN_PRICE_PATTERNS = [
-    re.compile(
-        rf"\b(?:almeno|minimo|min|sopra|oltre|più di){ARTICLE_PATTERN}\s+{NUM_PATTERN}\s*(?:euro|€)?\b",
-        re.IGNORECASE
-    ),
-]
-
-EXPLICIT_PRICE_PATTERN = re.compile(
-    rf"\b{NUM_PATTERN}\s*(?:euro|€)\b",
-    re.IGNORECASE
-)
+# Le regex complesse per i prezzi sono state rimosse. Demandiamo l'estrazione semantica interamente al LLM.
 
 # ── Lazy loaders ─────────────────────────────────────────────────────────────
-
-@lru_cache(maxsize=1)
-def get_nlp():
-    import spacy
-    return spacy.load(SPACY_MODEL)
 
 
 @lru_cache(maxsize=1)
@@ -236,166 +192,10 @@ def is_vague_product(text: str) -> bool:
 
 
 def should_try_llm(query: str) -> bool:
-    q = normalize_for_matching(query)
-    easy_patterns = [
-        r"\b(?:sotto|massimo|entro|tra|da|almeno|minimo|nuovo|usato|ricondizionato)\b",
-        r"\b(?:iphone|samsung|xiaomi|ps5|playstation|macbook|lenovo|asus|dyson|bose|jbl)\b",
-    ]
-    hits = sum(1 for p in easy_patterns if re.search(p, q))
-    return hits < 2
+    return True # LLM è ora il motore principale di estrazione semantica.
 
 
-# ── Extraction ────────────────────────────────────────────────────────────────
-
-def extract_base_price(text: str) -> Tuple[Optional[float], Optional[float]]:
-    normalized = normalize_for_matching(text)
-
-    for pattern in PRICE_RANGE_PATTERNS:
-        m = pattern.search(normalized)
-        if m:
-            p1 = normalize_float(m.group(1))
-            p2 = normalize_float(m.group(2))
-            if p1 is not None and p2 is not None:
-                return min(p1, p2), max(p1, p2)
-
-    for pattern in APPROX_PRICE_PATTERNS:
-        m = pattern.search(normalized)
-        if m:
-            val = normalize_float(m.group(1))
-            if val is not None:
-                return round(val * 0.8, 2), round(val * 1.2, 2)
-
-    for pattern in MAX_PRICE_PATTERNS:
-        m = pattern.search(normalized)
-        if m:
-            return None, normalize_float(m.group(1))
-
-    for pattern in MIN_PRICE_PATTERNS:
-        m = pattern.search(normalized)
-        if m:
-            return normalize_float(m.group(1)), None
-
-    explicit_prices = [normalize_float(m.group(1)) for m in EXPLICIT_PRICE_PATTERN.finditer(normalized)]
-    explicit_prices = [p for p in explicit_prices if p is not None]
-
-    if len(explicit_prices) == 1:
-        return None, explicit_prices[0]
-
-    return None, None
-
-
-def extract_condition(text: str) -> Optional[str]:
-    normalized = normalize_for_matching(text)
-    for canonical, variants in CONDITION_SYNONYMS.items():
-        for variant in variants:
-            if re.search(rf"\b{re.escape(variant)}\b", normalized):
-                return canonical
-    return None
-
-
-def fuzzy_brand_detection(text: str, threshold: int = 88) -> List[str]:
-    if not ENABLE_FUZZY_BRANDS:
-        return []
-    vocab = load_brand_vocab()
-    if not vocab:
-        return []
-
-    words = re.findall(r"\b\w+\b", text.lower())
-    found = []
-
-    for word in words:
-        if len(word) < 5:
-            continue
-        match = process.extractOne(word, cast(List[str], list(vocab)), scorer=fuzz.ratio)
-        if match:
-            brand, score, _ = match
-            if score >= threshold and abs(len(word) - len(brand)) <= 2:
-                found.append(brand)
-
-    return dedupe_keep_order(found)
-
-
-def extract_brands(doc, original_text: str) -> List[str]:
-    found: List[str] = []
-    text_norm = normalize_for_matching(original_text)
-    vocab = set(load_brand_vocab())
-
-    for raw, canonical in BRAND_WHITELIST.items():
-        if re.search(rf"\b{re.escape(raw)}\b", text_norm):
-            found.append(canonical)
-
-    if not found:
-        found.extend(fuzzy_brand_detection(original_text))
-
-    for ent in getattr(doc, "ents", []):
-        candidate = ent.text.strip(" ,.-")
-        if candidate and candidate in vocab:
-            found.append(candidate)
-
-    return dedupe_keep_order(found)
-
-
-def extract_product(doc, original_text: str, brands: List[str]) -> Optional[str]:
-    brand_norm = {b.lower() for b in brands}
-    forbidden_tokens = {
-        "prezzo", "euro", "minimo", "massimo", "costo",
-        "sotto", "sopra", "circa", "intorno", "entro"
-    }
-
-    content_tokens: List[str] = []
-
-    for token in doc:
-        if token.is_punct or token.is_space:
-            continue
-        t_low = token.text.lower()
-        if t_low in brand_norm or t_low in forbidden_tokens:
-            continue
-        if token.pos_ in {"NOUN", "PROPN", "ADJ", "NUM"}:
-            content_tokens.append(token.text)
-
-    if not content_tokens:
-        return None
-
-    vocab = get_nlp().vocab
-    while content_tokens and vocab[content_tokens[0]].is_stop:
-        content_tokens.pop(0)
-    while content_tokens and vocab[content_tokens[-1]].is_stop:
-        content_tokens.pop()
-
-    if not content_tokens:
-        return None
-
-    best = " ".join(content_tokens[:8]).strip()
-    return None if is_vague_product(best) else best
-
-
-# ── Rule-based parse ──────────────────────────────────────────────────────────
-
-def rule_based_parse(query: str) -> Dict[str, Any]:
-    normalized = normalize_text(query)
-    doc = get_nlp()(normalized)
-
-    brands = extract_brands(doc, query)
-    min_price, max_price = extract_base_price(query)
-    condition = extract_condition(query)
-    product = extract_product(doc, query, brands)
-
-    result = empty_result(query)
-    result["brands"] = brands
-    result["product"] = product
-    result["semantic_query"] = query
-
-    if min_price is not None and max_price is not None:
-        result["constraints"].append({"type": "price", "operator": "between", "value": [min_price, max_price]})
-    elif max_price is not None:
-        result["constraints"].append({"type": "price", "operator": "<=", "value": max_price})
-    elif min_price is not None:
-        result["constraints"].append({"type": "price", "operator": ">=", "value": min_price})
-
-    if condition:
-        result["constraints"].append({"type": "condition", "value": condition})
-
-    return result
+# Funzioni euristico/regex (extract_base_price, extract_condition, extract_product, rule_based_parse) rimosse.
 
 
 # ── JSON helpers ──────────────────────────────────────────────────────────────
@@ -540,6 +340,10 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
             for k, v in compatibilities.items()
             if str(k).strip() and str(v).strip()
         }
+    
+    target_seller = data.get("target_seller")
+    if isinstance(target_seller, str) and target_seller.strip().lower() not in {"", "null", "none"}:
+        result["target_seller"] = target_seller.strip()
 
     return result
 
@@ -580,7 +384,8 @@ Schema:
   "brands": [],
   "compatibilities": {{}},
   "constraints": [],
-  "preferences": []
+  "preferences": [],
+  "target_seller": null
 }}
 
 Allowed constraint/preference item types:
@@ -605,6 +410,7 @@ Rules:
 - Do NOT invent brands or products.
 - IMPORTANT: Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
 - If the user says "cercalo", "trovali", "show me more", etc., the 'product' and 'brands' fields must be populated based on the previous topic found in the context.
+- Target Seller: Extract the seller name if the user mentions one (e.g., "venduto da pegaso_italia", "di apple_store", "da monclick").
 - Output JSON only.
 
 Query: {json.dumps(query, ensure_ascii=False)}
@@ -631,42 +437,7 @@ Query: {json.dumps(query, ensure_ascii=False)}
     return parsed, used_provider
 
 
-# ── Merge / confidence ────────────────────────────────────────────────────────
-
-def merge_results(rule_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    if not llm_result:
-        semantic_parts = []
-        if rule_result.get("brands"):
-            semantic_parts.extend(rule_result["brands"])
-        if rule_result.get("product"):
-            semantic_parts.append(rule_result["product"])
-        rule_result["semantic_query"] = (
-            " ".join(semantic_parts) if semantic_parts else rule_result["original_query"]
-        )
-        return rule_result
-
-    final = empty_result(rule_result["original_query"])
-    final["semantic_query"] = llm_result.get("semantic_query") or rule_result.get("semantic_query") or rule_result["original_query"]
-    final["product"] = llm_result.get("product")
-
-    llm_brands = llm_result.get("brands", []) or []
-    rule_brands = rule_result.get("brands", []) or []
-    final["brands"] = dedupe_keep_order(llm_brands + rule_brands)
-
-    rule_constraints = rule_result.get("constraints", [])
-    llm_constraints = llm_result.get("constraints", [])
-
-    llm_price = [c for c in llm_constraints if c.get("type") == "price"]
-    price_constraints = llm_price if llm_price else [c for c in rule_constraints if c.get("type") == "price"]
-
-    llm_condition = next((c for c in llm_constraints if c.get("type") == "condition"), None)
-    condition_constraints = [llm_condition] if llm_condition else [c for c in rule_constraints if c.get("type") == "condition"]
-
-    final["constraints"] = price_constraints + condition_constraints
-    final["preferences"] = llm_result.get("preferences", []) or []
-    final["compatibilities"] = llm_result.get("compatibilities", {}) or {}
-
-    return final
+# merge_results non serve più in quanto usiamo solo LLM
 
 
 def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> float:
@@ -742,28 +513,25 @@ async def parse_query_service(
             logger.info("Parser cache hit for query: %s", text)
             return cached
 
-    rule_result = rule_based_parse(text)
     llm_result = None
     used_provider: Optional[str] = None
 
-    effective_use_llm = use_llm and should_try_llm(text)
-
-    if effective_use_llm:
+    if use_llm:
         llm_result, used_provider = await llm_parse(text, context_info=context_info)
 
-    final = merge_results(rule_result, llm_result)
+    final = llm_result if llm_result else empty_result(text)
 
     if include_meta:
         final["_meta"] = {
-            "llm_enabled": effective_use_llm,
+            "llm_enabled": use_llm,
             "llm_success": llm_result is not None,
-            "llm_provider": used_provider if effective_use_llm else None,
-            "confidence": compute_confidence(final, llm_result),
+            "llm_provider": used_provider if use_llm else None,
+            "confidence": 0.95 if llm_result else 0.1,
         }
     else:
         final.pop("_meta", None)
 
-    if effective_use_llm and llm_result:
+    if use_llm and llm_result:
         redis_client.set_json(cache_key, final, ttl_seconds=3600)
 
     return final
