@@ -1,4 +1,5 @@
-import { Box, Typography } from "@mui/material"
+import { Box, Typography, Tooltip } from "@mui/material"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import type { Feedback } from "../types"
 
 function normalizeRating(rating?: number): "positive" | "neutral" | "negative" {
@@ -26,6 +27,17 @@ export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
   const meta = ratingMeta[type]
   const date = formatDate(feedback.time ?? feedback.date)
   const initial = (feedback.user || "U").charAt(0).toUpperCase()
+
+  const nlp = feedback.nlp_sentiment
+  const isFalsePositive = type === "positive" && nlp !== undefined && nlp < 0.40
+  const isFalseNegative = type === "negative" && nlp !== undefined && nlp > 0.60
+  const hasMismatch = isFalsePositive || isFalseNegative
+  
+  const mismatchTooltip = isFalsePositive 
+    ? `Il testo è risultato tossico/negativo all'analisi AI (${Math.round(nlp! * 100)}%) nonostante la stella Positiva eBay`
+    : isFalseNegative 
+      ? `Il testo è risultato positivo/entusiasta all'analisi AI (${Math.round(nlp! * 100)}%) nonostante la stella Negativa eBay`
+      : ""
 
   return (
     <Box
@@ -78,6 +90,18 @@ export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
                 {meta.label}
               </Typography>
             </Box>
+
+            {hasMismatch && (
+              <Tooltip title={mismatchTooltip} placement="top" arrow>
+                <Box sx={{ cursor: 'help', display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: '#fef2f2', border: '1px solid #fca5a5', px: 1, py: '2px', borderRadius: '4px' }}>
+                  <WarningAmberIcon sx={{ fontSize: 12, color: '#dc2626' }} />
+                  <Typography sx={{ fontSize: 9, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Alert AI
+                  </Typography>
+                </Box>
+              </Tooltip>
+            )}
+
            </Box>
         </Box>
 
@@ -92,9 +116,10 @@ export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
       <Typography
         sx={{
           fontSize: 13,
-          color: "#4b5563",
+          color: hasMismatch ? "#dc2626" : "#4b5563",
           lineHeight: 1.5,
-          pl: "36px" // align with text after avatar
+          pl: "36px", // align with text after avatar
+          fontWeight: hasMismatch ? 500 : 400
         }}
       >
         {feedback.comment || "Nessun commento disponibile"}

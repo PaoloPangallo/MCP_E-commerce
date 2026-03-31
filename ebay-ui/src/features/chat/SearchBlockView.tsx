@@ -1,7 +1,7 @@
 import { useState, memo } from "react"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
-import { Button, Box, Collapse, Paper, Typography, Fab, Zoom } from "@mui/material"
+import { Box, Collapse, Paper, Typography, Fab, Zoom } from "@mui/material"
 import type { SearchBlock } from "../search/types.ts"
 import { ThinkingPill } from "../agent/components/ThinkingPill.tsx"
 import ItemDetailsCard from "./ItemDetailsCard.tsx"
@@ -162,6 +162,9 @@ const SearchBlockView = memo(function SearchBlockView({
         <VisionAnalysisCard
           description={search.vision_analysis.description}
           tags={search.vision_analysis.tags}
+          brand={search.vision_analysis.brand}
+          condition_clues={search.vision_analysis.condition_clues}
+          confidence={search.vision_analysis.confidence}
         />
       )}
 

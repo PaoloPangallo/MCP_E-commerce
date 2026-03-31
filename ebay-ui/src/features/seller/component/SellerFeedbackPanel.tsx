@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Box, CircularProgress, Collapse, Typography } from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 
 import SellerTrustGauge from "./SellerTrustGauge.tsx"
 import SellerFeedbackList from "../SellerFeedbackList.tsx"
@@ -58,6 +59,14 @@ export default function SellerFeedbackPanel({ seller }: Props) {
   const positive = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) >= 4), [feedbacks])
   const negative = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) <= 2), [feedbacks])
   const neutral  = Math.max(feedbacks.length - positive.length - negative.length, 0)
+
+  const flaggedFeedbacks = useMemo(() => feedbacks.filter((f) => {
+    const type = (f.rating ?? 0) >= 4 ? "positive" : (f.rating ?? 0) <= 2 ? "negative" : "neutral";
+    const nlp = f.nlp_sentiment;
+    const isFalsePos = type === "positive" && nlp !== undefined && nlp < 0.40;
+    const isFalseNeg = type === "negative" && nlp !== undefined && nlp > 0.60;
+    return isFalsePos || isFalseNeg;
+  }), [feedbacks])
 
   const handleToggle = async () => {
     if (!seller || loading) return
@@ -200,6 +209,14 @@ export default function SellerFeedbackPanel({ seller }: Props) {
                 ))}
               </Box>
             </Box>
+            {flaggedFeedbacks.length > 0 && (
+              <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 0.75, mt: 1, p: 1, bgcolor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px' }}>
+                <WarningAmberIcon sx={{ fontSize: 14, color: '#dc2626' }} />
+                <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#991b1b', lineHeight: 1.3 }}>
+                  L'Intelligenza Artificiale ha rilevato <strong>{flaggedFeedbacks.length}</strong> recensioni il cui testo contraddice il rating rilasciato.
+                </Typography>
+              </Box>
+            )}
           </Box>
 
           {/* Feedback lists */}

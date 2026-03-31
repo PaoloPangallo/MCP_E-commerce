@@ -90,124 +90,127 @@ def _anchor_vectors():
     return pos, neg
 
 
-# ============================================================
-# CACHE
-# ============================================================
-
-_SENTIMENT_CACHE_MAX = 1000
-_SENTIMENT_CACHE: Dict[str, float] = {}
-
-
-def _cache_put(key: str, value: float) -> None:
-    """Write to cache, evicting oldest entries when over capacity."""
-    if len(_SENTIMENT_CACHE) >= _SENTIMENT_CACHE_MAX:
-        # Remove oldest 10% to avoid evicting one at a time
-        evict_count = max(1, _SENTIMENT_CACHE_MAX // 10)
-        for k in list(_SENTIMENT_CACHE.keys())[:evict_count]:
-            del _SENTIMENT_CACHE[k]
-    _SENTIMENT_CACHE[key] = value
-
-
-# ============================================================
-# FAST HEURISTIC
-# ============================================================
-
-_POS_WORDS = {
-    "excellent", "great", "perfect", "fast", "recommended", "good",
-    "ottimo", "perfetto", "veloce", "consigliato", "positivo"
-}
-
-_NEG_WORDS = {
-    "terrible", "scam", "fake", "bad", "broken", "slow", "refund",
-    "terribile", "truffa", "falso", "rotto", "lento", "negativo"
-}
-
-
-def _heuristic_sentiment(texts: Sequence[str]) -> float:
-    """
-    Keyword-based sentiment using the same sigmoid formula as the embedding path,
-    so scores from both paths live on the same [0, 1] scale.
-    """
-    total_pos = 0
-    total_neg = 0
-
-    for text in texts:
-        t = text.lower()
-        total_pos += sum(1 for w in _POS_WORDS if w in t)
-        total_neg += sum(1 for w in _NEG_WORDS if w in t)
+def _heuristic_sentiment_single(text: str) -> float:
+    t = text.lower()
+    total_pos = sum(1 for w in _POS_WORDS if w in t)
+    total_neg = sum(1 for w in _NEG_WORDS if w in t)
 
     total_hits = total_pos + total_neg
     if total_hits == 0:
         return 0.5
 
-    # ratio in (-1, 1); sigmoid maps it to (0, 1) — same formula used in embedding path
     ratio = (total_pos - total_neg) / (total_hits + 1)
     return round(float(1 / (1 + exp(-3 * ratio))), 4)
 
 
 # ============================================================
-# PUBLIC API
+# CACHE SINGOLA STRINGA
+# ============================================================
+
+_TEXT_SENTIMENT_CACHE: Dict[str, float] = {}
+_TEXT_CACHE_MAX = 5000
+
+def _cache_put_text(text: str, score: float) -> None:
+    if len(_TEXT_SENTIMENT_CACHE) >= _TEXT_CACHE_MAX:
+        # Evict earliest 10%
+        keys_to_delete = list(_TEXT_SENTIMENT_CACHE.keys())[: (_TEXT_CACHE_MAX // 10)]
+        for k in keys_to_delete:
+            del _TEXT_SENTIMENT_CACHE[k]
+    _TEXT_SENTIMENT_CACHE[text] = score
+
+
+# ============================================================
+# PUBLIC API: SINGLE SCORES INJECTION
 # ============================================================
 
 def compute_sentiment_score(
     feedbacks: List[Dict],
-    max_texts: int = 20,
+    max_texts: int = 150,
     use_cache: bool = True,
-    use_fast_path: bool = True,
+    use_fast_path: bool = False,
 ) -> float:
     """
-    Returns sentiment score in [0,1].
-
-    Optimizations:
-    - lazy model loading
-    - content-based cache
-    - fast heuristic path for very small inputs
-    - limited embedding workload
+    Inietta la proprietà `nlp_sentiment` [0,1] all'interno di ogni dict in `feedbacks`
+    fino a `max_texts`. Restituisce la media aritmetica dei punteggi.
     """
-    texts = _extract_texts(feedbacks, max_texts=max_texts)
-
-    if not texts:
+    if not feedbacks:
         return 0.5
 
-    fingerprint = _stable_text_fingerprint(texts)
+    texts_to_encode = []
+    feedbacks_to_encode = []
 
-    if use_cache and fingerprint in _SENTIMENT_CACHE:
-        return _SENTIMENT_CACHE[fingerprint]
+    for f in feedbacks:
+        text = str(f.get("CommentText") or f.get("comment") or f.get("text") or "").strip()
+        if len(text) < 4:
+            f["nlp_sentiment"] = 0.5
+            continue
 
-    # Fast path for small batches (threshold raised so more texts benefit from embeddings)
-    if use_fast_path and len(texts) <= 8:
-        val = _heuristic_sentiment(texts)
-        if use_cache:
-            _cache_put(fingerprint, val)
-        return val
+        if use_cache and text in _TEXT_SENTIMENT_CACHE:
+            f["nlp_sentiment"] = _TEXT_SENTIMENT_CACHE[text]
+        else:
+            texts_to_encode.append(text)
+            feedbacks_to_encode.append(f)
 
-    try:
-        model = _get_model()
-        pos_anchor, neg_anchor = _anchor_vectors()
+        if len(texts_to_encode) >= max_texts:
+            break
 
-        embs = model.encode(
-            texts,
-            normalize_embeddings=True,
-            batch_size=min(16, len(texts)),
-            show_progress_bar=False,
-        ).astype("float32")
+    # Riempiamo anche i feedback restanti non toccati, se sono oltre max_texts
+    # in modo da non avere None accidentali
+    for f in feedbacks:
+        if "nlp_sentiment" not in f:
+            f["nlp_sentiment"] = 0.5
 
-        sim_pos = np.max(np.dot(embs, pos_anchor.T), axis=1)
-        sim_neg = np.max(np.dot(embs, neg_anchor.T), axis=1)
+    # Elaboriamo quelli nuovi
+    if texts_to_encode:
+        if use_fast_path and len(texts_to_encode) <= 8:
+            for text, f in zip(texts_to_encode, feedbacks_to_encode):
+                val = _heuristic_sentiment_single(text)
+                f["nlp_sentiment"] = val
+                if use_cache:
+                    _cache_put_text(text, val)
+        else:
+            try:
+                model = _get_model()
+                pos_anchor, neg_anchor = _anchor_vectors()
 
-        raw = sim_pos - sim_neg
-        mean_score = float(np.mean(raw))
+                embs = model.encode(
+                    texts_to_encode,
+                    normalize_embeddings=True,
+                    batch_size=min(32, len(texts_to_encode)),
+                    show_progress_bar=False,
+                ).astype(np.float32)
 
-        normalized = float(1 / (1 + np.exp(-3 * mean_score)))
+                sim_pos = np.max(np.dot(embs, pos_anchor.T), axis=1)
+                sim_neg = np.max(np.dot(embs, neg_anchor.T), axis=1)
 
-    except Exception as e:
-        logger.warning("Embedding sentiment failed, using heuristic: %s", e)
-        normalized = _heuristic_sentiment(texts)
+                raw = sim_pos - sim_neg
+                scores = 1 / (1 + np.exp(-3 * raw))
 
-    if use_cache:
-        _cache_put(fingerprint, normalized)
+                for text, f, val in zip(texts_to_encode, feedbacks_to_encode, scores):
+                    score = round(float(val), 4)
+                    f["nlp_sentiment"] = score
+                    if use_cache:
+                        _cache_put_text(text, score)
 
-    return round(normalized, 4)
+            except Exception as e:
+                logger.warning("Embedding sentiment failed, using heuristic: %s", e)
+                for text, f in zip(texts_to_encode, feedbacks_to_encode):
+                    val = _heuristic_sentiment_single(text)
+                    f["nlp_sentiment"] = val
+                    if use_cache:
+                        _cache_put_text(text, val)
+
+    # Calcoliamo l'overall
+    # Filtriamo prendendo in considerazione solo quelli che avevano davvero un testo, altrimenti 0.5
+    valid_scores = [
+        f["nlp_sentiment"] for f in feedbacks 
+        if len(str(f.get("CommentText") or f.get("comment") or f.get("text") or "").strip()) >= 4
+    ]
+
+    if not valid_scores:
+        valid_scores = [f["nlp_sentiment"] for f in feedbacks]
+
+    return round(float(np.mean(valid_scores)), 4) if valid_scores else 0.5
 
 # ============================================================
 # LLM SENTIMENT LABEL FOR RAG INGESTION

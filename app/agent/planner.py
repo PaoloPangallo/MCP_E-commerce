@@ -872,8 +872,13 @@ class ReactPlanner:
         margin = score - second[1]
         logger.info(f"PLANNER: Top intent is '{label}' with score {score} | margin={margin}")
 
-        if evidence.product >= self.hybrid_threshold and evidence.seller >= self.hybrid_threshold:
+        # HYBRID LOGIC: Only if both signals are REALLY strong
+        if evidence.product >= 0.8 and evidence.seller >= 0.8:
             return "hybrid", min(evidence.product, evidence.seller), evidence
+
+        # SELLER ANALYSIS OVERRIDE: If seller signal is dominant, don't fallback to hybrid easily
+        if label == "seller_analysis" and evidence.seller >= 0.7:
+            return "seller_analysis", evidence.seller, evidence
 
         if score >= self.intent_threshold and margin >= self.margin_threshold:
             return label, score, evidence

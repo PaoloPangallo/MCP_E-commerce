@@ -8,6 +8,7 @@ export interface Feedback {
   date?: string
   time?: string
   sentiment?: number
+  nlp_sentiment?: number
 }
 
 export interface SellerSummaryBlock {

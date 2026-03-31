@@ -171,6 +171,9 @@ export default function ChatPage() {
                   <VisionAnalysisCard
                     description={finalPayload.visionAnalysis.description}
                     tags={finalPayload.visionAnalysis.tags}
+                    brand={finalPayload.visionAnalysis.brand}
+                    condition_clues={finalPayload.visionAnalysis.condition_clues}
+                    confidence={finalPayload.visionAnalysis.confidence}
                   />
                 )}
                 <ThinkingPill

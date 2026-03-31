@@ -196,16 +196,20 @@ def clean_search_query(query: str) -> str:
         q,
     )
     q = re.sub(
-        r"(dammi i feedback|analizza il venditore|analizza|controlla il venditore|controlla se vende|verifica se vende|feedback del venditore|controlla|verifica|affidabilità|reputazione|trust|feedback|confronta|compara|mi serve|trovami|cerca|mostrami|fammi|bro|poi|grazie|per favore|qualsiasi)",
+        r"(dammi i feedback|analizza il venditore|analizza|controlla il venditore|controlla se vende|verifica se vende|feedback del venditore|controlla l'affidabilità del|controlla l'affidabilità di|controlla l'affidabilità|verifica l'affidabilità|controlla|verifica|affidabilità|reputazione|trust|feedback|confronta|compara|mi serve|trovami|cerca|mostrami|fammi|bro|poi|grazie|per favore|qualsiasi)",
         "",
         q,
     )
     q = re.sub(r"\s+", " ", q).strip()
 
-    if len(q) <= 2 or q in {"il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "per", "di", "del", "dal", "al"}:
-        return _clean_text(query).strip()
+    # Rimuoviamo preposizioni e articoli isolati all'inizio e alla fine (residui comuni)
+    q = re.sub(r"^(?:l'|del|di|da|il|lo|la|i|gli|le|un|uno|una|per|al|a)\s+", "", q)
+    q = re.sub(r"\s+(?:l'|del|di|da|il|lo|la|i|gli|le|un|uno|una|per|al|a)$", "", q)
+    
+    if len(q.strip()) <= 2 or q.strip() in {"l'", "del", "dell", "della", "dello", "degli", "delle", "dei"}:
+        return "" 
 
-    return q
+    return q.strip()
 
 
 _SELLER_NOISE = {
@@ -220,12 +224,12 @@ _SELLER_NOISE = {
 _SELLER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:venditore|seller)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})", re.IGNORECASE),
     re.compile(
-        r"(?:feedback|recensioni|reputazione|trust|affidabil(?:e|it[aà]))\s+(?:del|della|di)\s+([A-Za-z0-9][A-Za-z0-9._-]{2,})",
+        r"(?:feedback|recensioni|reputazione|trust|affidabil(?:e|it[aà]))\s+(?:del|della|di|dell')\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})",
         re.IGNORECASE,
     ),
     re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:è|e)\s+(?:affidabile|sicuro)", re.IGNORECASE),
     re.compile(
-        r"(?:contatta(?:re|lo|la|li|le|mi)?|scrivi a|scrivi al|messaggio a|messaggia|parla con)\s+([A-Za-z0-9][A-Za-z0-9._-]{2,})",
+        r"(?:contatta(?:re|lo|la|li|le|mi)?|scrivi a|scrivi al|messaggio a|messaggia|parla con|affidabilità\s+(?:del|di|dell'))\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})",
         re.IGNORECASE,
     ),
 )

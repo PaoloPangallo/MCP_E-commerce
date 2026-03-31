@@ -154,5 +154,7 @@ class VisionAnalysisEvent(BaseModel):
     type: Literal["vision_analysis"] = "vision_analysis"
     description: str
     tags: List[str] = Field(default_factory=list)
+    brand: Optional[str] = None
+    condition_clues: Optional[str] = None
     confidence: float = 1.0
     is_last: bool = False

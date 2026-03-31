@@ -153,6 +153,8 @@ export interface SearchBlock {
   vision_analysis?: {
     description: string
     tags: string[]
+    brand?: string | null
+    condition_clues?: string | null
     confidence: number
   } | null
   market_trends?: {

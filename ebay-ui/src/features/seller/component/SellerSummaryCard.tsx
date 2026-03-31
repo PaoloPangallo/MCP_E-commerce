@@ -7,6 +7,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import StarsIcon from '@mui/icons-material/Stars';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 import SellerFeedbackList from "../SellerFeedbackList.tsx"
 import type { Feedback } from "../types"
@@ -103,6 +104,14 @@ export default function SellerSummaryCard(props: Props) {
   const positive = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) >= 4), [feedbacks])
   const negative = useMemo(() => feedbacks.filter((f) => (f.rating ?? 0) <= 2), [feedbacks])
   const neutral  = Math.max(feedbacks.length - positive.length - negative.length, 0)
+
+  const flaggedFeedbacks = useMemo(() => feedbacks.filter((f) => {
+    const type = (f.rating ?? 0) >= 4 ? "positive" : (f.rating ?? 0) <= 2 ? "negative" : "neutral";
+    const nlp = f.nlp_sentiment;
+    const isFalsePos = type === "positive" && nlp !== undefined && nlp < 0.40;
+    const isFalseNeg = type === "negative" && nlp !== undefined && nlp > 0.60;
+    return isFalsePos || isFalseNeg;
+  }), [feedbacks])
 
   const handleToggle = async () => {
     if (!seller || loading) return
@@ -355,7 +364,7 @@ export default function SellerSummaryCard(props: Props) {
                     <Typography sx={{ fontSize: 11, fontWeight: 800, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.08em", mb: 1.5 }}>
                         Tono Recensioni ({feedbacks.length})
                     </Typography>
-                    <Box sx={{ display: "flex", gap: 1.5 }}>
+                    <Box sx={{ display: "flex", gap: 1.5, mb: flaggedFeedbacks.length > 0 ? 1.5 : 0 }}>
                         {[
                             { label: positive.length, desc: 'Positivi', color: "#10b981", bg: '#ecfdf5' },
                             { label: neutral,         desc: 'Neutri',   color: "#f59e0b", bg: '#fffbeb' },
@@ -379,6 +388,14 @@ export default function SellerSummaryCard(props: Props) {
                             </Box>
                         ))}
                     </Box>
+                    {flaggedFeedbacks.length > 0 && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, bgcolor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px' }}>
+                            <WarningAmberIcon sx={{ fontSize: 18, color: '#dc2626' }} />
+                            <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#991b1b', lineHeight: 1.4 }}>
+                                L'Intelligenza Artificiale ha rilevato <strong>{flaggedFeedbacks.length}</strong> recensioni potenzialmente fuorvianti, il cui testo analizzato è in forte disaccordo con il rating a stelle rilasciato.
+                            </Typography>
+                        </Box>
+                    )}
                 </Box>
             </Box>
           </Box>

@@ -171,6 +171,8 @@ export function parseSSEEvent(
           visionAnalysis: {
             description: event.description ?? "",
             tags: event.tags ?? [],
+            brand: event.brand ?? null,
+            condition_clues: event.condition_clues ?? null,
             confidence: event.confidence ?? 1.0
           }
         }

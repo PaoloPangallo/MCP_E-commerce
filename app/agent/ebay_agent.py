@@ -130,23 +130,41 @@ class EbayReactAgent:
                 message="Sto analizzando la tua immagine con Qwen-VL...",
             ).model_dump()
             
-            description = await describe_image_with_vision(request.image)
-            if description:
-                # Arricchiamo la query originale con la descrizione dell'immagine
+            vision_data = await describe_image_with_vision(request.image)
+            if vision_data:
+                desc_text = vision_data.get("description", "")
+                tags = vision_data.get("tags") or []
+                brand = vision_data.get("brand")
+                condition = vision_data.get("condition_clues")
+                try:
+                    confidence = float(vision_data.get("confidence", 0.95))
+                except (TypeError, ValueError):
+                    confidence = 0.95
+
+                search_additive = []
+                if brand:
+                    search_additive.append(brand)
+                if tags:
+                    search_additive.extend(tags[:4]) # Max 4 tag per compattezza
+
+                compact_str = " ".join(search_additive)
+
                 original_query = request.query.strip()
                 if not original_query:
-                    # Forza l'intento di ricerca se l'utente ha mandato solo l'immagine
-                    request.query = f"Trova prodotti simili a: {description}"
+                    request.query = f"Trova: {compact_str}".strip()
                 else:
-                    request.query = f"{original_query} ({description})".strip()
+                    request.query = f"{original_query} ({compact_str})".strip()
                 
-                vision_desc_temp = description
-                logger.info("AGENT: Query enriched with vision description: %s", request.query)
+                vision_desc_temp = desc_text
+                logger.info("AGENT: Query enriched with vision data (COMPACT): %s", request.query)
                 
                 # EMETTIAMO EVENTO VISIONE PER LA CARD DEDICATA
                 yield VisionAnalysisEvent(
-                    description=description,
-                    tags=[]  # Si potrebbe raffinare per estrarre tag
+                    description=desc_text,
+                    tags=tags,
+                    brand=brand,
+                    condition_clues=condition,
+                    confidence=confidence
                 ).model_dump()
             else:
                 logger.warning("AGENT: Vision analysis failed")

@@ -55,6 +55,8 @@ export interface AgentEvent {
 
   description?: string
   tags?: string[]
+  brand?: string | null
+  condition_clues?: string | null
   confidence?: number
 
   query?: string
@@ -91,6 +93,8 @@ export type FinalPayload = {
   visionAnalysis?: {
     description: string
     tags: string[]
+    brand?: string | null
+    condition_clues?: string | null
     confidence: number
   } | null
   marketTrends?: {

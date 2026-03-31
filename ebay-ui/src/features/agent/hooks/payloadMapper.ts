@@ -16,7 +16,7 @@ interface ToolDataPatch {
   marketTrends?: any
   metadata?: any
   deals?: any
-  visionAnalysis?: { description: string; tags: string[]; confidence: number }
+  visionAnalysis?: { description: string; tags: string[]; brand?: string | null; condition_clues?: string | null; confidence: number }
 }
 
 /** Maps a tool name + its data to the corresponding FinalPayload fields */
