@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reranker & User Profiling — Activity Diagrams</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f8f7f4;
+      --surface: #ffffff;
+      --surface-2: #f3f2ef;
+      --border: #e5e3de;
+      --text: #1a1a1a;
+      --text-2: #6b6b6b;
+      --text-3: #a3a3a3;
+      --green: #10a37f;
+      --green-bg: #e6f4f0;
+      --green-border: #b8ddd3;
+      --blue: #4787d7;
+      --blue-bg: #dae9fb;
+      --blue-border: #b3d1f0;
+      --amber: #c97d27;
+      --amber-bg: #fdf0de;
+      --amber-border: #f5e0c0;
+      --purple: #9055cc;
+      --purple-bg: #ede8f8;
+      --purple-border: #d8c8f0;
+      --red: #d94f4f;
+      --red-bg: #fde8e8;
+      --red-border: #f5c0c0;
+      --title-size: clamp(1.5rem, 4vw, 2.75rem);
+      --h2-size: clamp(1.1rem, 2.5vw, 1.75rem);
+      --small-size: clamp(0.65rem, 1vw, 0.85rem);
+      --slide-padding: clamp(1.5rem, 5vw, 4rem);
+    }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); height: 100%; overflow-x: hidden; }
+    .slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; scroll-snap-align: start; display: flex; flex-direction: column; position: relative; }
+    .slide-content { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: var(--slide-padding); padding-top: 3rem; max-height: 100%; overflow: hidden; }
+    .slide-inner { max-width: 1060px; margin: 0 auto; width: 100%; }
+    .slide-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .slide-number { font-size: var(--small-size); font-weight: 600; color: var(--text-3); font-family: 'JetBrains Mono', monospace; min-width: 2rem; }
+    h2 { font-size: var(--h2-size); font-weight: 600; letter-spacing: -0.02em; }
+    .tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-size: var(--small-size); font-weight: 500; }
+    .tag-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .tag-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+    .tag-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+    .tag-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
+    .tag-red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; border: 1px solid var(--border); }
+    .diagram-wrap { display: flex; justify-content: center; overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }
+    .diagram-wrap svg { max-width: 100%; height: auto; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0.75rem; margin-top: 1rem; }
+    .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+    .card h3 { margin-bottom: 0.35rem; font-size: clamp(0.8rem, 1.2vw, 1rem); font-weight: 600; }
+    .card p { font-size: var(--small-size); color: var(--text-2); line-height: 1.5; }
+    .card code { font-size: 0.8em; }
+
+    /* ===== TITLE SLIDE ===== */
+    .title-slide { background: var(--bg); }
+    .title-slide .slide-content { text-align: center; }
+    .title-slide h1 { color: var(--text); margin-bottom: 0.5rem; font-size: var(--title-size); font-weight: 600; letter-spacing: -0.03em; }
+    .title-slide .subtitle { color: var(--text-2); font-size: var(--h2-size); font-weight: 300; margin-bottom: 1.5rem; }
+    .title-slide .meta { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+    .tag-browse { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-size: var(--small-size); font-weight: 500; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+
+    /* ===== NAV ===== */
+    .nav { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 9999px; padding: 0.4rem 0.8rem; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+    .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all 0.2s; }
+    .nav-dot.active { background: var(--green); width: 18px; border-radius: 3px; }
+    .nav-dot:hover:not(.active) { background: var(--text-3); }
+    .slide-counter { font-size: var(--small-size); color: var(--text-3); padding: 0 0.5rem; }
+    .progress { position: fixed; top: 0; left: 0; height: 2px; background: var(--green); width: 0%; z-index: 200; transition: width 0.3s ease; }
+    .key-hint { position: fixed; bottom: 1.5rem; right: 1.5rem; font-size: var(--small-size); color: var(--text-3); display: flex; align-items: center; gap: 0.3rem; }
+    .key { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace; }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .slide:not(.reduced-motion) .slide-content > * { animation: fadeUp 0.45s ease both; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(1) { animation-delay: 0.05s; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(2) { animation-delay: 0.15s; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(3) { animation-delay: 0.25s; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    .reduced-motion .slide-content > * { animation: none !important; }
+    @media (max-height: 600px) { .nav, .key-hint { display: none; } }
+  </style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<!-- ===== SLIDE 1: TITLE ===== -->
+<section class="slide title-slide" id="s1">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <p class="tag tag-green" style="margin-bottom:1rem">Core Services</p>
+      <h1>Reranker & User Profiling</h1>
+      <p class="subtitle">Hybrid Retrieval · LTR · Auto-learning</p>
+      <div class="meta">
+        <span class="tag-browse">rag/reranker.py</span>
+        <span class="tag-browse">rag/retriever.py</span>
+        <span class="tag-browse">user_profiling.py</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 2: RERANKER OVERVIEW ===== -->
+<section class="slide" id="s2" style="background:var(--surface);">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">01</span>
+        <h2>Reranker — Architecture Overview</h2>
+        <span class="tag tag-blue">RAG</span>
+        <span class="tag tag-amber">LTR</span>
+      </div>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 1040 360" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+          <defs>
+            <marker id="ar" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d4d0c8"/></marker>
+            <marker id="ab" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4787d7"/></marker>
+            <marker id="ap" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#9055cc"/></marker>
+            <marker id="ag" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#10a37f"/></marker>
+            <filter id="fr" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000010"/></filter>
+          </defs>
+
+          <!-- ===== QUERY ===== -->
+          <rect x="390" y="6" width="260" height="34" rx="17" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5"/>
+          <text x="520" y="28" text-anchor="middle" fill="#10a37f" font-size="13" font-weight="600">rerank_products(query, items)</text>
+
+          <line x1="520" y1="40" x2="520" y2="62" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+          <!-- ===== PHASE 1: CONTEXT ===== -->
+          <rect x="390" y="64" width="260" height="28" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#fr)"/>
+          <text x="520" y="83" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="500">Phase 1 — Query Embedding</text>
+
+          <line x1="520" y1="92" x2="520" y2="114" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+          <rect x="390" y="116" width="260" height="28" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#fr)"/>
+          <text x="520" y="135" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="500">Phase 2 — RAG Evidence Retrieval</text>
+
+          <!-- RAG fork -->
+          <line x1="520" y1="144" x2="520" y2="162" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+          <rect x="180" y="164" width="340" height="60" rx="10" fill="#dae9fb" stroke="#b3d1f0" stroke-width="1.5" filter="url(#fr)"/>
+          <text x="350" y="182" text-anchor="middle" fill="#4787d7" font-size="11" font-weight="600">PARALLEL RETRIEVAL (Qdrant)</text>
+          <line x1="195" y1="188" x2="505" y2="188" stroke="#b3d1f0" stroke-width="1"/>
+          <text x="350" y="202" text-anchor="middle" fill="#4787d7" font-size="10">① product docs (k=8, doc_type="product")</text>
+          <text x="350" y="216" text-anchor="middle" fill="#4787d7" font-size="10">② seller_feedback docs (k=8, doc_type="seller_feedback")</text>
+
+          <line x1="520" y1="224" x2="520" y2="246" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+          <!-- ===== SCORE LOOP ===== -->
+          <rect x="260" y="248" width="520" height="76" rx="12" fill="#ede8f8" stroke="#d8c8f0" stroke-width="1.5" filter="url(#fr)"/>
+          <text x="520" y="266" text-anchor="middle" fill="#9055cc" font-size="11" font-weight="600">PHASE 3 — PER-ITEM FEATURE SCORING LOOP</text>
+          <line x1="275" y1="272" x2="765" y2="272" stroke="#d8c8f0" stroke-width="1"/>
+          <text x="520" y="285" text-anchor="middle" fill="#9055cc" font-size="9">① embed title → cosine similarity  ② lexical score (Jaccard token overlap)  ③ trust + rating signals</text>
+          <text x="520" y="297" text-anchor="middle" fill="#9055cc" font-size="9">④ price Z-score + accessory penalty  ⑤ RAG product boost  ⑥ RAG seller boost + sentiment</text>
+          <text x="520" y="309" text-anchor="middle" fill="#9055cc" font-size="9">⑦ personalisation bonus (fav brands)  ⑧ cross-encoder rerank on top-10  ⑨ blend 70% cross + 30% LTR</text>
+          <text x="520" y="321" text-anchor="middle" fill="#9055cc" font-size="9">→ sort by _final_score desc → return ranked list</text>
+
+          <!-- ===== OUTPUT ===== -->
+          <line x1="520" y1="324" x2="520" y2="344" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#ar)"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 3: RERANKER — FEATURE SCORING ===== -->
+<section class="slide" id="s3" style="background:var(--surface);">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">02</span>
+        <h2>Reranker — Feature Scoring Detail</h2>
+        <span class="tag tag-purple">LTR</span>
+        <span class="tag tag-amber">weights</span>
+      </div>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 1040 400" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+          <defs>
+            <marker id="a3r" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d4d0c8"/></marker>
+            <filter id="f3r" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000010"/></filter>
+          </defs>
+
+          <!-- START -->
+          <rect x="410" y="6" width="220" height="34" rx="17" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5"/>
+          <text x="520" y="28" text-anchor="middle" fill="#10a37f" font-size="13" font-weight="600">for each item</text>
+
+          <line x1="520" y1="40" x2="520" y2="62" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a3r)"/>
+
+          <!-- FEATURE EXTRACTION -->
+          <rect x="200" y="64" width="640" height="52" rx="10" fill="#dae9fb" stroke="#b3d1f0" stroke-width="1.5" filter="url(#f3r)"/>
+          <text x="520" y="82" text-anchor="middle" fill="#4787d7" font-size="11" font-weight="600">extract_ltr_features(query, item, context)</text>
+          <line x1="210" y1="88" x2="810" y2="88" stroke="#b3d1f0" stroke-width="1"/>
+          <text x="520" y="101" text-anchor="middle" fill="#4787d7" font-size="9">semantic_sim · lexical_sim · trust_score · seller_rating · log_price · price_z · has_image · is_new · has_brand · has_model · num_specs</text>
+          <text x="520" y="112" text-anchor="middle" fill="#4787d7" font-size="9">rag_product_boost · rag_seller_boost · rag_sentiment · price_match_constraint · accessory_score</text>
+
+          <line x1="520" y1="116" x2="520" y2="138" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a3r)"/>
+
+          <!-- SCORING WEIGHTS TABLE -->
+          <rect x="60" y="140" width="920" height="30" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#f3r)"/>
+          <text x="520" y="160" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">SCORING_WEIGHTS — weighted sum of features</text>
+
+          <!-- WEIGHTS GRID -->
+          <rect x="60" y="172" width="920" height="96" rx="10" fill="#f8f7f4" stroke="#e5e3de" stroke-width="1.5" filter="url(#f3r)"/>
+          <!-- Row 1 -->
+          <text x="115" y="190" text-anchor="middle" fill="#6b6b6b" font-size="9">semantic_sim</text><text x="115" y="202" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.35</text>
+          <text x="250" y="190" text-anchor="middle" fill="#6b6b6b" font-size="9">lexical_sim</text><text x="250" y="202" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.25</text>
+          <text x="385" y="190" text-anchor="middle" fill="#6b6b6b" font-size="9">rag_product_boost</text><text x="385" y="202" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.20</text>
+          <text x="520" y="190" text-anchor="middle" fill="#6b6b6b" font-size="9">price_match</text><text x="520" y="202" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.30</text>
+          <text x="655" y="190" text-anchor="middle" fill="#6b6b6b" font-size="9">trust_score</text><text x="655" y="202" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.15</text>
+          <text x="790" y="190" text-anchor="middle" fill="#6b6b6b" font-size="9">accessory_score</text><text x="790" y="202" text-anchor="middle" fill="#d94f4f" font-size="10" font-weight="600">−0.45</text>
+          <!-- Row 2 -->
+          <text x="115" y="222" text-anchor="middle" fill="#6b6b6b" font-size="9">rag_seller_boost</text><text x="115" y="234" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.15</text>
+          <text x="250" y="222" text-anchor="middle" fill="#6b6b6b" font-size="9">rag_sentiment</text><text x="250" y="234" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.05</text>
+          <text x="385" y="222" text-anchor="middle" fill="#6b6b6b" font-size="9">seller_rating</text><text x="385" y="234" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.05</text>
+          <text x="520" y="222" text-anchor="middle" fill="#6b6b6b" font-size="9">has_image</text><text x="520" y="234" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.05</text>
+          <text x="655" y="222" text-anchor="middle" fill="#6b6b6b" font-size="9">is_new</text><text x="655" y="234" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.05</text>
+          <text x="790" y="222" text-anchor="middle" fill="#6b6b6b" font-size="9">price_z</text><text x="790" y="234" text-anchor="middle" fill="#d94f4f" font-size="10" font-weight="600">−0.10</text>
+          <!-- Row 3 -->
+          <text x="115" y="254" text-anchor="middle" fill="#6b6b6b" font-size="9">has_brand</text><text x="115" y="266" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.05</text>
+          <text x="250" y="254" text-anchor="middle" fill="#6b6b6b" font-size="9">has_model</text><text x="250" y="266" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.03</text>
+          <text x="385" y="254" text-anchor="middle" fill="#6b6b6b" font-size="9">num_specs</text><text x="385" y="266" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">0.02</text>
+          <text x="520" y="254" text-anchor="middle" fill="#6b6b6b" font-size="9">log_price</text><text x="520" y="266" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="600">−0.02</text>
+
+          <line x1="520" y1="268" x2="520" y2="290" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a3r)"/>
+
+          <!-- SCORE COMPUTATION -->
+          <rect x="250" y="292" width="540" height="36" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#f3r)"/>
+          <text x="520" y="314" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="500">score = Σ(feature_value × weight) + personalisation + personalisation</text>
+
+          <line x1="520" y1="328" x2="520" y2="350" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a3r)"/>
+
+          <!-- CROSS ENCODER -->
+          <polygon points="520,352 640,380 520,408 400,380" fill="#ede8f8" stroke="#d8c8f0" stroke-width="1.5" filter="url(#f3r)"/>
+          <text x="520" y="375" text-anchor="middle" fill="#9055cc" font-size="11" font-weight="600">top-10 →</text>
+          <text x="520" y="388" text-anchor="middle" fill="#9055cc" font-size="11" font-weight="600">cross_rerank?</text>
+
+          <line x1="400" y1="380" x2="160" y2="380" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a3r)"/>
+          <text x="278" y="374" fill="#6b6b6b" font-size="9" font-style="italic">yes → cross-encoder ms-marco-MiniLM-L-6-v2</text>
+
+          <rect x="20" y="364" width="140" height="32" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#f3r)"/>
+          <text x="90" y="385" text-anchor="middle" fill="#1a1a1a" font-size="10">sigmoid(cross_score)</text>
+
+          <line x1="160" y1="380" x2="160" y2="410" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a3r)"/>
+
+          <!-- Blend -->
+          <rect x="250" y="410" width="540" height="28" rx="8" fill="#fdf0de" stroke="#f5e0c0" stroke-width="1.5" filter="url(#f3r)"/>
+          <text x="520" y="428" text-anchor="middle" fill="#c97d27" font-size="11" font-weight="600">_final_score = 0.70 × sigmoid(cross) + 0.30 × rerank_score</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 4: USER PROFILING — OVERVIEW ===== -->
+<section class="slide" id="s4" style="background:var(--surface);">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">03</span>
+        <h2>User Profiling — Architecture Overview</h2>
+        <span class="tag tag-green">auto-learn</span>
+        <span class="tag tag-amber">EMA</span>
+      </div>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 1040 360" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+          <defs>
+            <marker id="a4p" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d4d0c8"/></marker>
+            <filter id="f4p" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000010"/></filter>
+          </defs>
+
+          <!-- START -->
+          <rect x="390" y="6" width="260" height="34" rx="17" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5"/>
+          <text x="520" y="28" text-anchor="middle" fill="#10a37f" font-size="13" font-weight="600">update_user_profile()</text>
+
+          <line x1="520" y1="40" x2="520" y2="62" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a4p)"/>
+
+          <!-- UPDATE PARALLEL -->
+          <rect x="140" y="64" width="760" height="60" rx="10" fill="#dae9fb" stroke="#b3d1f0" stroke-width="1.5" filter="url(#f4p)"/>
+          <text x="520" y="82" text-anchor="middle" fill="#4787d7" font-size="11" font-weight="600">PARALLEL UPDATE — all independent, all wrapped in try/except</text>
+          <line x1="155" y1="90" x2="885" y2="90" stroke="#b3d1f0" stroke-width="1"/>
+          <text x="250" y="104" text-anchor="middle" fill="#4787d7" font-size="10">① _update_brands()</text>
+          <text x="520" y="104" text-anchor="middle" fill="#4787d7" font-size="10">② _update_category_affinities()</text>
+          <text x="790" y="104" text-anchor="middle" fill="#4787d7" font-size="10">③ _update_condition_preference()</text>
+
+          <line x1="520" y1="124" x2="520" y2="146" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a4p)"/>
+
+          <rect x="200" y="148" width="640" height="28" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#f4p)"/>
+          <text x="520" y="167" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="500">④ _update_contextual_budget() · ⑤ _update_global_price() · ⑥ update_interaction_depth()</text>
+
+          <line x1="520" y1="176" x2="520" y2="198" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a4p)"/>
+
+          <!-- COEXISTENCE RULE -->
+          <rect x="200" y="200" width="640" height="28" rx="8" fill="#fdf0de" stroke="#f5e0c0" stroke-width="1.5" filter="url(#f4p)"/>
+          <text x="520" y="219" text-anchor="middle" fill="#c97d27" font-size="11" font-weight="600">Coexistence: manual MCP overrides preserved — auto_ prefix protects user choices</text>
+
+          <line x1="520" y1="228" x2="520" y2="250" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a4p)"/>
+
+          <!-- DB COMMIT -->
+          <rect x="340" y="252" width="360" height="28" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#f4p)"/>
+          <text x="520" y="271" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="500">db.add(user) — caller commits · NO direct commit here</text>
+
+          <line x1="520" y1="280" x2="520" y2="302" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a4p)"/>
+
+          <!-- RESULT -->
+          <rect x="380" y="304" width="280" height="28" rx="8" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5" filter="url(#f4p)"/>
+          <text x="520" y="323" text-anchor="middle" fill="#10a37f" font-size="12" font-weight="600">Return: changed (bool) — any field updated?</text>
+
+          <!-- ===== CONTEXT INJECTION ===== -->
+          <line x1="800" y1="520" x2="800" y2="490" stroke="#d4d0c8" stroke-width="1.5"/>
+          <line x1="800" y1="490" x2="950" y2="490" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a4p)"/>
+          <rect x="952" y="474" width="80" height="32" rx="8" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5"/>
+          <text x="992" y="494" text-anchor="middle" fill="#10a37f" font-size="10" font-weight="500">build_profile</text>
+          <text x="992" y="506" text-anchor="middle" fill="#10a37f" font-size="10" font-weight="500">_context()</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 5: USER PROFILING — DETAIL ===== -->
+<section class="slide" id="s5" style="background:var(--surface);">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">04</span>
+        <h2>User Profiling — Learning Signals Detail</h2>
+        <span class="tag tag-green">auto-learn</span>
+        <span class="tag tag-blue">EMA</span>
+      </div>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 1040 390" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+          <defs>
+            <marker id="a5p" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d4d0c8"/></marker>
+            <filter id="f5p" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000010"/></filter>
+          </defs>
+
+          <!-- ===== INPUT ===== -->
+          <rect x="380" y="6" width="280" height="34" rx="17" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5"/>
+          <text x="520" y="28" text-anchor="middle" fill="#10a37f" font-size="12" font-weight="600">user · parsed · action · items</text>
+
+          <line x1="520" y1="40" x2="520" y2="62" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a5p)"/>
+
+          <!-- ===== BRANDS ===== -->
+          <rect x="30" y="64" width="300" height="90" rx="10" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5" filter="url(#f5p)"/>
+          <text x="180" y="82" text-anchor="middle" fill="#10a37f" font-size="11" font-weight="600">① _update_brands(parsed)</text>
+          <line x1="40" y1="88" x2="320" y2="88" stroke="#b8ddd3" stroke-width="1"/>
+          <text x="180" y="102" text-anchor="middle" fill="#10a37f" font-size="9">Only parser-validated brands</text>
+          <text x="180" y="114" text-anchor="middle" fill="#10a37f" font-size="9">Merged with existing, deduped</text>
+          <text x="180" y="126" text-anchor="middle" fill="#10a37f" font-size="9">Top 10 max · never removes manual</text>
+          <text x="180" y="138" text-anchor="middle" fill="#a3a3a3" font-size="8">→ user.favorite_brands</text>
+
+          <!-- ===== CONDITION ===== -->
+          <rect x="370" y="64" width="300" height="90" rx="10" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5" filter="url(#f5p)"/>
+          <text x="520" y="82" text-anchor="middle" fill="#10a37f" font-size="11" font-weight="600">② _update_condition_preference()</text>
+          <line x1="380" y1="88" x2="660" y2="88" stroke="#b8ddd3" stroke-width="1"/>
+          <text x="520" y="102" text-anchor="middle" fill="#10a37f" font-size="9">Counter: "new:5,used:2"</text>
+          <text x="520" y="114" text-anchor="middle" fill="#10a37f" font-size="9">Needs ≥3 signals + &gt;50% to commit</text>
+          <text x="520" y="126" text-anchor="middle" fill="#10a37f" font-size="9">get_dominant_condition() for LTM</text>
+          <text x="520" y="138" text-anchor="middle" fill="#a3a3a3" font-size="8">→ user.condition_preference</text>
+
+          <!-- ===== CATEGORY ===== -->
+          <rect x="710" y="64" width="300" height="90" rx="10" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5" filter="url(#f5p)"/>
+          <text x="860" y="82" text-anchor="middle" fill="#10a37f" font-size="11" font-weight="600">③ _update_category_affinities()</text>
+          <line x1="720" y1="88" x2="1000" y2="88" stroke="#b8ddd3" stroke-width="1"/>
+          <text x="860" y="102" text-anchor="middle" fill="#10a37f" font-size="9">Increments hit count per category</text>
+          <text x="860" y="114" text-anchor="middle" fill="#10a37f" font-size="9">JSON: {"Smartphone": 12, ...}</text>
+          <text x="860" y="126" text-anchor="middle" fill="#10a37f" font-size="9">Top 20 only · sorted desc</text>
+          <text x="860" y="138" text-anchor="middle" fill="#a3a3a3" font-size="8">→ user.category_affinities</text>
+
+          <!-- ===== BUDGET ===== -->
+          <rect x="30" y="166" width="470" height="90" rx="10" fill="#dae9fb" stroke="#b3d1f0" stroke-width="1.5" filter="url(#f5p)"/>
+          <text x="265" y="184" text-anchor="middle" fill="#4787d7" font-size="11" font-weight="600">④ _update_contextual_budget() — EMA 0.80 / 0.20</text>
+          <line x1="40" y1="190" x2="490" y2="190" stroke="#b3d1f0" stroke-width="1"/>
+          <text x="265" y="204" text-anchor="middle" fill="#4787d7" font-size="9">auto_cat:category_name — per-category EMA budget from price constraints</text>
+          <text x="265" y="216" text-anchor="middle" fill="#4787d7" font-size="9">auto_brand:brand_name — per-brand EMA budget</text>
+          <text x="265" y="228" text-anchor="middle" fill="#4787d7" font-size="9">Manual keys untouched (no auto_ prefix)</text>
+          <text x="265" y="240" text-anchor="middle" fill="#a3a3a3" font-size="8">→ user.contextual_budgets</text>
+
+          <!-- ===== INTERACTION DEPTH ===== -->
+          <rect x="540" y="166" width="470" height="90" rx="10" fill="#ede8f8" stroke="#d8c8f0" stroke-width="1.5" filter="url(#f5p)"/>
+          <text x="775" y="184" text-anchor="middle" fill="#9055cc" font-size="11" font-weight="600">⑥ update_interaction_depth(action)</text>
+          <line x1="550" y1="190" x2="1000" y2="190" stroke="#d8c8f0" stroke-width="1"/>
+          <text x="775" y="204" text-anchor="middle" fill="#9055cc" font-size="9">browser → researcher → power_buyer</text>
+          <text x="775" y="216" text-anchor="middle" fill="#9055cc" font-size="9">Tier map: search=1 · detail/compare/seller=3 · contact=5</text>
+          <text x="775" y="228" text-anchor="middle" fill="#9055cc" font-size="9">Advancement: "detail"→researcher · "contact"→power_buyer</text>
+          <text x="775" y="240" text-anchor="middle" fill="#a3a3a3" font-size="8">→ user.interaction_depth</text>
+
+          <!-- ===== BUILD PROFILE ===== -->
+          <line x1="520" y1="256" x2="520" y2="278" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a5p)"/>
+
+          <rect x="240" y="280" width="560" height="80" rx="10" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5" filter="url(#f5p)"/>
+          <text x="520" y="298" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">build_profile_context(user) — for LLM prompt injection</text>
+          <line x1="250" y1="304" x2="790" y2="304" stroke="#e5e3de" stroke-width="1"/>
+          <text x="520" y="318" text-anchor="middle" fill="#6b6b6b" font-size="9">favorite_brands · price_preference · condition_preference (dominant) · interaction_depth</text>
+          <text x="520" y="330" text-anchor="middle" fill="#6b6b6b" font-size="9">Top 3 category_affinities (sorted by count) · contextual_budgets (manual + auto_ readable)</text>
+          <text x="520" y="342" text-anchor="middle" fill="#6b6b6b" font-size="9">Graceful degradation if new DB columns are missing</text>
+
+          <line x1="520" y1="360" x2="520" y2="375" stroke="#d4d0c8" stroke-width="1.5" marker-end="url(#a5p)"/>
+          <rect x="400" y="375" width="240" height="22" rx="11" fill="#e6f4f0" stroke="#b8ddd3" stroke-width="1.5"/>
+          <text x="520" y="391" text-anchor="middle" fill="#10a37f" font-size="10">→ Dict injected into agent prompt</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 6: RECAP ===== -->
+<section class="slide" id="s6" style="background:var(--bg);">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">05</span>
+        <h2>Reranker & Profiling — Data Flow</h2>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Reranker — Input</h3>
+          <p><code>query</code>, <code>items[]</code>, <code>user</code>, <code>constraints</code></p>
+        </div>
+        <div class="card">
+          <h3>Reranker — Output</h3>
+          <p>Items sorted by <code>_final_score</code> (cross + LTR blend), with <code>explanations[]</code> and <code>rag_feedback[]</code></p>
+        </div>
+        <div class="card">
+          <h3>Profiling — Trigger</h3>
+          <p>Every <code>update_user_profile()</code> call after search interaction — wrapped in try/except, never blocks</p>
+        </div>
+        <div class="card">
+          <h3>Profiling — Coexistence</h3>
+          <p>Manual MCP overrides via <code>update_user_preferences</code> coexist with auto-learning — <code>auto_</code> prefix protects user choices</p>
+        </div>
+      </div>
+      <div style="margin-top:1rem; padding:1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
+        <p style="font-size:var(--small-size); color:var(--text-2); font-weight:500; line-height:1.7">
+          <span class="tag tag-green" style="font-size:0.7rem; margin-right:0.4rem">flow</span>
+          Query → embed() → RAG retrieval → per-item scoring → cross_rerank(top-10) → blend(0.7 + 0.3) → sorted
+          &nbsp;·&nbsp;
+          <span class="tag tag-blue" style="font-size:0.7rem; margin-right:0.4rem">profile</span>
+          parsed + items → 6 parallel updates → EMA budgets → build_profile_context() → agent prompt
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== NAV ===== -->
+<nav class="nav" id="nav">
+  <div class="nav-dot active" data-slide="1"></div>
+  <div class="nav-dot" data-slide="2"></div>
+  <div class="nav-dot" data-slide="3"></div>
+  <div class="nav-dot" data-slide="4"></div>
+  <div class="nav-dot" data-slide="5"></div>
+  <div class="nav-dot" data-slide="6"></div>
+  <span class="slide-counter" id="counter">1 / 6</span>
+</nav>
+
+<div class="key-hint">
+  <span class="key">↑</span><span class="key">↓</span> navigate
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.querySelectorAll('.nav-dot');
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  const total = slides.length;
+  let current = 0;
+
+  function updateUI(idx) {
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    counter.textContent = `${idx + 1} / ${total}`;
+    progress.style.width = `${((idx + 1) / total) * 100}%`;
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        current = Array.from(slides).indexOf(entry.target);
+        updateUI(current);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  slides.forEach(s => observer.observe(s));
+
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      slides[parseInt(dot.dataset.slide) - 1].scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      if (current < total - 1) slides[current + 1].scrollIntoView({ behavior: 'smooth' });
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (current > 0) slides[current - 1].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  let touchStartY = 0;
+  document.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; });
+  document.addEventListener('touchend', e => {
+    const delta = touchStartY - e.changedTouches[0].clientY;
+    if (Math.abs(delta) > 40) {
+      if (delta > 0 && current < total - 1) slides[current + 1].scrollIntoView({ behavior: 'smooth' });
+      if (delta < 0 && current > 0) slides[current - 1].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.slide').forEach(s => s.classList.add('reduced-motion'));
+  }
+</script>
+
+</body>
+</html>

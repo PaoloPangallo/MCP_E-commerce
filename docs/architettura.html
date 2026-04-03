@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP_ECOM — Architettura</title>
+  <script src="mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.25rem;
+    }
+    header p {
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .l-amber  { background: #fef3c7; border-color: #d97706; color: #78350f; }
+    .l-blue   { background: #dbeafe; border-color: #2563eb; color: #172554; }
+    .l-indigo { background: #e0e7ff; border-color: #4f46e5; color: #312e81; }
+    .l-teal   { background: #ccfbf1; border-color: #0f766e; color: #134e4a; }
+    .l-neutral{ background: #f8fafc; border-color: #334155; color: #0f172a; }
+    .l-mint   { background: #dcfce7; border-color: #16a34a; color: #14532d; }
+    .l-rose   { background: #ffe4e6; border-color: #e11d48; color: #881337; }
+    .l-orange { background: #ffedd5; border-color: #ea580c; color: #7c2d12; }
+    .dot-amber  { background: #d97706; }
+    .dot-blue   { background: #2563eb; }
+    .dot-indigo { background: #4f46e5; }
+    .dot-teal   { background: #0f766e; }
+    .dot-neutral{ background: #334155; }
+    .dot-mint   { background: #16a34a; }
+    .dot-rose   { background: #e11d48; }
+    .dot-orange { background: #ea580c; }
+    .diagram-wrap {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      padding: 2rem;
+      overflow: auto;
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+    footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>MCP_ECOM — Architettura del Progetto</h1>
+  <p>Clicca su un nodo per aprire il file sorgente su GitHub</p>
+</header>
+
+<div class="legend">
+  <span class="legend-item l-amber"><span class="dot dot-amber"></span>Frontend</span>
+  <span class="legend-item l-blue"><span class="dot dot-blue"></span>API Layer</span>
+  <span class="legend-item l-indigo"><span class="dot dot-indigo"></span>Agent Layer</span>
+  <span class="legend-item l-teal"><span class="dot dot-teal"></span>MCP Layer</span>
+  <span class="legend-item l-neutral"><span class="dot dot-neutral"></span>Services</span>
+  <span class="legend-item l-mint"><span class="dot dot-mint"></span>RAG Stack</span>
+  <span class="legend-item l-rose"><span class="dot dot-rose"></span>Data Layer</span>
+  <span class="legend-item l-orange"><span class="dot dot-orange"></span>External APIs</span>
+</div>
+
+<div class="diagram-wrap">
+  <div class="mermaid">
+flowchart TD
+
+subgraph group_frontend["Frontend (React / Vite)"]
+  node_app["App shell&lt;br/&gt;React root&lt;br/&gt;[App.tsx]"]
+  node_chat["Chat page&lt;br/&gt;Conversation UI&lt;br/&gt;[ChatPage.tsx]"]
+  node_agent_hook["Agent stream hook&lt;br/&gt;SSE client&lt;br/&gt;[useAgentStream.ts]"]
+  node_search_view["Search results&lt;br/&gt;[SearchResultList.tsx]"]
+  node_seller_view["Seller view&lt;br/&gt;[SellerTrustGauge.tsx]"]
+  node_auth_ui["Auth UI&lt;br/&gt;[AuthPanel.tsx]"]
+  node_api_client["API client&lt;br/&gt;HTTP client&lt;br/&gt;[apiClient.ts]"]
+end
+
+subgraph group_api["API Layer (FastAPI)"]
+  node_main["Entry point&lt;br/&gt;FastAPI bootstrap&lt;br/&gt;[main.py]"]
+  node_routes["Routes&lt;br/&gt;HTTP router&lt;br/&gt;[routes.py]"]
+  node_agent_stream["SSE endpoint&lt;br/&gt;streaming&lt;br/&gt;[agent_stream.py]"]
+  node_auth_router["Auth&lt;br/&gt;JWT + rate-limit&lt;br/&gt;[auth_router.py]"]
+  node_seller_route["Seller route&lt;br/&gt;[seller.py]"]
+  node_wishlist_route["Wishlist&lt;br/&gt;[wishlist.py]"]
+end
+
+subgraph group_agent["Agent Layer"]
+  node_ebay_agent["ReAct Agent&lt;br/&gt;orchestrator&lt;br/&gt;[ebay_agent.py]"]
+  node_planner["Planner&lt;br/&gt;intent → tool&lt;br/&gt;[planner.py]"]
+  node_executor["Executor&lt;br/&gt;tool runner&lt;br/&gt;[executor.py]"]
+  node_memory["Memory&lt;br/&gt;context state&lt;br/&gt;[memory.py]"]
+  node_task_decomposer["Task decomposer&lt;br/&gt;[task_decomposer.py]"]
+end
+
+subgraph group_mcp["MCP Layer"]
+  node_mcp_client["MCP Client&lt;br/&gt;SSE caller&lt;br/&gt;[client.py]"]
+  node_mcp_server["MCP Server&lt;br/&gt;FastMCP&lt;br/&gt;[server.py]"]
+  subgraph group_standard_tools["/mcp/standard — Standard Tools"]
+    node_tools_standard["search · seller · item&lt;br/&gt;wishlist · deals · trends&lt;br/&gt;conversation · contact_seller"]
+  end
+  subgraph group_playwright_tools["/mcp/playwright — Browser Tools"]
+    node_tools_playwright["playwright_search&lt;br/&gt;playwright_contact"]
+  end
+end
+
+subgraph group_services["Services"]
+  node_search_pipeline["Search pipeline&lt;br/&gt;[search_pipeline.py]"]
+  node_seller_pipeline["Seller pipeline&lt;br/&gt;[seller_pipeline.py]"]
+  node_ebay_svc["eBay service&lt;br/&gt;[ebay.py]"]
+  node_feedback["Feedback&lt;br/&gt;Trading API XML&lt;br/&gt;[feedback.py]"]
+  node_trust["Trust score&lt;br/&gt;[trust.py]"]
+  node_sentiment["Sentiment NLP&lt;br/&gt;[nlp_sentiment.py]"]
+  node_parser["Query parser&lt;br/&gt;spaCy + LLM&lt;br/&gt;[parser.py]"]
+  node_llm["LLM client&lt;br/&gt;Ollama / Gemini&lt;br/&gt;[llm/client.py]"]
+  node_vision["Vision&lt;br/&gt;Qwen-VL&lt;br/&gt;[llm/vision.py]"]
+  node_user_profiling["User profiling&lt;br/&gt;[user_profiling.py]"]
+  node_price_tracker["Price tracker&lt;br/&gt;background loop&lt;br/&gt;[price_tracker.py]"]
+end
+
+subgraph group_rag["RAG Stack"]
+  node_retriever["Retriever&lt;br/&gt;hybrid vector+BM25&lt;br/&gt;[retriever.py]"]
+  node_qdrant_store["Qdrant store&lt;br/&gt;[qdrant_store.py]"]
+  node_embedding["Embeddings&lt;br/&gt;MiniLM&lt;br/&gt;[embedding.py]"]
+  node_reranker["Reranker&lt;br/&gt;multi-factor&lt;br/&gt;[reranker.py]"]
+  node_ltr["LTR features&lt;br/&gt;30+ features&lt;br/&gt;[ltr_features.py]"]
+end
+
+subgraph group_data["Data Layer"]
+  node_postgres[("PostgreSQL&lt;br/&gt;users · listings&lt;br/&gt;wishlist")]
+  node_redis[("Redis&lt;br/&gt;cache + memory")]
+  node_qdrant_storage[("Qdrant&lt;br/&gt;vector storage")]
+end
+
+subgraph group_external["External APIs"]
+  node_ebay_api["eBay Browse API&lt;br/&gt;+ Trading API"]
+  node_ollama["Ollama Cloud&lt;br/&gt;gpt-oss:120b&lt;br/&gt;+ qwen3-vl vision"]
+end
+
+node_agent_hook -->|"SSE stream"| node_agent_stream
+node_api_client -->|"HTTP"| node_routes
+node_api_client -->|"auth"| node_auth_router
+node_api_client -->|"wishlist"| node_wishlist_route
+node_api_client -->|"seller"| node_seller_route
+node_main -->|"mounts"| node_routes
+node_main -->|"mounts"| node_auth_router
+node_main -->|"mounts"| node_agent_stream
+node_main -->|"mounts"| node_seller_route
+node_main -->|"mounts"| node_wishlist_route
+node_agent_stream -->|"delegates"| node_ebay_agent
+node_seller_route -->|"calls"| node_seller_pipeline
+node_routes -->|"calls"| node_search_pipeline
+node_ebay_agent -->|"plans"| node_planner
+node_ebay_agent -->|"executes"| node_executor
+node_ebay_agent -->|"tracks"| node_memory
+node_ebay_agent -->|"decomposes"| node_task_decomposer
+node_ebay_agent -->|"vision preproc"| node_vision
+node_executor -->|"invokes"| node_mcp_client
+node_executor -->|"caches"| node_redis
+node_memory -->|"persists"| node_redis
+node_planner -->|"reasons"| node_llm
+node_mcp_client -->|"calls"| node_mcp_server
+node_mcp_server -->|"routes"| node_tools_standard
+node_mcp_server -->|"routes"| node_tools_playwright
+node_tools_standard -->|"search"| node_search_pipeline
+node_tools_standard -->|"seller"| node_seller_pipeline
+node_tools_standard -->|"convo"| node_llm
+node_search_pipeline -->|"parses"| node_parser
+node_search_pipeline -->|"queries"| node_ebay_svc
+node_search_pipeline -->|"feedback"| node_feedback
+node_search_pipeline -->|"trust"| node_trust
+node_search_pipeline -->|"sentiment"| node_sentiment
+node_search_pipeline -->|"profiles"| node_user_profiling
+node_search_pipeline -->|"retrieves"| node_retriever
+node_seller_pipeline -->|"feedback"| node_feedback
+node_seller_pipeline -->|"trust"| node_trust
+node_seller_pipeline -->|"sentiment"| node_sentiment
+node_seller_pipeline -->|"summarizes"| node_llm
+node_retriever -->|"vector+BM25"| node_qdrant_store
+node_retriever -->|"reranks"| node_reranker
+node_reranker -->|"LTR"| node_ltr
+node_qdrant_store -->|"embeds"| node_embedding
+node_qdrant_store -->|"persists"| node_qdrant_storage
+node_parser -->|"LLM parse"| node_llm
+node_llm -->|"Ollama Cloud"| node_ollama
+node_vision -->|"Qwen-VL"| node_ollama
+node_ebay_svc -->|"Browse API"| node_ebay_api
+node_feedback -->|"Trading API"| node_ebay_api
+node_auth_router -->|"users"| node_postgres
+node_wishlist_route -->|"wishlist"| node_postgres
+node_price_tracker -->|"watchlist"| node_redis
+
+click node_app "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/App.tsx"
+click node_chat "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/chat/ChatPage.tsx"
+click node_agent_hook "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/agent/hooks/useAgentStream.ts"
+click node_search_view "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/search/components/SearchResultList.tsx"
+click node_seller_view "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/seller/component/SellerTrustGauge.tsx"
+click node_auth_ui "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/auth/ui/AuthPanel.tsx"
+click node_api_client "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/api/apiClient.ts"
+click node_main "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/main.py"
+click node_routes "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/routes.py"
+click node_agent_stream "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/agent_stream.py"
+click node_auth_router "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/auth/auth_router.py"
+click node_seller_route "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/seller.py"
+click node_wishlist_route "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/wishlist.py"
+click node_ebay_agent "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/ebay_agent.py"
+click node_planner "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/planner.py"
+click node_executor "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/executor.py"
+click node_memory "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/memory.py"
+click node_task_decomposer "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/task_decomposer.py"
+click node_mcp_client "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/mcp/client.py"
+click node_mcp_server "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/mcp/server.py"
+click node_tools_standard "https://github.com/paolopangallo/mcp_e-commerce/tree/Paolo_minimax2.7/app/mcp/tools"
+click node_tools_playwright "https://github.com/paolopangallo/mcp_e-commerce/tree/Paolo_minimax2.7/app/mcp/tools"
+click node_search_pipeline "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/search_pipeline.py"
+click node_seller_pipeline "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/seller_pipeline.py"
+click node_ebay_svc "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/ebay.py"
+click node_feedback "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/feedback.py"
+click node_trust "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/trust.py"
+click node_sentiment "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/nlp_sentiment.py"
+click node_parser "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/parser.py"
+click node_llm "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/llm/client.py"
+click node_vision "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/llm/vision.py"
+click node_user_profiling "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/user_profiling.py"
+click node_price_tracker "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/price_tracker.py"
+click node_retriever "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/retriever.py"
+click node_qdrant_store "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/qdrant_store.py"
+click node_embedding "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/embedding.py"
+click node_reranker "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/reranker.py"
+click node_ltr "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/ltr_features.py"
+click node_qdrant_storage "https://github.com/paolopangallo/mcp_e-commerce/tree/Paolo_minimax2.7/qdrant_storage"
+
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneOrange fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12
+
+class node_app,node_chat,node_agent_hook,node_search_view,node_seller_view,node_auth_ui,node_api_client toneAmber
+class node_main,node_routes,node_agent_stream,node_auth_router,node_seller_route,node_wishlist_route toneBlue
+class node_ebay_agent,node_planner,node_executor,node_memory,node_task_decomposer toneIndigo
+class node_mcp_client,node_mcp_server,node_tools_standard,node_tools_playwright toneTeal
+class node_search_pipeline,node_seller_pipeline,node_ebay_svc,node_feedback,node_trust,node_sentiment,node_parser,node_llm,node_vision,node_user_profiling,node_price_tracker toneNeutral
+class node_retriever,node_qdrant_store,node_embedding,node_reranker,node_ltr toneMint
+class node_postgres,node_redis,node_qdrant_storage toneRose
+class node_ebay_api,node_ollama toneOrange
+  </div>
+</div>
+
+<footer>MCP_ECOM · branch Paolo_minimax2.7 · clicca su un nodo per aprire il file su GitHub</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      fontFamily: 'Inter, -apple-system, sans-serif',
+      fontSize: '13px',
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#0f172a',
+      primaryBorderColor: '#2563eb',
+      lineColor: '#94a3b8',
+      secondaryColor: '#f1f5f9',
+      tertiaryColor: '#f8fafc'
+    },
+    flowchart: {
+      curve: 'basis',
+      padding: 20,
+      nodeSpacing: 40,
+      rankSpacing: 60
+    },
+    securityLevel: 'loose'
+  });
+</script>
+
+</body>
+</html>

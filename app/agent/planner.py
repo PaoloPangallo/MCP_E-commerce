@@ -24,9 +24,7 @@ EBAY_ID_RE = re.compile(r"\b(?:v1\|)?\d{12,13}(?:\|\d)?\b|\b\d{12,13}\b", re.IGN
 class ReactPlanner:
     """
     Planner orientato ai capability-tool.
-    In Fase 1 manteniamo il cuore attuale, ma:
-    - usiamo i nuovi nomi tool (`search_products`, `analyze_seller`, `conversation`)
-    - aggiungiamo uno strato state-based prima del routing più astratto
+
     """
 
     def __init__(self, llm_engine: str = "gemini", mcp_client: Optional[Any] = None):
@@ -51,7 +49,7 @@ class ReactPlanner:
             memory.last_seller_name = explicit_seller
 
         if memory.has_pending_tasks():
-            decision = self._decide_from_task_queue(memory)
+            decision = await self._decide_from_task_queue(memory)
             if decision:
                 logger.info(f"Planned task decision: {decision.action.tool if decision.action else 'finish'}")
                 return decision
@@ -74,12 +72,16 @@ class ReactPlanner:
 
         # TENTATIVO PRIMARIO: MCP + LLM Native Tool Calling
         # Sfruttiamo i modelli capaci come Minimax/Qwen etc per parseggiare direttamente il raw user_query in JSON MCP
+        # Pre-compute a clean browser search query once per session for playwright mode.
+        # Uses the parser service (LLM-powered, Redis-cached) so no hardcoded stop-words.
+        if memory.mcp_mode == "playwright_browser" and not getattr(memory, "_browser_query", None):
+            await self._precompute_browser_query(memory)
+
         llm_decision = await self._llm_decide(memory, step_index, max_steps, custom_instructions=custom_instructions, tone=tone)
         if llm_decision:
             return llm_decision
 
-
-        return self._safe_fallback_decide(memory)
+        return await self._safe_fallback_decide(memory)
 
     def _conversation_fast_path(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         text = (memory.user_query or "").strip().lower()
@@ -92,6 +94,32 @@ class ReactPlanner:
             )
         return None
 
+    async def _precompute_browser_query(self, memory: AgentMemory) -> None:
+        """Compute a clean product search query for browser_type using the LLM parser.
+
+        Priority:
+        1. Reuse the `semantic_query` from a profile_query observation already in memory.
+        2. Call parse_query_service (LLM-powered, Redis-cached) to extract it.
+        3. Fall back to the raw user_query unchanged.
+
+        Result is stored as memory._browser_query (transient, not persisted).
+        """
+        # 1. Reuse profile_query result if already computed this session
+        pq_data = memory.tool_states.get("profile_query", {}).get("data") or {}
+        semantic = (pq_data.get("parsed") or {}).get("semantic_query", "")
+        if semantic:
+            memory._browser_query = semantic
+            return
+
+        # 2. Call the parser (LLM + Redis cache)
+        try:
+            from app.services.parser import parse_query_service
+            result = await parse_query_service(memory.user_query or "", use_llm=True)
+            parsed_semantic = result.get("semantic_query", "")
+            memory._browser_query = parsed_semantic if parsed_semantic else (memory.user_query or "")
+        except Exception:
+            memory._browser_query = memory.user_query or ""
+
     def can_stop_early(self, memory: AgentMemory) -> bool:
         if memory.has_pending_tasks():
             return False
@@ -100,12 +128,18 @@ class ReactPlanner:
         if intent == "conversation":
             return True
 
+        mcp_mode = getattr(memory, "mcp_mode", "standard")
+        if mcp_mode == "playwright_browser":
+            # In modalità step-by-step, non forziamo mai la terminazione prematura dal backend.
+            # Aspettiamo ESCLUSIVAMENTE che l'LLM restituisca l'azione `finish`.
+            return False
+
         return self._intent_is_satisfied(memory, intent)
 
     def should_abort_after_error(self, memory: AgentMemory, failed_tool: str) -> bool:
         return memory.tool_call_count(failed_tool) >= self.max_calls_per_tool
 
-    def _state_based_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+    async def _state_based_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         intent = (memory.detected_intent or self._infer_intent(memory)).lower()
 
         if intent == "conversation":
@@ -127,7 +161,7 @@ class ReactPlanner:
 
             # Proviamo a normalizzare gli input. 
             # Se restituisce None, significa che mancano i prerequisiti (es. l'item_id per la spedizione e la ricerca non ha ancora finito)
-            normalized_input = self._normalize_action_input(tool_name, {}, memory)
+            normalized_input = await self._normalize_action_input(tool_name, {}, memory)
             if normalized_input is not None:
                 return PlannerOutput(
                     thought=f"Eseguo lo step necessario: {tool_name}.",
@@ -138,7 +172,7 @@ class ReactPlanner:
         return None
 
 
-    def _decide_from_task_queue(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+    async def _decide_from_task_queue(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         task = memory.peek_task()
         if not task:
             return None
@@ -154,7 +188,7 @@ class ReactPlanner:
             memory.pop_task()
             return None
 
-        action_input = self._normalize_action_input(tool, task.get("input") or {}, memory)
+        action_input = await self._normalize_action_input(tool, task.get("input") or {}, memory)
         if action_input is None:
             logger.warning("Skipping queued task for tool=%s because input normalization failed.", tool)
             memory.pop_task()
@@ -252,10 +286,10 @@ class ReactPlanner:
 
         if action in {"finish", "stop"}:
             if memory.has_pending_tasks():
-                return self._safe_fallback_decide(memory, forced_intent=intent)
+                return await self._safe_fallback_decide(memory, forced_intent=intent)
 
             if not self._intent_is_satisfied(memory, intent):
-                return self._safe_fallback_decide(memory, forced_intent=intent)
+                return await self._safe_fallback_decide(memory, forced_intent=intent)
 
             return PlannerOutput(
                 thought=thought or "Ho raccolto abbastanza informazioni.",
@@ -267,9 +301,9 @@ class ReactPlanner:
 
         if self._exceeds_tool_budget(memory, action):
             logger.warning("Planner selected tool=%s but budget is exhausted.", action)
-            return self._safe_fallback_decide(memory, forced_intent=intent)
+            return await self._safe_fallback_decide(memory, forced_intent=intent)
 
-        normalized_input = self._normalize_action_input(action, action_input, memory)
+        normalized_input = await self._normalize_action_input(action, action_input, memory)
         if normalized_input is None:
             logger.warning("Planner selected tool=%s with unusable input=%r.", action, action_input)
             return None
@@ -280,7 +314,7 @@ class ReactPlanner:
             intent=intent,
         )
 
-    def _safe_fallback_decide(
+    async def _safe_fallback_decide(
             self,
             memory: AgentMemory,
             forced_intent: Optional[str] = None,
@@ -288,7 +322,7 @@ class ReactPlanner:
         intent = (forced_intent or memory.detected_intent or self._infer_intent(memory)).lower()
 
         if memory.has_pending_tasks():
-            decision = self._decide_from_task_queue(memory)
+            decision = await self._decide_from_task_queue(memory)
             if decision:
                 decision.intent = intent if intent in VALID_INTENTS else decision.intent
                 return decision
@@ -301,12 +335,15 @@ class ReactPlanner:
             )
 
         for tool_name in self._ordered_tools_for_intent(intent, memory):
+            # Skip tools not available in the current MCP world (e.g. search_products in playwright mode)
+            if self._cached_mcp_catalog and tool_name not in self._cached_mcp_catalog:
+                continue
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
             if self._exceeds_tool_budget(memory, tool_name):
                 continue
 
-            normalized_input = self._normalize_action_input(tool_name, {}, memory)
+            normalized_input = await self._normalize_action_input(tool_name, {}, memory)
             if normalized_input is None:
                 continue
 
@@ -338,7 +375,7 @@ class ReactPlanner:
             logger.warning("Planner LLM failed: %s", exc)
         return None
 
-    def _normalize_action_input(
+    async def _normalize_action_input(
             self,
             action: str,
             action_input: Dict[str, Any],
@@ -356,6 +393,17 @@ class ReactPlanner:
             # A basic normalizer for search as fallback
             from app.mcp.normalizers import clean_search_query
             action_input["query"] = clean_search_query(text) or text
+
+        elif action == "browser_navigate" and not action_input.get("url"):
+            action_input["url"] = "https://www.ebay.it"
+
+        elif action == "browser_type" and not action_input.get("text"):
+            # Use the LLM-parsed semantic query (pre-computed in decide()) when available.
+            # Falls back to raw user_query if parsing was not performed.
+            search_text = getattr(memory, "_browser_query", None) or text
+            action_input["selector"] = "#gh-ac"
+            action_input["text"] = search_text
+            action_input["press_enter"] = True
 
         elif action in {"analyze_seller", "contact_seller"} and not action_input.get("seller_name"):
             from app.agent.tool_registry import extract_explicit_seller
@@ -457,35 +505,47 @@ class ReactPlanner:
                 seller = extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
 
                 if seller:
-                    # Priorità assoluta: URL diretto del form di contatto eBay per questo seller.
-                    # Non usiamo URL dal scratchpad perché appartengono a ricerche precedenti
-                    # di prodotti diversi e porterebbero alla pagina del prodotto sbagliato.
                     action_input["product_url"] = (
                         f"https://www.ebay.it/cnt/IntermediatedFAQ?seller_name={seller}"
                     )
                     logger.info("contact_seller_playwright: using IntermediatedFAQ URL for seller=%s", seller)
                 else:
-                    # Nessun seller noto — fallback a URL prodotto dal scratchpad corrente
-                    scratchpad = memory.scratchpad()
-                    top_results = scratchpad.get("top_results") or []
-                    if top_results and top_results[0].get("url"):
-                        action_input["product_url"] = top_results[0]["url"]
+                    # In playwright mode: read the current browser page URL from tool_states
+                    # (BrowserManager stores last navigation result there)
+                    browser_url = None
+                    for browser_tool in ("browser_type", "browser_navigate", "browser_get_view"):
+                        state_data = (memory.tool_states.get(browser_tool) or {}).get("data") or {}
+                        url = state_data.get("url", "")
+                        if url and "ebay" in url.lower():
+                            browser_url = url
+                            break
+
+                    if browser_url:
+                        action_input["product_url"] = browser_url
+                        logger.info("contact_seller_playwright: using current browser URL=%s", browser_url)
                     else:
-                        search = memory.search_payload or {}
-                        results = search.get("results") or []
-                        if results and results[0].get("url"):
-                            action_input["product_url"] = results[0]["url"]
+                        # Last resort: standard mode search payload
+                        scratchpad = memory.scratchpad()
+                        top_results = scratchpad.get("top_results") or []
+                        if top_results and top_results[0].get("url"):
+                            action_input["product_url"] = top_results[0]["url"]
                         else:
-                            return None  # Nessun URL e nessun seller name
+                            return None  # No URL and no seller name — cannot proceed
 
             if not action_input.get("message"):
-                action_input["message"] = memory.user_query
+                action_input["message"] = memory.user_query  # temporary; Task 2 replaces this with LLM call
 
         return action_input
 
     def _intent_is_satisfied(self, memory: AgentMemory, intent: str) -> bool:
         if intent == "conversation":
             return True
+
+        mcp_mode = getattr(memory, "mcp_mode", "standard")
+        if mcp_mode == "playwright_browser":
+            # In modalità visiva iterativa, ci fidiamo ciecamente della decisione di finish del LLM
+            # basandoci solo sul fatto che abbia effettivamente interagito almeno una volta
+            return len(memory.tool_states) > 0
 
         tools = self._ordered_tools_for_intent(intent, memory)
         if not tools:
@@ -514,9 +574,12 @@ class ReactPlanner:
         if intent == "seller_analysis":
             return [seller_tool]
         if intent == "product_search":
+            mcp_mode = getattr(memory, "mcp_mode", "standard") if memory else "standard"
+            if mcp_mode == "playwright_browser":
+                return ["browser_navigate", "browser_type"]
             return [search_tool]
         if intent == "playwright_search":
-            return ["search_products"]
+            return ["browser_navigate", "browser_type"]
         if intent == "item_details":
             return ["get_item_details"] if explicit_id else [search_tool, "get_item_details"]
         if intent == "shipping":
@@ -573,4 +636,13 @@ class ReactPlanner:
         return "product_search"
 
     def _exceeds_tool_budget(self, memory: AgentMemory, tool_name: str) -> bool:
-        return memory.tool_call_count(tool_name) >= self.max_calls_per_tool
+        budget = self.max_calls_per_tool
+        if tool_name.startswith("browser_"):
+            if tool_name == "browser_navigate":
+                budget = 1  # Navigate to eBay homepage only once
+            elif tool_name == "browser_type":
+                budget = 1  # Search once; LLM can call it explicitly again if needed
+            else:
+                budget = 10 # get_view, click etc.
+        return memory.tool_call_count(tool_name) >= budget
+

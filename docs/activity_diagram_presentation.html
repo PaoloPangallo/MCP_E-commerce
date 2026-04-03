@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP_ECOM — Activity Diagrams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ===== BASE RESET ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f8f7f4;
+      --surface: #ffffff;
+      --surface-2: #f3f2ef;
+      --border: #e8e6e1;
+      --text: #1a1a1a;
+      --text-2: #6b6b6b;
+      --text-3: #9b9b9b;
+      --accent: #10a37f;
+      --accent-2: #d2e8e3;
+      --accent-3: #e8f5f1;
+      --blue: #4787d7;
+      --blue-2: #e0ecfb;
+      --amber: #c97d27;
+      --amber-2: #fdf0de;
+      --purple: #9055cc;
+      --purple-2: #f0e8fa;
+
+      --title-size: clamp(1.5rem, 4vw, 2.75rem);
+      --h2-size: clamp(1.1rem, 2.5vw, 1.75rem);
+      --body-size: clamp(0.75rem, 1.3vw, 1rem);
+      --small-size: clamp(0.65rem, 1vw, 0.85rem);
+      --slide-padding: clamp(1.5rem, 5vw, 4rem);
+      --content-gap: clamp(0.75rem, 2vw, 1.5rem);
+    }
+
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100%;
+      overflow-x: hidden;
+    }
+
+    /* ===== SLIDE LAYOUT ===== */
+    .slide {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: var(--slide-padding);
+      max-height: 100%;
+      overflow: hidden;
+    }
+
+    .slide-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ===== NAV ===== */
+    .nav {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      padding: 0.4rem 0.8rem;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+
+    .nav-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .nav-dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
+    .nav-dot:hover:not(.active) { background: var(--text-3); }
+
+    .slide-counter {
+      font-size: var(--small-size);
+      color: var(--text-3);
+      padding: 0 0.5rem;
+    }
+
+    /* ===== KEYBOARD HINT ===== */
+    .key-hint {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      font-size: var(--small-size);
+      color: var(--text-3);
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .key {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ===== PROGRESS BAR ===== */
+    .progress {
+      position: fixed;
+      top: 0; left: 0;
+      height: 2px;
+      background: var(--accent);
+      width: 0%;
+      z-index: 200;
+      transition: width 0.3s ease;
+    }
+
+    /* ===== TYPOGRAPHY ===== */
+    h1 { font-size: var(--title-size); font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
+    h2 { font-size: var(--h2-size); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+    h3 { font-size: clamp(0.9rem, 1.5vw, 1.2rem); font-weight: 500; }
+    p, li { font-size: var(--body-size); line-height: 1.6; color: var(--text-2); }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; border: 1px solid var(--border); }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.65rem;
+      border-radius: 9999px;
+      font-size: var(--small-size);
+      font-weight: 500;
+    }
+    .tag-green { background: var(--accent-2); color: var(--accent); }
+    .tag-blue { background: var(--blue-2); color: var(--blue); }
+    .tag-amber { background: var(--amber-2); color: var(--amber); }
+    .tag-purple { background: var(--purple-2); color: var(--purple); }
+    .tag-gray { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+
+    /* ===== TITLE SLIDE ===== */
+    .title-slide { background: var(--bg); }
+    .title-slide .slide-content { text-align: center; }
+    .title-slide h1 { color: var(--text); margin-bottom: 0.5rem; }
+    .title-slide .subtitle { color: var(--text-2); font-size: var(--h2-size); font-weight: 300; margin-bottom: 1.5rem; }
+    .title-slide .meta { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+
+    /* ===== CONTENT SLIDE ===== */
+    .content-slide { background: var(--surface); }
+    .content-slide .slide-content { padding-top: 3rem; }
+    .slide-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: var(--content-gap); }
+    .slide-number {
+      font-size: var(--small-size);
+      font-weight: 600;
+      color: var(--text-3);
+      font-family: 'JetBrains Mono', monospace;
+      min-width: 2rem;
+    }
+
+    /* ===== FLOW DIAGRAM ===== */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .flow-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: var(--body-size);
+    }
+
+    .flow-node {
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: var(--body-size);
+      white-space: nowrap;
+      border: 1px solid transparent;
+    }
+
+    .flow-start { background: var(--accent-3); color: var(--accent); border-color: var(--accent-2); }
+    .flow-end { background: var(--surface-2); color: var(--text-3); border-color: var(--border); }
+    .flow-action { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+    .flow-decision { background: var(--amber-2); color: var(--amber); border-color: #f5e0c0; }
+    .flow-parallel { background: var(--blue-2); color: var(--blue); border-color: #c5d9f5; }
+    .flow-tool { background: var(--purple-2); color: var(--purple); border-color: #e0c8f5; }
+
+    .flow-arrow {
+      color: var(--text-3);
+      font-size: 0.8rem;
+      flex-shrink: 0;
+    }
+
+    .flow-label {
+      font-size: var(--small-size);
+      color: var(--text-3);
+      font-style: italic;
+    }
+
+    .flow-indent { padding-left: 1.5rem; }
+
+    .flow-branch {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      padding-left: 1.2rem;
+      border-left: 2px solid var(--border);
+      margin: 0.25rem 0;
+    }
+
+    /* ===== GRID SLIDE ===== */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; margin-top: 1rem; }
+    .card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card h3 { margin-bottom: 0.5rem; }
+    .card p { font-size: var(--small-size); }
+
+    /* ===== FLOWCHART ===== */
+    .flowchart {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      align-items: flex-start;
+      margin-top: 0.75rem;
+    }
+
+    .fc-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: var(--body-size);
+    }
+
+    .fc-box {
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: var(--small-size);
+      font-weight: 500;
+      border: 1px solid transparent;
+    }
+
+    .fc-start-end { background: var(--accent-3); color: var(--accent); border-color: var(--accent-2); }
+    .fc-process { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+    .fc-decision { background: var(--amber-2); color: var(--amber); border-color: #f5e0c0; }
+    .fc-arrow { color: var(--text-3); font-size: 0.75rem; }
+    .fc-branch { padding-left: 1.5rem; border-left: 2px dashed var(--border); margin-left: 0.5rem; }
+    .fc-note { font-size: var(--small-size); color: var(--text-3); font-style: italic; margin-left: 0.5rem; }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .slide:not(.reduced-motion) .slide-content > * {
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(1) { animation-delay: 0.05s; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(2) { animation-delay: 0.12s; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(3) { animation-delay: 0.2s; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(4) { animation-delay: 0.28s; }
+    .slide:not(.reduced-motion) .slide-content > *:nth-child(5) { animation-delay: 0.35s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide:not(.reduced-motion) .slide-content > * { animation: none; }
+      html { scroll-behavior: auto; }
+    }
+
+    .reduced-motion .slide-content > * { animation: none !important; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-height: 600px) {
+      :root { --slide-padding: 0.75rem 1.5rem; --content-gap: 0.5rem; }
+      .nav, .key-hint { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<!-- ===== SLIDE 1: TITLE ===== -->
+<section class="slide title-slide" id="s1">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <p class="tag tag-green" style="margin-bottom:1rem">Backend Architecture</p>
+      <h1>MCP_ECOM</h1>
+      <p class="subtitle">Activity Diagrams</p>
+      <div class="meta">
+        <span class="tag tag-gray">Python</span>
+        <span class="tag tag-gray">FastAPI</span>
+        <span class="tag tag-gray">FastMCP</span>
+        <span class="tag tag-gray">Redis</span>
+        <span class="tag tag-gray">PostgreSQL</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 2: AGENT STREAM ===== -->
+<section class="slide content-slide" id="s2">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">01</span>
+        <h2>Agent Stream — <code>/agent/stream</code></h2>
+        <span class="tag tag-blue">main flow</span>
+        <span class="tag tag-purple">async</span>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">HTTP POST /agent/stream</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Acquire semaphore (concurrency limit)</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-decision">semaphore available?</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-box fc-start-end">no</span><span class="fc-arrow">→</span><span class="fc-note">Return 429</span></div>
+          <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">continue</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">EbayReactAgent.run_stream() — background task</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">ReAct loop (max 6 steps)</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-note">Vision preproc → Memory hydration → Task decomposition</span></div>
+          <div class="fc-row"><span class="fc-note">ReactPlanner.decide() → LLM action selection</span></div>
+          <div class="fc-row"><span class="fc-box fc-decision">action = "stop"?</span></div>
+          <div class="fc-branch">
+            <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">LLM synthesis → SSE → client</span></div>
+            <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">ToolExecutor → MCPToolClient → Service → Redis</span></div>
+          </div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-start-end">End</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 3: SEARCH PIPELINE ===== -->
+<section class="slide content-slide" id="s3">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">02</span>
+        <h2>Search Pipeline</h2>
+        <span class="tag tag-green">search</span>
+        <span class="tag tag-blue">parallel</span>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">POST /search — run_search_pipeline()</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">parse_query_service() — LLM semantic parsing</span></div>
+        <div class="fc-row"><span class="fc-box fc-decision">cache hit?</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">return cached</span></div>
+          <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">continue</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">ebay.search_items() — Browse API</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Parallel RAG reranking (vector + BM25)</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Seller trust scoring + Normalize</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Cache result in Redis</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-start-end">Return SearchResponse</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 4: MCP TOOL CALL ===== -->
+<section class="slide content-slide" id="s4">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">03</span>
+        <h2>MCP Tool Call</h2>
+        <span class="tag tag-purple">MCP</span>
+        <span class="tag tag-amber">cache</span>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">MCPToolClient.call_tool_async()</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-decision">Redis cache hit?</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">return cached</span></div>
+          <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">continue</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-decision">is_local_mode?</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-box fc-process">yes</span><span class="fc-arrow">→</span><span class="fc-note">FastMCP direct call</span></div>
+          <div class="fc-row"><span class="fc-box fc-process">HTTP</span><span class="fc-arrow">→</span><span class="fc-note">streamable_http_client → MCP Server</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Service execution → Extract parts → Parse dict</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Cache in Redis (TTL from config)</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-start-end">Return ToolResult</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 5: SELLER ANALYSIS ===== -->
+<section class="slide content-slide" id="s5">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">04</span>
+        <h2>Seller Analysis Pipeline</h2>
+        <span class="tag tag-amber">seller</span>
+        <span class="tag tag-blue">parallel</span>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">analyze_seller(seller_id)</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Parallel fetch (all at once)</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-note">ebay.get_seller_feedback()</span></div>
+          <div class="fc-row"><span class="fc-note">ebay.get_user_details()</span></div>
+          <div class="fc-row"><span class="fc-note">ebay.get_store_details()</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">NLP Sentiment analysis on feedback text</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Trust score: feedback_ratio × recency × confidence</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Normalize scores</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-start-end">Return SellerAnalysis</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 6: DUAL MCP WORLD ===== -->
+<section class="slide content-slide" id="s6">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">05</span>
+        <h2>Dual MCP World Architecture</h2>
+        <span class="tag tag-purple">MCP</span>
+        <span class="tag tag-amber">routing</span>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">Frontend selects mcp_mode</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-decision">mcp_mode == "standard"?</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-box fc-process">yes</span><span class="fc-arrow">→</span><span class="fc-note">Route to /mcp/standard → FastMCP (mcp) → All tools</span></div>
+          <div class="fc-row"><span class="fc-box fc-process">playwright</span><span class="fc-arrow">→</span><span class="fc-note">Route to /mcp/playwright → FastMCP (mcp_playwright)</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Playwright world: search_products (visible browser)</span></div>
+        <div class="fc-row"><span class="fc-note" style="margin-left:1.5rem">contact_seller_playwright + other tools synced from standard</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">MCPToolClient.call_tool_async()</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-start-end">End</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 7: MEMORY SYSTEM ===== -->
+<section class="slide content-slide" id="s7">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">06</span>
+        <h2>Memory & User Profiling</h2>
+        <span class="tag tag-green">memory</span>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Session Memory</h3>
+          <p>Redis: <code>session_memory:{user_key}</code></p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">TTL: 1 giorno</p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size)">recent_queries, recent_sellers, recent_products, conversation_history, vision_description</p>
+        </div>
+        <div class="card">
+          <h3>Long-Term Memory</h3>
+          <p>Redis: <code>long_term_memory:{user_key}</code></p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">TTL: 30 giorni</p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size)">favorite_sellers, validated_brands, category_history, user_behaviour</p>
+        </div>
+      </div>
+
+      <div class="flowchart" style="margin-top:1rem">
+        <div class="fc-row"><span class="fc-box fc-process">User query arrives → update session_memory in Redis</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-decision">preference signal detected?</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-box fc-process">yes</span><span class="fc-arrow">→</span><span class="fc-note">auto-learn: category_affinities, budget, condition → long_term_memory</span></div>
+          <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">skip</span></div>
+        </div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Return enriched context to agent</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 8: STARTUP ===== -->
+<section class="slide content-slide" id="s8">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">07</span>
+        <h2>Startup — Application Lifespan</h2>
+        <span class="tag tag-purple">init</span>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-row"><span class="fc-box fc-start-end">uvicorn starts app</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Preload SentenceTransformer model</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Create DB tables (SQLAlchemy)</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Check Redis connection</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Init eBay HTTP client</span></div>
+        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
+        <div class="fc-row"><span class="fc-box fc-process">Start price tracking background loop</span></div>
+        <div class="fc-branch">
+          <div class="fc-row"><span class="fc-note">FastAPI listening on port 8050</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 9: ARCH OVERVIEW ===== -->
+<section class="slide content-slide" id="s9">
+  <div class="slide-content">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <span class="slide-number">08</span>
+        <h2>Architecture Overview</h2>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Frontend</h3>
+          <p>React + TypeScript + Zustand + MUI</p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Port 5173</p>
+        </div>
+        <div class="card">
+          <h3>Backend</h3>
+          <p>FastAPI + FastMCP</p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Port 8050</p>
+        </div>
+        <div class="card">
+          <h3>Data</h3>
+          <p>PostgreSQL + Redis</p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Memory & persistence</p>
+        </div>
+        <div class="card">
+          <h3>LLM</h3>
+          <p>Ollama Cloud + Qwen-VL</p>
+          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Streaming + Vision</p>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem; padding:1rem; background:var(--surface-2); border:1px solid var(--border); border-radius:12px;">
+        <p style="font-size:var(--small-size); color:var(--text-2)">
+          <strong>Agent loop:</strong> Vision → Memory → Task decomposition → ReactPlanner (LLM) →
+          ToolExecutor (MCP) → Service → Redis cache → Synthesis → SSE
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== NAV ===== -->
+<nav class="nav" id="nav">
+  <div class="nav-dot active" data-slide="1"></div>
+  <div class="nav-dot" data-slide="2"></div>
+  <div class="nav-dot" data-slide="3"></div>
+  <div class="nav-dot" data-slide="4"></div>
+  <div class="nav-dot" data-slide="5"></div>
+  <div class="nav-dot" data-slide="6"></div>
+  <div class="nav-dot" data-slide="7"></div>
+  <div class="nav-dot" data-slide="8"></div>
+  <div class="nav-dot" data-slide="9"></div>
+  <span class="slide-counter" id="counter">1 / 9</span>
+</nav>
+
+<div class="key-hint">
+  <span class="key">↑</span><span class="key">↓</span> navigate
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.querySelectorAll('.nav-dot');
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  const total = slides.length;
+
+  function updateUI(idx) {
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    counter.textContent = `${idx + 1} / ${total}`;
+    progress.style.width = `${((idx + 1) / total) * 100}%`;
+  }
+
+  // Scroll snap listener
+  let current = 0;
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const idx = Array.from(slides).indexOf(entry.target);
+        current = idx;
+        updateUI(idx);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  slides.forEach(s => observer.observe(s));
+
+  // Dot navigation
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      const n = parseInt(dot.dataset.slide) - 1;
+      slides[n].scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      if (current < total - 1) slides[current + 1].scrollIntoView({ behavior: 'smooth' });
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (current > 0) slides[current - 1].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // Touch/swipe support
+  let touchStartY = 0;
+  document.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; });
+  document.addEventListener('touchend', e => {
+    const delta = touchStartY - e.changedTouches[0].clientY;
+    if (Math.abs(delta) > 40) {
+      if (delta > 0 && current < total - 1) slides[current + 1].scrollIntoView({ behavior: 'smooth' });
+      if (delta < 0 && current > 0) slides[current - 1].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // prefers-reduced-motion
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.slide').forEach(s => s.classList.add('reduced-motion'));
+  }
+</script>
+
+</body>
+</html>
