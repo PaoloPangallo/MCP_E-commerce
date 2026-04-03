@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field, asdict
@@ -8,6 +9,26 @@ from typing import Any, Dict, List, Optional
 
 from app.db.redis import redis_client
 from app.agent.schemas import Observation
+
+logger = logging.getLogger(__name__)
+
+
+def _extract_seller_from_page_text(page_text: str) -> Optional[str]:
+    """Extract eBay seller username from browser page observation text."""
+    if not page_text:
+        return None
+    patterns = [
+        r"[Vv]enduto\s+da[:\s]+([A-Za-z0-9_\-\.]{3,})",
+        r"[Ss]eller[:\s]+([A-Za-z0-9_\-\.]{3,})",
+        r"[Vv]enditore[:\s]+([A-Za-z0-9_\-\.]{3,})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, page_text)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate.lower() not in {"ebay", "paypal", "feedback", "contatta", "italy", "it"}:
+                return candidate
+    return None
 
 
 def _compact_result(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -531,6 +552,15 @@ class RequestState:
                 "summary": observation.summary,
                 "data": obs_data,
             }
+
+        # Auto-populate last_seller_name from browser page observations
+        _browser_view_tools = {"browser_navigate", "browser_type", "browser_get_view", "browser_click"}
+        if observation.tool in _browser_view_tools and observation.ok:
+            page_text = (observation.data or {}).get("page_text", "")
+            seller = _extract_seller_from_page_text(page_text)
+            if seller and not self.last_seller_name:
+                self.last_seller_name = seller
+                logger.debug("memory: extracted seller_name=%s from %s", seller, observation.tool)
 
         if observation.tool == "search_products" and observation.ok:
             self._apply_search_payload(observation.data)
