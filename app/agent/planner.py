@@ -127,9 +127,10 @@ class ReactPlanner:
         Extracts the user's actual intent from their query and formats it as
         a polite seller message. Falls back to a generic inquiry if LLM fails.
         """
+        _fallback = "Salve, volevo richiedere informazioni su questo articolo. Grazie."
         user_query = (memory.user_query or "").strip()
         if not user_query:
-            return "Salve, volevo richiedere informazioni su questo articolo. Grazie."
+            return _fallback
 
         prompt = (
             "L'utente vuole inviare un messaggio a un venditore eBay. "
@@ -138,12 +139,8 @@ class ReactPlanner:
             "Non includere saluti ridondanti. Non includere spiegazioni. Solo il testo del messaggio. "
             "Massimo 3 frasi."
         )
-        try:
-            message, _ = await call_llm(prompt)
-            return (message or "").strip() or "Salve, volevo richiedere informazioni su questo articolo. Grazie."
-        except Exception:
-            logger.warning("_generate_seller_message failed, using generic fallback", exc_info=True)
-            return "Salve, volevo richiedere informazioni su questo articolo. Grazie."
+        message = await self._call_llm(prompt)
+        return message.strip() if message else _fallback
 
     def can_stop_early(self, memory: AgentMemory) -> bool:
         if memory.has_pending_tasks():
