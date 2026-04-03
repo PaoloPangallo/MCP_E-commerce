@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP_ECOM — Advanced Retrieval Sequence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #eef3f8;
+      --bg-soft: #f8fbff;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-strong: #ffffff;
+      --border: #dbe4ee;
+      --border-bright: rgba(255, 255, 255, 0.65);
+      --text: #0f172a;
+      --muted: #5b6b80;
+      --font: 'Inter', system-ui, sans-serif;
+      --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.1);
+      
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: radial-gradient(circle at top left, #ffffff 0%, #f3f7fc 26%, #eef3f8 56%, #e8eef5 100%);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* === AMBIENT ORBS === */
+    .ambient {
+      position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; opacity: 0.35;
+      animation: floatOrb 25s ease-in-out infinite alternate;
+    }
+    .ambient-1 { width: 600px; height: 600px; background: #e0e7ff; top: -100px; left: -100px; }
+    .ambient-2 { width: 500px; height: 500px; background: #dcfce7; bottom: -50px; right: -50px; animation-delay: -5s; }
+
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.1); }
+    }
+
+    /* === HEADER === */
+    header {
+      position: relative; z-index: 20; padding: 5rem 2rem 4rem; text-align: center; max-width: 1400px; margin: 20px auto;
+      background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--border-bright);
+      box-shadow: var(--shadow-md); border-radius: var(--radius);
+    }
+
+    .header-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.15em;
+      text-transform: uppercase; color: #6366f1; background: #eef2ff; padding: 0.35rem 1rem; border-radius: 999px; margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 900; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-bottom: 1.25rem;
+    }
+
+    header p { color: var(--muted); font-size: 1.1rem; max-width: 800px; margin: 0 auto; font-weight: 500; line-height: 1.6; }
+
+    /* === MAIN === */
+    main { position: relative; z-index: 10; max-width: 1700px; margin: 0 auto; padding: 2rem 2rem 8rem; display: flex; flex-direction: column; gap: 4rem; }
+
+    /* === SECTION === */
+    .section-header { margin-bottom: 2.5rem; }
+    .section-badge {
+      font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #6366f1;
+      background: #eef2ff; padding: 0.3rem 0.7rem; border-radius: 6px; margin-bottom: 0.8rem; display: inline-block;
+    }
+    .section-title { font-size: 2rem; font-weight: 900; letter-spacing: -0.04em; color: var(--text); }
+    .section-desc { font-size: 1rem; color: var(--muted); margin-top: 0.5rem; max-width: 800px; }
+
+    /* === DIAGRAM CARD === */
+    .diagram-card {
+      background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); overflow: hidden; transition: transform 0.3s ease;
+    }
+    .diagram-card-body { padding: 3rem 2rem; overflow-x: auto; background: radial-gradient(circle at top right, #f8fafc, transparent); display: flex; justify-content: center; }
+
+    .mermaid { min-width: min-content; }
+    .mermaid svg { min-width: 1100px; height: auto !important; overflow: visible; font-family: var(--font) !important; }
+
+    footer { text-align: center; padding: 6rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+
+<body>
+
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
+
+  <header>
+    <div class="header-eyebrow">Sprint 7 • RAG Engine</div>
+    <h1>Advanced Retrieval & Reranking Sequence</h1>
+    <p>A granular Sequence Diagram demonstrating the retrieval flow. It highlights the Query Expansion algorithm, the Hybrid search intersecting Vector (Dense) and Lexical (Sparse) scopes, and the post-retrieval validation via Cross-Encoder and Learning To Rank scores.</p>
+  </header>
+
+  <main>
+    <section id="sequence-diagram">
+      <div class="section-header">
+        <span class="section-badge">Runtime Flow</span>
+        <h2 class="section-title">Query to Context Cycle</h2>
+        <p class="section-desc">Diagramma di Sequenza che mappa il processo di Retrieval and Reranking (`retriever.py` / `reranker.py`).</p>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Caller as Consumer Pipeline
+    participant expander as Query Expansion (LLM)
+    participant retriever as Hybrid Retriever
+    participant qdrant as Qdrant (Semantic/Dense)
+    participant bm25 as BM25 Store (Lexical/Sparse)
+    participant reranker as Cross-Encoder Reranker
+    participant builder as Context Builder & Explainer
+
+    Caller->>expander: expand_query(query)
+    activate expander
+    Note right of expander: Generates synonyms<br/>and contextual terms
+    expander-->>Caller: expanded_query
+    deactivate expander
+    
+    Caller->>retriever: retrieve_context(expanded_query, k)
+    activate retriever
+    
+    Note over retriever, bm25: STEP 1: Broad Retrieval (Hybrid)
+    par Vector Search
+        retriever->>qdrant: search(expanded_query)
+        qdrant-->>retriever: Semantic Results
+    and Keyword Search
+        retriever->>bm25: search(expanded_query)
+        bm25-->>retriever: Lexical Results
+    end
+    
+    retriever->>retriever: Merge & Deduplicate (Union)
+    retriever-->>Caller: broad_candidate_documents
+    deactivate retriever
+    
+    Note over Caller, reranker: STEP 2: Learning-To-Rank Optimization
+    Caller->>reranker: rerank_products(query, broad_candidate_documents)
+    activate reranker
+    
+    loop Per Candidate Document
+        reranker->>reranker: Calculate Cosine Similarity
+        reranker->>reranker: Calculate Jaccard/Overlap
+        reranker->>reranker: Call Cross-Encoder Model
+        reranker->>reranker: Linear Weight Fusion (Price, Trust, Features)
+    end
+    
+    reranker->>reranker: Sort Array by Final Score
+    reranker-->>Caller: top_ranked_documents
+    deactivate reranker
+    
+    Note over Caller, builder: STEP 3: Context Formatting & XAI
+    Caller->>builder: build_context(top_ranked_documents)
+    activate builder
+    builder-->>Caller: LLM_ready_text_blob
+    deactivate builder
+    
+    Caller->>builder: explain_results(top_ranked_documents)
+    activate builder
+    Note right of builder: Generates user-facing<br/>reasons for ranking
+    builder-->>Caller: explanations_dict
+    deactivate builder
+    
+    Note left of Caller: Final Payload ready<br/>for Main Agent or Pipeline.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    MCP_ECOM · Master Documentation · Visual Consistency System
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '14px',
+        primaryColor: '#f1f5f9',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#cbd5e1',
+        lineColor: '#64748b',
+        secondaryColor: '#f8fafc',
+        tertiaryColor: '#ffffff',
+        mainBkg: '#ffffff',
+        nodeBorder: '#cbd5e1',
+        clusterBkg: '#f8fafc',
+        clusterBorder: '#e2e8f0',
+        textColor: '#0f172a',
+        nodeTextColor: '#0f172a',
+        edgeLabelBackground: '#ffffff'
+      },
+      sequence: { showSequenceNumbers: true, actorMargin: 40, messageMargin: 30 }
+    });
+  </script>
+
+</body>
+</html>

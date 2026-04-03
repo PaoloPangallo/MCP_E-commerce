@@ -161,40 +161,6 @@ class ReactPlanner:
     def should_abort_after_error(self, memory: AgentMemory, failed_tool: str) -> bool:
         return memory.tool_call_count(failed_tool) >= self.max_calls_per_tool
 
-    async def _state_based_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
-        # TODO: remove — dead code, superseded by _safe_fallback_decide. Never called.
-        intent = (memory.detected_intent or self._infer_intent(memory)).lower()
-
-        if intent == "conversation":
-            return PlannerOutput(
-                thought="La richiesta è conversazionale.",
-                should_stop=True,
-                intent="conversation",
-            )
-
-        # Usiamo l'approccio generico basato sull'ordine dei tool previsti per l'intento
-        for tool_name in self._ordered_tools_for_intent(intent, memory):
-            # Se il tool è già stato eseguito e ha raggiunto uno stato terminale (es. ha prodotto risultati finali o eccezioni bloccanti)
-            if self._tool_state_is_terminal(memory, tool_name):
-                continue
-            
-            # Se il tool è andato in errore troppe volte
-            if self._exceeds_tool_budget(memory, tool_name):
-                continue
-
-            # Proviamo a normalizzare gli input. 
-            # Se restituisce None, significa che mancano i prerequisiti (es. l'item_id per la spedizione e la ricerca non ha ancora finito)
-            normalized_input = await self._normalize_action_input(tool_name, {}, memory)
-            if normalized_input is not None:
-                return PlannerOutput(
-                    thought=f"Eseguo lo step necessario: {tool_name}.",
-                    action=ToolCall(tool=tool_name, input=normalized_input),
-                    intent=intent,
-                )
-
-        return None
-
-
     async def _decide_from_task_queue(self, memory: AgentMemory) -> Optional[PlannerOutput]:
         task = memory.peek_task()
         if not task:
@@ -357,9 +323,13 @@ class ReactPlanner:
                 intent="conversation",
             )
 
+        mcp_mode = getattr(memory, "mcp_mode", "standard")
         for tool_name in self._ordered_tools_for_intent(intent, memory):
-            # Skip tools not available in the current MCP world (e.g. search_products in playwright mode)
+            # Skip tools not available in the current MCP world
             if self._cached_mcp_catalog and tool_name not in self._cached_mcp_catalog:
+                continue
+            # In playwright mode, skip contact_seller (standard-only tool) even if catalog unavailable
+            if mcp_mode == "playwright_browser" and tool_name == "contact_seller":
                 continue
             if self._tool_state_is_terminal(memory, tool_name):
                 continue
@@ -558,7 +528,11 @@ class ReactPlanner:
                             return None  # No URL and no seller name — cannot proceed
 
             if not action_input.get("message"):
-                action_input["message"] = await self._generate_seller_message(memory)
+                cached_msg = getattr(memory, "_seller_message", None)
+                if cached_msg is None:
+                    cached_msg = await self._generate_seller_message(memory)
+                    memory._seller_message = cached_msg
+                action_input["message"] = cached_msg
 
         return action_input
 
