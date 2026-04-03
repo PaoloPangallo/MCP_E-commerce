@@ -13,6 +13,18 @@ from app.agent.schemas import Observation
 logger = logging.getLogger(__name__)
 
 
+# Tools that reliably navigate to a full page — product pages surface seller info here.
+# Excludes browser_type (lands on search results SERP) and browser_click (any intermediate page).
+_BROWSER_SELLER_EXTRACT_TOOLS: frozenset = frozenset({"browser_navigate", "browser_get_view"})
+
+_SELLER_NAME_STOPWORDS: frozenset = frozenset({
+    "ebay", "paypal",              # platform brand names
+    "feedback",                    # common UI label
+    "contatta", "italy", "it",     # Italian UI boilerplate / country codes
+    "information", "contact", "details", "ratings",  # English UI boilerplate
+})
+
+
 def _extract_seller_from_page_text(page_text: str) -> Optional[str]:
     """Extract eBay seller username from browser page observation text."""
     if not page_text:
@@ -26,7 +38,7 @@ def _extract_seller_from_page_text(page_text: str) -> Optional[str]:
         match = re.search(pattern, page_text)
         if match:
             candidate = match.group(1).strip()
-            if candidate.lower() not in {"ebay", "paypal", "feedback", "contatta", "italy", "it"}:
+            if candidate.lower() not in _SELLER_NAME_STOPWORDS:
                 return candidate
     return None
 
@@ -554,8 +566,7 @@ class RequestState:
             }
 
         # Auto-populate last_seller_name from browser page observations
-        _browser_view_tools = {"browser_navigate", "browser_type", "browser_get_view", "browser_click"}
-        if observation.tool in _browser_view_tools and observation.ok:
+        if observation.tool in _BROWSER_SELLER_EXTRACT_TOOLS and observation.ok:
             page_text = (observation.data or {}).get("page_text", "")
             seller = _extract_seller_from_page_text(page_text)
             if seller and not self.last_seller_name:

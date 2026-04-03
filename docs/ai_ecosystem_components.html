@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP_ECOM — AI & RAG Ecosystem Component Diagram</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #eef3f8;
+      --bg-soft: #f8fbff;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-strong: #ffffff;
+      --border: #dbe4ee;
+      --border-bright: rgba(255, 255, 255, 0.65);
+      --text: #0f172a;
+      --muted: #5b6b80;
+      --font: 'Inter', system-ui, sans-serif;
+      --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.1);
+      
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: radial-gradient(circle at top left, #ffffff 0%, #f3f7fc 26%, #eef3f8 56%, #e8eef5 100%);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* === AMBIENT ORBS === */
+    .ambient {
+      position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; opacity: 0.35;
+      animation: floatOrb 25s ease-in-out infinite alternate;
+    }
+    .ambient-1 { width: 600px; height: 600px; background: #e0e7ff; top: -100px; left: -100px; }
+    .ambient-2 { width: 500px; height: 500px; background: #dcfce7; bottom: -50px; right: -50px; animation-delay: -5s; }
+
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.1); }
+    }
+
+    /* === HEADER === */
+    header {
+      position: relative; z-index: 20; padding: 5rem 2rem 4rem; text-align: center; max-width: 1400px; margin: 20px auto;
+      background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--border-bright);
+      box-shadow: var(--shadow-md); border-radius: var(--radius);
+    }
+
+    .header-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.15em;
+      text-transform: uppercase; color: #6366f1; background: #eef2ff; padding: 0.35rem 1rem; border-radius: 999px; margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 900; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-bottom: 1.25rem;
+    }
+
+    header p { color: var(--muted); font-size: 1.1rem; max-width: 800px; margin: 0 auto; font-weight: 500; line-height: 1.6; }
+
+    /* === NAV === */
+    nav {
+      position: sticky; top: 14px; z-index: 100; max-width: min(1000px, calc(100vw - 32px)); margin: 14px auto;
+      background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(18px); border: 1px solid var(--border-bright);
+      border-radius: 100px; padding: 6px; display: flex; justify-content: center; box-shadow: var(--shadow-sm);
+    }
+    nav a {
+      color: var(--muted); text-decoration: none; font-size: 0.82rem; font-weight: 700; padding: 0.7rem 1.3rem;
+      border-radius: 100px; transition: all 0.2s;
+    }
+    nav a:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+
+    /* === MAIN === */
+    main { position: relative; z-index: 10; max-width: 1700px; margin: 0 auto; padding: 2rem 2rem 8rem; display: flex; flex-direction: column; gap: 4rem; }
+
+    /* === SECTION === */
+    .section-header { margin-bottom: 2.5rem; }
+    .section-badge {
+      font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #6366f1;
+      background: #eef2ff; padding: 0.3rem 0.7rem; border-radius: 6px; margin-bottom: 0.8rem; display: inline-block;
+    }
+    .section-title { font-size: 2rem; font-weight: 900; letter-spacing: -0.04em; color: var(--text); }
+    .section-desc { font-size: 1rem; color: var(--muted); margin-top: 0.5rem; max-width: 800px; }
+
+    /* === DIAGRAM CARD === */
+    .diagram-card {
+      background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); overflow: hidden; transition: transform 0.3s ease;
+    }
+    .diagram-card-body { padding: 3rem 2rem; overflow-x: auto; background: radial-gradient(circle at top right, #f8fafc, transparent); }
+
+    .mermaid { display: flex; justify-content: center; min-width: min-content; }
+    .mermaid svg { min-width: 1100px; height: auto !important; overflow: visible; font-family: var(--font) !important; }
+
+    footer { text-align: center; padding: 6rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+
+<body>
+
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
+
+  <header>
+    <div class="header-eyebrow">Sprint 2 • AI Ecosystem</div>
+    <h1>AI, NLP & RAG Services Framework</h1>
+    <p>A Component Diagram illustrating the orchestration of natural language processing services, user profiling, and the Retrieval-Augmented Generation (RAG) capabilities bridging the system to Qdrant & Redis.</p>
+  </header>
+
+  <nav>
+    <a href="#component-diagram">Component Ecosystem</a>
+  </nav>
+
+  <main>
+    <section id="component-diagram">
+      <div class="section-header">
+        <span class="section-badge">Architecture Blueprint</span>
+        <h2 class="section-title">Components Overview</h2>
+        <p class="section-desc">Interazioni tra il Core NLP, i modelli LLM, e la memoria Semantica (Vector Search).</p>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <div class="mermaid">
+flowchart TB
+    %% External Interfaces / Consumers
+    subgraph group_pipelines ["Pipeline & Agenti (Consumers)"]
+      node_search["search_pipeline.py"]
+      node_compare["compare_pipeline.py"]
+      node_agent["agent_executor.py"]
+    end
+
+    %% Internal RAG Ecosystem
+    subgraph group_rag ["Retrieval-Augmented Generation (RAG)"]
+      direction TB
+      node_retriever["retriever.py<br/>(Sematic Search)"]
+      node_reranker["reranker.py<br/>(Cross-Encoder Score)"]
+      node_context["context_builder.py"]
+      node_qdrant_store["qdrant_store.py<br/>(Vector Ops)"]
+      
+      node_retriever -.-> node_qdrant_store
+      node_reranker -.-> node_retriever
+      node_context -.-> node_reranker
+    end
+
+    %% NLP processing modules
+    subgraph group_nlp ["NLP & Intelligence Services"]
+      direction LR
+      node_parser["parser.py<br/>(Query Parser)"]
+      node_ner["nlp_ner.py<br/>(Entity Extraction)"]
+      node_sentiment["nlp_sentiment.py<br/>(Feedback Analysis)"]
+      node_trust["trust.py<br/>(Trust Scoring)"]
+      node_profiling["user_profiling.py<br/>(Adaptive Budget & Prefs)"]
+      
+      node_parser --> node_ner
+      node_trust --> node_sentiment
+    end
+
+    %% LLM Abstraction layer
+    subgraph group_llm ["Underlying Model Wrapper"]
+      node_client["LLM Client<br/>(llm/client.py)"]
+      node_model_singleton["model_singleton.py<br/>(Local MiniMax/Transformers)"]
+      
+      node_client --> node_model_singleton
+    end
+
+    %% Storage / External Boundaries
+    subgraph group_storage ["Persistence Boundaries"]
+      db_qdrant[("Qdrant TVDB\n(Dense Vectors)")]
+      db_redis[("Redis Cache\n(Fast Key-Val)")]
+    end
+
+    %% Link Consumers to Intelligence
+    node_search --> node_parser
+    node_search --> node_profiling
+    node_search --> node_trust
+    node_compare --> node_context
+
+    %% Agent logic routing
+    node_agent --> node_parser
+    node_agent --> node_retriever
+
+    %% Intelligence calling LLM / RAG / Storage
+    node_qdrant_store --> db_qdrant
+    node_sentiment --> db_redis
+    node_ner --> node_model_singleton
+
+    node_parser -.-> node_client
+    node_profiling -.-> node_client
+    node_explainer["explainer.py"] -.-> node_client
+    node_explainer --> node_context
+
+    style group_pipelines fill:#f8fafc,stroke:#94a3b8
+    style group_rag fill:#f0fdfa,stroke:#99f6e4
+    style group_nlp fill:#faf5ff,stroke:#e9d5ff
+    style group_llm fill:#eff6ff,stroke:#bfdbfe
+    style group_storage fill:#fff1f2,stroke:#fecdd3
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    MCP_ECOM · Master Documentation · Visual Consistency System
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '14px',
+        primaryColor: '#ffffff',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#cbd5e1',
+        lineColor: '#64748b',
+        secondaryColor: '#f8fafc',
+        tertiaryColor: '#f1f5f9',
+        mainBkg: '#ffffff',
+        nodeBorder: '#cbd5e1',
+        clusterBkg: '#f8fafc',
+        clusterBorder: '#e2e8f0',
+        textColor: '#1e293b'
+      },
+      flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis', padding: 32 }
+    });
+  </script>
+
+</body>
+</html>

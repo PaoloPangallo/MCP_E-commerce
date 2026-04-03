@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP_ECOM — Search Pipeline Sequence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #eef3f8;
+      --bg-soft: #f8fbff;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-strong: #ffffff;
+      --border: #dbe4ee;
+      --border-bright: rgba(255, 255, 255, 0.65);
+      --text: #0f172a;
+      --muted: #5b6b80;
+      --font: 'Inter', system-ui, sans-serif;
+      --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.1);
+      
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: radial-gradient(circle at top left, #ffffff 0%, #f3f7fc 26%, #eef3f8 56%, #e8eef5 100%);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* === AMBIENT ORBS === */
+    .ambient {
+      position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; opacity: 0.35;
+      animation: floatOrb 25s ease-in-out infinite alternate;
+    }
+    .ambient-1 { width: 600px; height: 600px; background: #e0e7ff; top: -100px; left: -100px; }
+    .ambient-2 { width: 500px; height: 500px; background: #dcfce7; bottom: -50px; right: -50px; animation-delay: -5s; }
+
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.1); }
+    }
+
+    /* === HEADER === */
+    header {
+      position: relative; z-index: 20; padding: 5rem 2rem 4rem; text-align: center; max-width: 1400px; margin: 20px auto;
+      background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--border-bright);
+      box-shadow: var(--shadow-md); border-radius: var(--radius);
+    }
+
+    .header-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.15em;
+      text-transform: uppercase; color: #6366f1; background: #eef2ff; padding: 0.35rem 1rem; border-radius: 999px; margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 900; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-bottom: 1.25rem;
+    }
+
+    header p { color: var(--muted); font-size: 1.1rem; max-width: 800px; margin: 0 auto; font-weight: 500; line-height: 1.6; }
+
+    /* === NAV === */
+    nav {
+      position: sticky; top: 14px; z-index: 100; max-width: min(1000px, calc(100vw - 32px)); margin: 14px auto;
+      background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(18px); border: 1px solid var(--border-bright);
+      border-radius: 100px; padding: 6px; display: flex; justify-content: center; box-shadow: var(--shadow-sm);
+    }
+    nav a {
+      color: var(--muted); text-decoration: none; font-size: 0.82rem; font-weight: 700; padding: 0.7rem 1.3rem;
+      border-radius: 100px; transition: all 0.2s;
+    }
+    nav a:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+
+    /* === MAIN === */
+    main { position: relative; z-index: 10; max-width: 1700px; margin: 0 auto; padding: 2rem 2rem 8rem; display: flex; flex-direction: column; gap: 4rem; }
+
+    /* === SECTION === */
+    .section-header { margin-bottom: 2.5rem; }
+    .section-badge {
+      font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #6366f1;
+      background: #eef2ff; padding: 0.3rem 0.7rem; border-radius: 6px; margin-bottom: 0.8rem; display: inline-block;
+    }
+    .section-title { font-size: 2rem; font-weight: 900; letter-spacing: -0.04em; color: var(--text); }
+    .section-desc { font-size: 1rem; color: var(--muted); margin-top: 0.5rem; max-width: 800px; }
+
+    /* === DIAGRAM CARD === */
+    .diagram-card {
+      background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); overflow: hidden; transition: transform 0.3s ease;
+    }
+    .diagram-card-body { padding: 3rem 2rem; overflow-x: auto; background: radial-gradient(circle at top right, #f8fafc, transparent); }
+
+    .mermaid { display: flex; justify-content: center; min-width: min-content; }
+    .mermaid svg { min-width: 1100px; height: auto !important; overflow: visible; font-family: var(--font) !important; }
+
+    footer { text-align: center; padding: 6rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+
+<body>
+
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
+
+  <header>
+    <div class="header-eyebrow">Sprint 1 • Service Layer</div>
+    <h1>Hybrid Search Pipeline</h1>
+    <p>A fine-grained sequence diagram documenting the `search_pipeline.py`. It showcases the Reciprocal Rank Fusion (RRF), concurrent eBay & Qdrant retrievals, NLP intent parsing, and LLM-based value scoring.</p>
+  </header>
+
+  <nav>
+    <a href="#sequence-diagram">Pipeline Sequence</a>
+  </nav>
+
+  <main>
+    <section id="sequence-diagram">
+      <div class="section-header">
+        <span class="section-badge">Sequence Workflow</span>
+        <h2 class="section-title">run_search_pipeline() Flow</h2>
+        <p class="section-desc">Dettagli di esecuzione asincrona, chiamate parallele e logiche di ranking ibrido.</p>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Caller as Agent/Controller
+    participant Pipe as SearchPipeline
+    participant Qdrant as Global Memory (Qdrant)
+    participant Parser as NLP Parser (LLM/Regex)
+    participant EbayAPI as eBay Service
+    participant RAG as RAG Enhancer
+    participant Redis as Redis Cache / DB
+    participant Analyzer as Trust & Rank Engine
+
+    Caller->>Pipe: run_search_pipeline(query, user, session_id)
+    activate Pipe
+    
+    %% STEP 0: Phantom Memory Fetch
+    Note over Pipe, Qdrant: STEP 0: Background task per recuperare item storici RAG
+    Pipe--)Qdrant: retrieve_context(query, k=15, doc_type="product") (async task)
+    
+    %% STEP 1: Parse Query
+    Note over Pipe, Parser: STEP 1: Parsifica Intenti ed Estrae Entità (Named Entity)
+    Pipe->>Parser: parse_query_service(query, llm_engine)
+    activate Parser
+    Parser-->>Pipe: parsed_dict (brands, product, constraints)
+    deactivate Parser
+    
+    Pipe->>Pipe: _build_ebay_query(parsed_dict)
+    
+    %% STEP 2: Parallel Search & RAG
+    Note over Pipe, RAG: STEP 2: I/O Parallelo (Gather) tra eBay e Documentazione RAG
+    par eBay Search
+        Pipe->>EbayAPI: search_items(parsed_dict, limit=15)
+        activate EbayAPI
+        EbayAPI-->>Pipe: ebay_items (JSON array) + Aspect Distributions
+        deactivate EbayAPI
+    and RAG Enhancement
+        Pipe->>RAG: expand_query(query)
+        RAG->>Qdrant: retrieve_context(expanded_query)
+        Qdrant-->>RAG: rag_docs  (info su seller e prodotto)
+        RAG-->>Pipe: expanded, rag_docs
+    end
+
+    %% Anti-accessory filtering
+    opt Categoria Principale Dominata da Accessori
+        Pipe->>Pipe: Detect accessory dominance (Smart Filter)
+        Pipe->>EbayAPI: RE-SEARCH with better categoryId constraint
+        EbayAPI-->>Pipe: Updated ebay_items
+    end
+    
+    %% STEP 3: Hybrid Merge
+    Note over Pipe, Qdrant: STEP 3: Reciprocal Rank Fusion (RRF)
+    Qdrant-->>Pipe: memory_items (from STEP 0 async task)
+    Pipe->>Pipe: _merge_hybrid_results(ebay_items, memory_items)
+    Note right of Pipe: Calcola _hybrid_bonus e <br/>_memory_rank combinati.
+    
+    Pipe->>Pipe: _dedupe_items()
+    
+    %% STEP 4: Metadata Enrich & Persistence
+    Note over Pipe, Analyzer: STEP 4: Calcolo Affidabilità Venditori & Persistenza
+    Pipe->>Analyzer: _prefetch_top_sellers_feedback(items)
+    activate Analyzer
+    Analyzer->>Redis: Controlla Cache Feedback & Trust Score
+    Redis-->>Analyzer: Cached data or misses
+    Analyzer-->>Pipe: seller_trust_map (Seller -> Score 0-1)
+    deactivate Analyzer
+    
+    Pipe->>Redis: _batch_fetch_existing_ebay_ids(items)
+    Redis-->>Pipe: existing_ids
+    Pipe->>Redis: DB Persist if missing (Save to DB e Cache)
+
+    %% STEP 5: Final Evaluation
+    Note over Pipe, Analyzer: STEP 5: _apply_final_ranking (Trust + Rerank + Value Score)
+    Pipe->>Analyzer: _apply_final_ranking(items, user)
+    activate Analyzer
+    Note right of Analyzer: Applica bias dell'utente (budget, condizione, brand preferiti)
+    Analyzer-->>Pipe: Ranked items
+    deactivate Analyzer
+    
+    opt Uso LLM per insight di mercato Value-for-Money
+        Pipe->>Analyzer: _compute_llm_value_scores(top_items, serp_stats)
+        Analyzer-->>Pipe: value_scores (Giustificazione qualitativa)
+    end
+    
+    Pipe-->>Caller: Final Sorted Results & Explanations JSON
+    deactivate Pipe
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    MCP_ECOM · Master Documentation · Visual Consistency System
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '14px',
+        primaryColor: '#e0e7ff',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#cbd5e1',
+        lineColor: '#64748b',
+        secondaryColor: '#f8fafc',
+        tertiaryColor: '#f1f5f9',
+        mainBkg: '#ffffff',
+        nodeBorder: '#cbd5e1',
+        clusterBkg: '#f8fafc',
+        clusterBorder: '#e2e8f0',
+        textColor: '#1e293b'
+      },
+      sequence: { showSequenceNumbers: true, actorMargin: 40, messageMargin: 30 }
+    });
+  </script>
+
+</body>
+</html>
