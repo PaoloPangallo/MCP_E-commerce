@@ -118,6 +118,7 @@ class ReactPlanner:
             parsed_semantic = result.get("semantic_query", "")
             memory._browser_query = parsed_semantic if parsed_semantic else (memory.user_query or "")
         except Exception:
+            logger.warning("_precompute_browser_query failed, using raw query", exc_info=True)
             memory._browser_query = memory.user_query or ""
 
     def can_stop_early(self, memory: AgentMemory) -> bool:
@@ -140,6 +141,7 @@ class ReactPlanner:
         return memory.tool_call_count(failed_tool) >= self.max_calls_per_tool
 
     async def _state_based_decide(self, memory: AgentMemory) -> Optional[PlannerOutput]:
+        # TODO: remove — dead code, superseded by _safe_fallback_decide. Never called.
         intent = (memory.detected_intent or self._infer_intent(memory)).lower()
 
         if intent == "conversation":
@@ -513,10 +515,12 @@ class ReactPlanner:
                     # In playwright mode: read the current browser page URL from tool_states
                     # (BrowserManager stores last navigation result there)
                     browser_url = None
-                    for browser_tool in ("browser_type", "browser_navigate", "browser_get_view"):
+                    from urllib.parse import urlparse as _urlparse
+                    for browser_tool in ("browser_click", "browser_get_view", "browser_type", "browser_navigate"):
                         state_data = (memory.tool_states.get(browser_tool) or {}).get("data") or {}
                         url = state_data.get("url", "")
-                        if url and "ebay" in url.lower():
+                        parsed_netloc = _urlparse(url).netloc.lower() if url else ""
+                        if parsed_netloc and ("ebay." in parsed_netloc):
                             browser_url = url
                             break
 
@@ -595,7 +599,7 @@ class ReactPlanner:
             return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
         if intent == "contact_seller":
             mcp_mode = getattr(memory, "mcp_mode", "standard") if memory else "standard"
-            if mcp_mode == "playwright_browser" or (memory and "playwright" in memory.user_query.lower()):
+            if mcp_mode == "playwright_browser" or (memory and "playwright" in (memory.user_query or "").lower()):
                 return ["contact_seller_playwright", "contact_seller"]
             return ["contact_seller"]
         return []
