@@ -121,6 +121,30 @@ class ReactPlanner:
             logger.warning("_precompute_browser_query failed, using raw query", exc_info=True)
             memory._browser_query = memory.user_query or ""
 
+    async def _generate_seller_message(self, memory: AgentMemory) -> str:
+        """Generate a short, professional message to send to an eBay seller.
+
+        Extracts the user's actual intent from their query and formats it as
+        a polite seller message. Falls back to a generic inquiry if LLM fails.
+        """
+        user_query = (memory.user_query or "").strip()
+        if not user_query:
+            return "Salve, volevo richiedere informazioni su questo articolo. Grazie."
+
+        prompt = (
+            "L'utente vuole inviare un messaggio a un venditore eBay. "
+            f'La sua richiesta è: "{user_query}"\n\n'
+            "Scrivi SOLO il testo del messaggio da inviare al venditore: breve, educato, professionale. "
+            "Non includere saluti ridondanti. Non includere spiegazioni. Solo il testo del messaggio. "
+            "Massimo 3 frasi."
+        )
+        try:
+            message, _ = await call_llm(prompt)
+            return (message or "").strip() or "Salve, volevo richiedere informazioni su questo articolo. Grazie."
+        except Exception:
+            logger.warning("_generate_seller_message failed, using generic fallback", exc_info=True)
+            return "Salve, volevo richiedere informazioni su questo articolo. Grazie."
+
     def can_stop_early(self, memory: AgentMemory) -> bool:
         if memory.has_pending_tasks():
             return False
@@ -537,7 +561,7 @@ class ReactPlanner:
                             return None  # No URL and no seller name — cannot proceed
 
             if not action_input.get("message"):
-                action_input["message"] = memory.user_query  # temporary; Task 2 replaces this with LLM call
+                action_input["message"] = await self._generate_seller_message(memory)
 
         return action_input
 
