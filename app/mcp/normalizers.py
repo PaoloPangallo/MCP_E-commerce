@@ -71,6 +71,7 @@ def _normalize_search_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "analysis": raw.get("analysis"),
         "metrics": raw.get("metrics"),
         "rag_context": raw.get("rag_context"),
+        "dominant_category_name": raw.get("dominant_category_name"),
         "terminal": True,
     }
 
