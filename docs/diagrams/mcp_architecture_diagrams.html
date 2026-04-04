@@ -6,11 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MCP Architecture — Visual Reference</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
   <!-- v9.4.3: compatible with file:// origins -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     :root {
       --bg: #eef3f8;
@@ -27,12 +34,14 @@
       --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
       --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.06);
       --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.1);
-      
+
       --radius: 20px;
       --radius-sm: 12px;
     }
 
-    html { scroll-behavior: smooth; }
+    html {
+      scroll-behavior: smooth;
+    }
 
     body {
       font-family: var(--font);
@@ -109,7 +118,10 @@
       scrollbar-width: none;
       box-shadow: var(--shadow-sm);
     }
-    nav::-webkit-scrollbar { display: none; }
+
+    nav::-webkit-scrollbar {
+      display: none;
+    }
 
     nav a {
       color: var(--muted);
@@ -122,7 +134,11 @@
       border-radius: 100px;
       margin: 4px 0;
     }
-    nav a:hover { color: var(--text); background: rgba(0,0,0,0.03); }
+
+    nav a:hover {
+      color: var(--text);
+      background: rgba(0, 0, 0, 0.03);
+    }
 
     /* === MAIN === */
     main {
@@ -144,12 +160,36 @@
       --accent-border: hsla(var(--accent-h), 80%, 50%, 0.2);
     }
 
-    .diagram-section:nth-child(1) { --accent-h: 255; } /* Purple */
-    .diagram-section:nth-child(2) { --accent-h: 200; } /* Blue/Sky */
-    .diagram-section:nth-child(3) { --accent-h: 160; } /* Emerald */
-    .diagram-section:nth-child(4) { --accent-h: 215; } /* Navy */
-    .diagram-section:nth-child(5) { --accent-h: 180; } /* Teal */
-    .diagram-section:nth-child(6) { --accent-h: 280; } /* Indigo */
+    .diagram-section:nth-child(1) {
+      --accent-h: 255;
+    }
+
+    /* Purple */
+    .diagram-section:nth-child(2) {
+      --accent-h: 200;
+    }
+
+    /* Blue/Sky */
+    .diagram-section:nth-child(3) {
+      --accent-h: 160;
+    }
+
+    /* Emerald */
+    .diagram-section:nth-child(4) {
+      --accent-h: 215;
+    }
+
+    /* Navy */
+    .diagram-section:nth-child(5) {
+      --accent-h: 180;
+    }
+
+    /* Teal */
+    .diagram-section:nth-child(6) {
+      --accent-h: 280;
+    }
+
+    /* Indigo */
 
     .section-meta {
       display: flex;
@@ -159,11 +199,14 @@
     }
 
     .section-dot {
-      width: 42px; height: 42px;
+      width: 42px;
+      height: 42px;
       border-radius: 14px;
       background: var(--surface-strong);
       border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 1.1rem;
       box-shadow: var(--shadow-sm);
     }
@@ -214,7 +257,7 @@
     }
 
     .diagram-card-body svg {
-      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.02));
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.02));
       overflow: visible;
     }
 
@@ -243,7 +286,12 @@
       margin-bottom: 1.2rem;
     }
 
-    .key-list { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; }
+    .key-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
 
     .key-list li {
       color: var(--text-muted);
@@ -255,14 +303,20 @@
     .key-list li::before {
       content: '';
       position: absolute;
-      left: 0; top: 0.55rem;
-      width: 14px; height: 1px;
+      left: 0;
+      top: 0.55rem;
+      width: 14px;
+      height: 1px;
       background: var(--accent);
       opacity: 0.5;
     }
 
     /* === TABLES === */
-    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
 
     th {
       text-align: left;
@@ -277,7 +331,7 @@
 
     td {
       padding: 0.7rem 0.75rem;
-      border-bottom: 1px solid rgba(0,0,0,0.04);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.04);
       color: var(--text-muted);
     }
 
@@ -301,47 +355,57 @@
     }
 
     @media (max-width: 900px) {
-      .info-row { grid-template-columns: 1fr; }
-      nav { top: 10px; margin: 10px auto; }
-      main { padding: 1rem 1rem 4rem; }
+      .info-row {
+        grid-template-columns: 1fr;
+      }
+
+      nav {
+        top: 10px;
+        margin: 10px auto;
+      }
+
+      main {
+        padding: 1rem 1rem 4rem;
+      }
     }
   </style>
 </head>
 
 <body>
 
-<header>
-  <div class="header-eyebrow">MCP E-Commerce · Visual Components</div>
-  <h1>System Architecture</h1>
-  <p>Comprehensive visual reference for the dual-world MCP server landscape, data enrichment pipelines, and browser automation flows.</p>
-</header>
+  <header>
+    <div class="header-eyebrow">MCP E-Commerce · Visual Components</div>
+    <h1>System Architecture</h1>
+    <p>Comprehensive visual reference for the dual-world MCP server landscape, data enrichment pipelines, and browser
+      automation flows.</p>
+  </header>
 
-<nav>
-  <a href="#d1">Topology</a>
-  <a href="#d2">Taxonomy</a>
-  <a href="#d3">Tool Flow</a>
-  <a href="#d4">Browser Flow</a>
-  <a href="#d5">Profile Data</a>
-  <a href="#d6">Sync Engine</a>
-</nav>
+  <nav>
+    <a href="#d1">Topology</a>
+    <a href="#d2">Taxonomy</a>
+    <a href="#d3">Tool Flow</a>
+    <a href="#d4">Browser Flow</a>
+    <a href="#d5">Profile Data</a>
+    <a href="#d6">Sync Engine</a>
+  </nav>
 
-<main>
+  <main>
 
-  <!-- ================================================================ -->
-  <!-- 1: Dual-World Architecture -->
-  <!-- ================================================================ -->
-  <section class="diagram-section" id="d1">
-    <div class="section-meta">
-      <div class="section-dot">🏗</div>
-      <div>
-        <div class="section-label">Server Topology</div>
-        <h2 class="section-title">Dual-World Implementation</h2>
+    <!-- ================================================================ -->
+    <!-- 1: Dual-World Architecture -->
+    <!-- ================================================================ -->
+    <section class="diagram-section" id="d1">
+      <div class="section-meta">
+        <div class="section-dot">🏗</div>
+        <div>
+          <div class="section-label">Server Topology</div>
+          <h2 class="section-title">Dual-World Implementation</h2>
+        </div>
       </div>
-    </div>
 
-    <div class="diagram-card">
-      <div class="diagram-card-body">
-        <pre class="mermaid">
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
 graph LR
     FA["<b>FastAPI App</b><br/>asgi.py"]
 
@@ -376,119 +440,154 @@ graph LR
     ToolsStd --> T_STD
     ToolsPWStd -. "sync_standard_tools()" .-> ToolsStd
         </pre>
+        </div>
       </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-card">
-        <div class="info-card-title">Technical Principles</div>
-        <ul class="key-list">
-          <li><strong>ASGI Coexistence</strong>: Two independent MCP servers mounted on a single FastAPI instance.</li>
-          <li><strong>Domain Isolation</strong>: Playwright restricted to browser tasks; Standard handles pure API logic.</li>
-          <li><strong>Tool Mirroring</strong>: Real-time metadata sync ensures feature parity across protocols.</li>
-        </ul>
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-title">Technical Principles</div>
+          <ul class="key-list">
+            <li><strong>ASGI Coexistence</strong>: Two independent MCP servers mounted on a single FastAPI instance.
+            </li>
+            <li><strong>Domain Isolation</strong>: Playwright restricted to browser tasks; Standard handles pure API
+              logic.</li>
+            <li><strong>Tool Mirroring</strong>: Real-time metadata sync ensures feature parity across protocols.</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Routing Schema</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Mount Point</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Standard API</td>
+                <td><code>/standard</code></td>
+              </tr>
+              <tr>
+                <td>Playwright</td>
+                <td><code>/playwright</code></td>
+              </tr>
+              <tr>
+                <td>Core Logic</td>
+                <td><code>app/mcp/server.py</code></td>
+              </tr>
+              <tr>
+                <td>Browser Logic</td>
+                <td><code>app/mcp/playwright_server.py</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="info-card">
-        <div class="info-card-title">Routing Schema</div>
-        <table>
-          <thead><tr><th>Role</th><th>Mount Point</th></tr></thead>
-          <tbody>
-            <tr><td>Standard API</td><td><code>/standard</code></td></tr>
-            <tr><td>Playwright</td><td><code>/playwright</code></td></tr>
-            <tr><td>Core Logic</td><td><code>app/mcp/server.py</code></td></tr>
-            <tr><td>Browser Logic</td><td><code>app/mcp/playwright_server.py</code></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ================================================================ -->
-  <!-- 2: Tools Taxonomy -->
-  <!-- ================================================================ -->
-  <section class="diagram-section" id="d2">
-    <div class="section-meta">
-      <div class="section-dot">🧩</div>
-      <div>
-        <div class="section-label">Object Model</div>
-        <h2 class="section-title">Tools Taxonomy</h2>
+    <!-- ================================================================ -->
+    <!-- 2: Tools Taxonomy -->
+    <!-- ================================================================ -->
+    <section class="diagram-section" id="d2">
+      <div class="section-meta">
+        <div class="section-dot">🧩</div>
+        <div>
+          <div class="section-label">Object Model</div>
+          <h2 class="section-title">Tools Taxonomy</h2>
+        </div>
       </div>
-    </div>
 
-    <div class="diagram-card">
-      <div class="diagram-card-body">
-        <pre class="mermaid">
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+  <pre class="mermaid">
 classDiagram
-    direction TB
-
-    class MCPTool {
-        <<abstract>>
-        +name: str
-        +description: str
-        +inputSchema: dict
-    }
-
-    class SearchTools {
-        +search_products()
-        +profile_query()
-        +compare_products()
-    }
-
-    class SellerTools {
-        +analyze_seller()
-        +contact_seller()
-    }
-
-    class UserTools {
-        +update_user_preferences()
-        +manage_wishlist()
-    }
-
-    class PlaywrightTools {
-        +search_browser()
-        +contact_playwright()
-    }
-
-    MCPTool <|-- SearchTools
-    MCPTool <|-- SellerTools
-    MCPTool <|-- UserTools
-    MCPTool <|-- PlaywrightTools
-        </pre>
+class MCPTool {
+  +name str
+  +description str
+}
+class SearchTools {
+  +search_products()
+  +profile_query()
+}
+class SellerTools {
+  +analyze_seller()
+  +contact_seller()
+}
+class UserTools {
+  +update_user_preferences()
+  +manage_wishlist()
+}
+class PlaywrightTools {
+  +search_browser()
+  +contact_playwright()
+}
+SearchTools --|> MCPTool
+SellerTools --|> MCPTool
+UserTools --|> MCPTool
+PlaywrightTools --|> MCPTool
+</pre>
+        </div>
       </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-card">
-        <div class="info-card-title">Discovery Registry</div>
-        <table>
-          <thead><tr><th>Family</th><th>Principal Tool</th><th>File</th></tr></thead>
-          <tbody>
-            <tr><td>Search</td><td><code>search_products</code></td><td>search.py</td></tr>
-            <tr><td>Seller</td><td><code>analyze_seller</code></td><td>seller.py</td></tr>
-            <tr><td>Inventory</td><td><code>get_item_details</code></td><td>item.py</td></tr>
-            <tr><td>User</td><td><code>manage_wishlist</code></td><td>wishlist_tool.py</td></tr>
-            <tr><td>Browser</td><td><code>contact_seller_playwright</code></td><td>playwright_contact.py</td></tr>
-          </tbody>
-        </table>
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-title">Discovery Registry</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Family</th>
+                <th>Principal Tool</th>
+                <th>File</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Search</td>
+                <td><code>search_products</code></td>
+                <td>search.py</td>
+              </tr>
+              <tr>
+                <td>Seller</td>
+                <td><code>analyze_seller</code></td>
+                <td>seller.py</td>
+              </tr>
+              <tr>
+                <td>Inventory</td>
+                <td><code>get_item_details</code></td>
+                <td>item.py</td>
+              </tr>
+              <tr>
+                <td>User</td>
+                <td><code>manage_wishlist</code></td>
+                <td>wishlist_tool.py</td>
+              </tr>
+              <tr>
+                <td>Browser</td>
+                <td><code>contact_seller_playwright</code></td>
+                <td>playwright_contact.py</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ================================================================ -->
-  <!-- 3: Client Sequence -->
-  <!-- ================================================================ -->
-  <section class="diagram-section" id="d3">
-    <div class="section-meta">
-      <div class="section-dot">⚡</div>
-      <div>
-        <div class="section-label">Runtime Execution</div>
-        <h2 class="section-title">Tool Invocation Flow</h2>
+    <!-- ================================================================ -->
+    <!-- 3: Client Sequence -->
+    <!-- ================================================================ -->
+    <section class="diagram-section" id="d3">
+      <div class="section-meta">
+        <div class="section-dot">⚡</div>
+        <div>
+          <div class="section-label">Runtime Execution</div>
+          <h2 class="section-title">Tool Invocation Flow</h2>
+        </div>
       </div>
-    </div>
 
-    <div class="diagram-card">
-      <div class="diagram-card-body">
-        <pre class="mermaid">
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
 sequenceDiagram
     participant Agent
     participant Client as "MCPToolClient"
@@ -512,36 +611,39 @@ sequenceDiagram
     Client->>Client: _parse_parts_to_dict()
     Client-->>Agent: {status, result}
         </pre>
+        </div>
       </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-card">
-        <div class="info-card-title">Performance Optimization</div>
-        <ul class="key-list">
-          <li><strong>In-Process Routing</strong>: Local MCP servers are called directly via Python functions to bypass the HTTP stack.</li>
-          <li><strong>Typed Output</strong>: Automatic conversion from <code>CallToolResult</code> to native Python dictionaries.</li>
-          <li><strong>Graceful Fallbacks</strong>: Support for JSON, AST literal evaluation, and raw string parsing.</li>
-        </ul>
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-title">Performance Optimization</div>
+          <ul class="key-list">
+            <li><strong>In-Process Routing</strong>: Local MCP servers are called directly via Python functions to
+              bypass the HTTP stack.</li>
+            <li><strong>Typed Output</strong>: Automatic conversion from <code>CallToolResult</code> to native Python
+              dictionaries.</li>
+            <li><strong>Graceful Fallbacks</strong>: Support for JSON, AST literal evaluation, and raw string parsing.
+            </li>
+          </ul>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ================================================================ -->
-  <!-- 4: Playwright Browser Flow -->
-  <!-- ================================================================ -->
-  <section class="diagram-section" id="d4">
-    <div class="section-meta">
-      <div class="section-dot">🌐</div>
-      <div>
-        <div class="section-label">Browser Automation</div>
-        <h2 class="section-title">Playwright Contact Flow</h2>
+    <!-- ================================================================ -->
+    <!-- 4: Playwright Browser Flow -->
+    <!-- ================================================================ -->
+    <section class="diagram-section" id="d4">
+      <div class="section-meta">
+        <div class="section-dot">🌐</div>
+        <div>
+          <div class="section-label">Browser Automation</div>
+          <h2 class="section-title">Playwright Contact Flow</h2>
+        </div>
       </div>
-    </div>
 
-    <div class="diagram-card">
-      <div class="diagram-card-body">
-        <pre class="mermaid">
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
 sequenceDiagram
     participant Planner
     participant PWS as "Playwright Server"
@@ -562,36 +664,39 @@ sequenceDiagram
     
     PWS-->>Planner: success: true
         </pre>
+        </div>
       </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-card">
-        <div class="info-card-title">Resilience Pattern</div>
-        <ul class="key-list">
-          <li><strong>CDP Port 9222</strong>: Attempts to attach to an already running Chrome to preserve active cookies.</li>
-          <li><strong>Login Wall Timeout</strong>: Waits up to 120s for manual user login if automated detection fails.</li>
-          <li><strong>Multi-Selector Fallback</strong>: Heuristic-based element finding for dynamic eBay HTML structures.</li>
-        </ul>
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-title">Resilience Pattern</div>
+          <ul class="key-list">
+            <li><strong>CDP Port 9222</strong>: Attempts to attach to an already running Chrome to preserve active
+              cookies.</li>
+            <li><strong>Login Wall Timeout</strong>: Waits up to 120s for manual user login if automated detection
+              fails.</li>
+            <li><strong>Multi-Selector Fallback</strong>: Heuristic-based element finding for dynamic eBay HTML
+              structures.</li>
+          </ul>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ================================================================ -->
-  <!-- 5: Resource Data Flow -->
-  <!-- ================================================================ -->
-  <section class="diagram-section" id="d5">
-    <div class="section-meta">
-      <div class="section-dot">🧠</div>
-      <div>
-        <div class="section-label">Data Lifecycle</div>
-        <h2 class="section-title">Knowledge Flow</h2>
+    <!-- ================================================================ -->
+    <!-- 5: Resource Data Flow -->
+    <!-- ================================================================ -->
+    <section class="diagram-section" id="d5">
+      <div class="section-meta">
+        <div class="section-dot">🧠</div>
+        <div>
+          <div class="section-label">Data Lifecycle</div>
+          <h2 class="section-title">Knowledge Flow</h2>
+        </div>
       </div>
-    </div>
 
-    <div class="diagram-card">
-      <div class="diagram-card-body">
-        <pre class="mermaid">
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
 flowchart LR
     R["<b>MCP Resource</b><br/>profile://{uid}"]
     DB["<b>SQL DB</b><br/>User Profile"]
@@ -603,36 +708,39 @@ flowchart LR
     PC -->|auto-learn| R
     R -.->|inject| Agent
         </pre>
+        </div>
       </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-card">
-        <div class="info-card-title">Automated Insights</div>
-        <ul class="key-list">
-          <li><strong>Condition Affinities</strong>: Learns if the user prefers 'New' vs 'Used' based on historical searches.</li>
-          <li><strong>Contextual Budgets</strong>: Infers spending power per category from recent interaction depth.</li>
-          <li><strong>Resource Update</strong>: Triggers <code>notify_resource_updated()</code> to keep the LLM context warm.</li>
-        </ul>
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-title">Automated Insights</div>
+          <ul class="key-list">
+            <li><strong>Condition Affinities</strong>: Learns if the user prefers 'New' vs 'Used' based on historical
+              searches.</li>
+            <li><strong>Contextual Budgets</strong>: Infers spending power per category from recent interaction depth.
+            </li>
+            <li><strong>Resource Update</strong>: Triggers <code>notify_resource_updated()</code> to keep the LLM
+              context warm.</li>
+          </ul>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ================================================================ -->
-  <!-- 6: Sync Between Worlds -->
-  <!-- ================================================================ -->
-  <section class="diagram-section" id="d6">
-    <div class="section-meta">
-      <div class="section-dot">🔄</div>
-      <div>
-        <div class="section-label">State Synchronization</div>
-        <h2 class="section-title">Startup Engine</h2>
+    <!-- ================================================================ -->
+    <!-- 6: Sync Between Worlds -->
+    <!-- ================================================================ -->
+    <section class="diagram-section" id="d6">
+      <div class="section-meta">
+        <div class="section-dot">🔄</div>
+        <div>
+          <div class="section-label">State Synchronization</div>
+          <h2 class="section-title">Startup Engine</h2>
+        </div>
       </div>
-    </div>
 
-    <div class="diagram-card">
-      <div class="diagram-card-body">
-        <pre class="mermaid">
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
 sequenceDiagram
     participant Lifespan
     participant Std as "Standard MCP"
@@ -650,88 +758,92 @@ sequenceDiagram
     
     Note over PW: Standard tools now visible via Playwright port
         </pre>
+        </div>
       </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-card">
-        <div class="info-card-title">Mirroring Strategy</div>
-        <ul class="key-list">
-          <li><strong>Atomic Lifespan</strong>: All sync operations complete before the FastAPI server accepts traffic.</li>
-          <li><strong>Identity Preservation</strong>: Synced tools keep their original names for seamless Agent planning.</li>
-          <li><strong>Entity Coverage</strong>: Includes Tools, Prompts, and Resources (like <code>profile://</code>).</li>
-        </ul>
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-title">Mirroring Strategy</div>
+          <ul class="key-list">
+            <li><strong>Atomic Lifespan</strong>: All sync operations complete before the FastAPI server accepts
+              traffic.</li>
+            <li><strong>Identity Preservation</strong>: Synced tools keep their original names for seamless Agent
+              planning.</li>
+            <li><strong>Entity Coverage</strong>: Includes Tools, Prompts, and Resources (like <code>profile://</code>).
+            </li>
+          </ul>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-</main>
+  </main>
 
-<footer>
-  MCP Architecture Reference · Visual Consistency System · <code>app/mcp/</code>
-</footer>
+  <footer>
+    MCP Architecture Reference · Visual Consistency System · <code>app/mcp/</code>
+  </footer>
 
-<script>
-  mermaid.initialize({
-    startOnLoad: true,
-    securityLevel: 'loose',
-    theme: 'base',
-    themeVariables: {
-      fontFamily: 'Inter, system-ui, sans-serif',
-      fontSize: '14px',
-      
-      /* Colors matching frontend Slate/Blue style */
-      primaryColor: '#ffffff',
-      primaryTextColor: '#0f172a',
-      primaryBorderColor: '#cbd5e1',
-      lineColor: '#64748b',
-      secondaryColor: '#f8fafc',
-      tertiaryColor: '#f1f5f9',
-      
-      mainBkg: '#ffffff',
-      nodeBorder: '#cbd5e1',
-      clusterBkg: '#f8fafc',
-      clusterBorder: '#e2e8f0',
-      
-      textColor: '#1e293b',
-      edgeLabelBackground: '#f1f5f9',
-      
-      /* Sequence */
-      actorBkg: '#ffffff',
-      actorBorder: '#cbd5e1',
-      actorTextColor: '#0f172a',
-      actorLineColor: '#94a3b8',
-      signalColor: '#64748b',
-      signalTextColor: '#334155',
-      labelBoxBkgColor: '#ffffff',
-      labelBoxBorderColor: '#cbd5e1',
-      activationBkgColor: '#eff6ff',
-      activationBorderColor: '#3b82f6',
-      
-      /* Class */
-      classText: '#0f172a',
-    },
-    flowchart: {
-      useMaxWidth: false,
-      htmlLabels: true,
-      curve: 'basis',
-      padding: 30
-    },
-    sequence: {
-      useMaxWidth: false,
-      wrap: true,
-      diagramMarginX: 25,
-      diagramMarginY: 20,
-      actorMargin: 50,
-      width: 150,
-      height: 65,
-      messageMargin: 35
-    },
-    classDiagram: {
-      useMaxWidth: false
-    }
-  });
-</script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '14px',
+
+        /* Colors matching frontend Slate/Blue style */
+        primaryColor: '#ffffff',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#cbd5e1',
+        lineColor: '#64748b',
+        secondaryColor: '#f8fafc',
+        tertiaryColor: '#f1f5f9',
+
+        mainBkg: '#ffffff',
+        nodeBorder: '#cbd5e1',
+        clusterBkg: '#f8fafc',
+        clusterBorder: '#e2e8f0',
+
+        textColor: '#1e293b',
+        edgeLabelBackground: '#f1f5f9',
+
+        /* Sequence */
+        actorBkg: '#ffffff',
+        actorBorder: '#cbd5e1',
+        actorTextColor: '#0f172a',
+        actorLineColor: '#94a3b8',
+        signalColor: '#64748b',
+        signalTextColor: '#334155',
+        labelBoxBkgColor: '#ffffff',
+        labelBoxBorderColor: '#cbd5e1',
+        activationBkgColor: '#eff6ff',
+        activationBorderColor: '#3b82f6',
+
+        /* Class */
+        classText: '#0f172a',
+      },
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: 'basis',
+        padding: 30
+      },
+      sequence: {
+        useMaxWidth: false,
+        wrap: true,
+        diagramMarginX: 25,
+        diagramMarginY: 20,
+        actorMargin: 50,
+        width: 150,
+        height: 65,
+        messageMargin: 35
+      },
+      classDiagram: {
+        useMaxWidth: false
+      }
+    });
+  </script>
 
 </body>
+
 </html>

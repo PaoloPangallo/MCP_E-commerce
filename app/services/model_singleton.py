@@ -28,6 +28,28 @@ def get_sentence_transformer():
     return _MODEL
 
 
+_SENTIMENT_PIPELINE = None
+_SENTIMENT_LOCK = threading.Lock()
+
+def get_sentiment_pipeline():
+    """Lazy-load and return the specialized Multilingual Sentiment pipeline."""
+    global _SENTIMENT_PIPELINE
+    if _SENTIMENT_PIPELINE is None:
+        with _SENTIMENT_LOCK:
+            if _SENTIMENT_PIPELINE is None:
+                from transformers import pipeline  # noqa: PLC0415
+                logger.info("Loading dedicated NLP Sentiment pipeline: nlptown/bert-base-multilingual-uncased-sentiment")
+                # Warning: downloads ~600MB on first run
+                _SENTIMENT_PIPELINE = pipeline(
+                    "sentiment-analysis",
+                    model="nlptown/bert-base-multilingual-uncased-sentiment",
+                    device=-1 # CPU by default, switch if GPU auto-detect needed
+                )
+                logger.info("Sentiment pipeline loaded and ready.")
+    return _SENTIMENT_PIPELINE
+
+
 def preload():
     """Call this at app startup to warm up the model on the main thread."""
     get_sentence_transformer()
+    # Non pre-carichiamo il sentiment model a meno che non serva per evitare picchi di RAM al boot se non utilizzato.

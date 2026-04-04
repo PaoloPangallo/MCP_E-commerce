@@ -191,12 +191,20 @@ class ToolExecutor:
         quality = "good" if status == "ok" else "empty"
         # il browser si è già aperto, non ha senso riprovare.
         # IMPORTANTE: In un flusso multi-step, lo status "ok" NON deve mai essere terminale!
-        playwright_terminal_statuses = {
-            "contact_button_not_found", "login_required",
-            "message_form_not_found", "submit_button_not_found", "message_sent",
-        }
-        contact_status = result.get("contact_status", "")
-        terminal = contact_status in playwright_terminal_statuses
+        # Multi-step vs Single-step terminal logic:
+        # Browser tools are iterative and only terminal on specific end-states.
+        # Standard/REST tools are terminal once they succeed or definitively find no data.
+        _browser_view_tools = {"browser_navigate", "browser_type", "browser_get_view", "browser_click", "ebay_scrape"}
+        
+        if tool_call.tool in _browser_view_tools:
+            playwright_terminal_statuses = {
+                "contact_button_not_found", "login_required",
+                "message_form_not_found", "submit_button_not_found", "message_sent",
+            }
+            contact_status = result.get("contact_status", "")
+            terminal = contact_status in playwright_terminal_statuses
+        else:
+            terminal = status in {"ok", "no_data"}
         summary = result.get("summary", f"Tool {tool_call.tool} completato con status {status}.")
 
         # For browser tools, enrich the summary with actual page content so the LLM

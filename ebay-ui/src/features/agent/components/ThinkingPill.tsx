@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import {Box, Collapse, Paper, Typography} from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 
-import { AIThinkingPipeline } from "./AIThinkingPipeline"
+import { AIThinkingPipeline, humanizeToolName } from "./AIThinkingPipeline"
 import type { AgentStep, PlannedTask } from "../types"
 
 interface ThinkingPillProps {
@@ -30,8 +30,12 @@ export function ThinkingPill({
     }
   }, [loading, defaultOpen])
 
+  const activeStep = steps.slice().reverse().find(s => s.status === "thinking" || s.status === "running")
+  
   const label = loading
-    ? "L'agente sta pianificando…"
+    ? activeStep 
+      ? `${humanizeToolName(activeStep.action, activeStep.action_input)}…`
+      : "L'agente sta ragionando…"
     : `Analisi completata${steps.length > 0 ? ` · ${steps.length} passi` : ""}`
 
   if (hideTrace || (!loading && steps.length === 0 && (!plannedTasks || plannedTasks.length === 0))) {
@@ -76,13 +80,15 @@ export function ThinkingPill({
             height: 8,
             borderRadius: "50%",
             bgcolor: loading ? "#3b82f6" : "#10b981",
-            animation: loading ? "dotPulse 1.8s infinite ease-in-out" : "none",
+            animation: loading ? "neuralPulse 1.5s infinite ease-out" : "none",
             boxShadow: loading 
-              ? "0 0 10px rgba(59, 130, 246, 0.8)" 
+              ? "0 0 10px rgba(59, 130, 246, 0.8), 0 0 20px rgba(59, 130, 246, 0.4)" 
               : "0 0 8px rgba(16, 185, 129, 0.6)",
-            "@keyframes dotPulse": {
-              "0%, 100%": { transform: "scale(0.8)", opacity: 0.6 },
-              "50%": { transform: "scale(1.2)", opacity: 1 }
+            "@keyframes neuralPulse": {
+              "0%": { transform: "scale(0.8)", opacity: 0.8, boxShadow: "0 0 0 0 rgba(59, 130, 246, 0.7)" },
+              "50%": { transform: "scale(1.1)", opacity: 1 },
+              "70%": { boxShadow: "0 0 0 6px rgba(59, 130, 246, 0)" },
+              "100%": { transform: "scale(0.8)", opacity: 0.8, boxShadow: "0 0 0 0 rgba(59, 130, 246, 0)" }
             }
           }}
         />

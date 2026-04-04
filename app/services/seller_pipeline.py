@@ -79,11 +79,14 @@ async def run_seller_pipeline(
     try:
         from app.llm.client import call_llm
         texts = [f.get("CommentText") or f.get("comment") or f.get("text", "") for f in feedbacks]
-        texts = [t for t in texts if isinstance(t, str) and len(t.strip()) > 5][:100]  # usa max 100 commenti come campione per LLM
+        texts = [t for t in texts if isinstance(t, str) and len(t.strip()) > 5][:150]  # usa max 150 commenti come campione per LLM
         if texts:
             prompt = (
-                f"Analizza queste recenti e autentiche recensioni di acquirenti sul venditore '{seller_name}'. "
-                "Scrivi in lingua italiana al massimo 2 o 3 frasi (max 50 parole) che riassumono il giudizio generale, i pregi e i potenziali difetti o rischi emersi. Sii conciso e diretto, senza convenevoli.\n\n"
+                f"Agisci in qualità di esperto di e-commerce e sicurezza acquisti. Analizza il seguente campione di recensioni reali lasciate ad un venditore eBay ('{seller_name}').\n"
+                "Il tuo obiettivo è fornire all'utente un verdetto rapido ma estremamente chiaro e netto sulla reale affidabilità del venditore.\n"
+                "Scrivi in lingua italiana al massimo 3-4 frasi. Devi esplicitamente chiarire se è sicuro comprare da lui, se ci sono rischi e, in tal caso, quali sono i problemi più comuni riscontrati (es. spedizione lenta, oggetti falsi, pessima comunicazione).\n"
+                "Non essere vago, sii analitico e focalizzato sui rischi e sui pregi.\n\n"
+                "RECENSIONI:\n"
             ) + " ; ".join(texts)
             res, _ = await call_llm(prompt)
             ai_summary = res.strip() if res else None

@@ -1,0 +1,543 @@
+% =============================================================
+% Capitolo: La Seller Pipeline — Analisi della Reputazione del Venditore
+% Progetto: MCP_ECOM — Agente e-commerce basato su MCP
+% =============================================================
+
+\chapter{La Seller Pipeline: Analisi della Reputazione del Venditore}
+\label{chap:seller-pipeline}
+
+% ─────────────────────────────────────────────────────────────
+\section{Motivazione e Posizione nel Sistema}
+\label{sec:seller-intro}
+% ─────────────────────────────────────────────────────────────
+
+In un marketplace come eBay, la scelta del prodotto giusto è solo metà
+della decisione d'acquisto: l'altra metà riguarda la \emph{fiducia nel
+venditore}. Un articolo con prezzo competitivo può nascondere rischi
+reali se il venditore ha una storia di feedback negativi, spedizioni
+lente o gestione controversie carente.
+
+La \textbf{Seller Pipeline} è il sottosistema del progetto MCP\_ECOM
+dedicato alla valutazione automatica e quantitativa della reputazione
+di un venditore eBay. Viene invocata dal tool MCP
+\texttt{analyze\_seller} e produce, come output, un insieme strutturato
+di metriche — \emph{trust score}, \emph{sentiment score}, metadati
+anagrafici e un sommario generato da LLM — che l'agente può
+presentare direttamente all'utente o usare come segnale di ranking nella
+pipeline di ricerca prodotti.
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.82\linewidth}{\centering\vspace{2cm}
+        \textit{[Diagramma: MCP Tool analyze\_seller → Seller Pipeline
+        → (eBay Trading API $\parallel$ Redis Cache) → NLP Sentiment
+        → Trust Score → AI Summary → Output normalizzato]}\\
+        \vspace{2cm}}}
+    \caption{Flusso ad alto livello della Seller Pipeline.}
+    \label{fig:seller-pipeline-flow}
+\end{figure}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Architettura della Pipeline}
+\label{sec:seller-arch}
+% ─────────────────────────────────────────────────────────────
+
+Il punto di entrata è la funzione \texttt{run\_seller\_pipeline()}
+(\texttt{app/services/seller\_pipeline.py}). Il flusso si articola in
+cinque fasi principali:
+
+\begin{enumerate}
+    \item \textbf{Cache check} — ricerca in Redis del risultato già
+        calcolato per la coppia \texttt{(seller\_name, limit)}.
+    \item \textbf{Fetch parallelo} — acquisizione asincrona e simultanea
+        di feedback, dati anagrafici e informazioni sul negozio
+        dall'API Trading di eBay.
+    \item \textbf{Analisi NLP del sentiment} — calcolo del punteggio
+        di sentiment su ciascun feedback testuale tramite embedding
+        semantici.
+    \item \textbf{Calcolo del trust score} — aggregazione di feedback
+        ratio, sentiment score, recency decay e confidence in un unico
+        indice composito.
+    \item \textbf{AI Summary} — generazione di un sommario testuale
+        sintetico tramite LLM, in lingua italiana, basato su un
+        campione dei feedback reali.
+\end{enumerate}
+
+Il risultato viene infine serializzato, salvato su Redis e restituito
+al chiamante.
+
+\subsection{Parallelismo Asincrono}
+\label{subsec:seller-async}
+
+Le tre chiamate verso l'API eBay — \texttt{GetFeedback},
+\texttt{GetUser} e \texttt{GetStore} — vengono lanciate in parallelo
+tramite \texttt{asyncio.gather()}, eliminando la latenza sequenziale
+che si accumulerebbe attendendo ciascuna risposta prima di avviare la
+successiva:
+
+\begin{verbatim}
+feedbacks, user_details, store_details = await asyncio.gather(
+    get_seller_feedback(seller_name, limit=needed),
+    get_user_details(seller_name),
+    get_store_details(seller_name),
+)
+\end{verbatim}
+
+Analogamente, le due operazioni CPU-intensive — calcolo del sentiment
+e calcolo del trust score — vengono eseguite nel thread pool di default
+tramite \texttt{asyncio.to\_thread()}, evitando il blocco dell'event
+loop durante l'inferenza del modello di embedding.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Acquisizione Dati: eBay Trading API}
+\label{sec:seller-data}
+% ─────────────────────────────────────────────────────────────
+
+L'acquisizione dei dati avviene tramite l'eBay \textbf{Trading API}
+(SOAP/XML), autenticata con token OAuth seller-level. Il modulo
+\texttt{app/services/feedback.py} gestisce tre chiamate distinte.
+
+\subsection{GetFeedback — Fetch Multi-Pagina Asincrono}
+\label{subsec:seller-feedback}
+
+La chiamata \texttt{GetFeedback} recupera i feedback lasciati dagli
+acquirenti sul venditore. Dato che l'API eBay pagina i risultati a
+blocchi di 50 elementi, il sistema calcola automaticamente il numero
+di pagine necessarie a soddisfare il \texttt{limit} richiesto
+e lancia \emph{tutte le pagine in parallelo}:
+
+\begin{verbatim}
+tasks = [
+    fetch_feedback_page(client, username, page, per_page)
+    for page in range(1, max_pages + 1)
+]
+results = await asyncio.gather(*tasks)
+\end{verbatim}
+
+Per ciascun feedback viene eseguita la conversione della valutazione
+qualitativa eBay (\texttt{"Positive"}, \texttt{"Neutral"},
+\texttt{"Negative"}) in un valore numerico su scala 1–5,
+compatibile con la pipeline di scoring:
+
+\begin{table}[htbp]
+\centering
+\caption{Mapping valutazione eBay → valore numerico}
+\label{tab:rating-map}
+\begin{tabular}{cc}
+\hline
+\textbf{eBay CommentType} & \textbf{Valore numerico} \\
+\hline
+Positive  & 5 \\
+Neutral   & 3 \\
+Negative  & 1 \\
+\hline
+\end{tabular}
+\end{table}
+
+Il parser XML include protezione contro l'XML injection via
+\texttt{xml.sax.saxutils.escape()} e gestione degli errori eBay
+(\texttt{Ack = Failure / PartialFailure}) prima del parsing dei nodi
+dati, prevenendo l'ingestione silenziosa di risposte di errore.
+
+\subsection{GetUser e GetStore — Metadati Anagrafici}
+\label{subsec:seller-meta}
+
+In parallelo al fetch dei feedback, vengono recuperati:
+
+\begin{itemize}
+    \item \textbf{GetUser}: data di registrazione, paese, feedback
+        score globale eBay, stato dell'account.
+    \item \textbf{GetStore}: nome del negozio eBay, URL del logo,
+        descrizione editoriale dello store.
+\end{itemize}
+
+Questi metadati non concorrono al calcolo del trust score, ma
+arricchiscono il profilo presentato all'utente e sono utili
+all'agente per contestualizzare la raccomandazione (es.\ un venditore
+registrato da 10 anni con negozio dedicato ispira più fiducia di un
+account recente senza store).
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Analisi NLP del Sentiment}
+\label{sec:seller-sentiment}
+% ─────────────────────────────────────────────────────────────
+
+Il modulo \texttt{app/services/nlp\_sentiment.py} implementa un sistema
+di analisi del sentiment a più livelli, con degradazione graceful
+in caso di indisponibilità delle risorse computazionali.
+
+\subsection{Approccio Principale: Embedding Semantici con Anchor Vectors}
+\label{subsec:sentiment-embedding}
+
+La strategia principale utilizza il modello
+\textbf{all-MiniLM-L6-v2} (SentenceTransformers) per calcolare
+embedding densi a 384 dimensioni per ogni testo di feedback. Il modello
+è condiviso nell'applicazione tramite un singleton thread-safe
+(\texttt{app/services/model\_singleton.py}), caricato una sola volta
+alla prima invocazione e riutilizzato da tutti i componenti.
+
+Il punteggio di sentiment non è calcolato con un classificatore
+addestrato, ma tramite il confronto geometrico nello spazio degli
+embedding con due insiemi di \textbf{anchor vector}:
+
+\begin{itemize}
+    \item \textbf{Anchor positivi} — frasi prototipiche di feedback
+        eccellente, in inglese e italiano (es.\ \textit{"excellent seller
+        fast shipping"}, \textit{"ottimo venditore spedizione veloce"}).
+    \item \textbf{Anchor negativi} — frasi prototipiche di feedback
+        critico (es.\ \textit{"terrible seller never again"},
+        \textit{"truffa non comprate"}).
+\end{itemize}
+
+Gli anchor vector sono calcolati una sola volta e memorizzati con
+\texttt{@lru\_cache(maxsize=1)}, eliminando il costo di ricalcolo
+a ogni invocazione della pipeline.
+
+Per ogni testo di feedback, il punteggio grezzo è:
+
+\[
+    \text{raw}_i = \max_j(\text{emb}_i \cdot \text{pos}_j)
+                 - \max_k(\text{emb}_i \cdot \text{neg}_k)
+\]
+
+dove \(\text{emb}_i\) è l'embedding normalizzato del testo $i$,
+\(\text{pos}_j\) e \(\text{neg}_k\) sono rispettivamente gli anchor
+positivi e negativi normalizzati. Il prodotto scalare tra vettori
+normalizzati equivale alla cosine similarity.
+
+Il punteggio grezzo viene poi compresso nell'intervallo $[0, 1]$
+tramite funzione sigmoide con guadagno 3, che amplifica la separazione
+attorno allo zero:
+
+\[
+    s_i = \frac{1}{1 + e^{-3 \cdot \text{raw}_i}}
+\]
+
+Il sentiment score complessivo del venditore è la media aritmetica
+degli $s_i$ calcolati sui feedback con testo valido.
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.78\linewidth}{\centering\vspace{2cm}
+        \textit{[Diagramma: Testo feedback → all-MiniLM-L6-v2 →
+        Embedding [384d] → Cosine sim vs anchor+/anchor- →
+        raw score → Sigmoid(3x) → $s_i \in [0,1]$]}\\
+        \vspace{2cm}}}
+    \caption{Pipeline di calcolo del sentiment via anchor-based
+    cosine similarity.}
+    \label{fig:sentiment-pipeline}
+\end{figure}
+
+\subsection{Fallback Euristico}
+\label{subsec:sentiment-heuristic}
+
+Se il modello di embedding non è disponibile (errore di caricamento,
+memoria insufficiente), o se il batch di testi da analizzare è piccolo
+($\leq 8$ elementi e \texttt{use\_fast\_path=True}), il sistema degrada
+a un approccio \textbf{euristico basato su keyword}:
+
+\begin{enumerate}
+    \item Conta le occorrenze di parole positivamente connotate
+        (\texttt{\_POS\_WORDS}) e negativamente connotate
+        (\texttt{\_NEG\_WORDS}) nel testo.
+    \item Calcola il ratio $\frac{\text{pos} - \text{neg}}{\text{hits}+1}$.
+    \item Applica la stessa funzione sigmoide del percorso principale.
+\end{enumerate}
+
+Questo garantisce che la pipeline produca sempre un output numerico,
+indipendentemente dallo stato del sottosistema ML.
+
+\subsection{Labeling LLM per Ingestion RAG}
+\label{subsec:sentiment-llm-label}
+
+Per la fase di ingestion nel vettorstore RAG, ogni singolo feedback
+viene etichettato con un label discreto (\texttt{POSITIVE},
+\texttt{NEGATIVE}, \texttt{NEUTRAL}) tramite una chiamata LLM
+(\texttt{extract\_sentiment\_label()}). Anche qui è presente un
+fallback euristico se la chiamata LLM fallisce.
+
+\subsection{Cache a Due Livelli}
+\label{subsec:sentiment-cache}
+
+Per evitare di ricalcolare l'embedding dello stesso testo più volte
+(i feedback di un venditore popolare possono ripresentarsi in richieste
+successive), il sistema mantiene una cache in memoria:
+
+\begin{itemize}
+    \item Struttura: dizionario \texttt{\{testo: score\}}.
+    \item Capacità massima: 5.000 entry.
+    \item Eviction: al raggiungimento del limite, il 10\% delle entry
+        più vecchie viene rimosso (FIFO approximation).
+\end{itemize}
+
+Questa cache è complementare alla cache Redis a livello di pipeline:
+Redis evita di ripetere l'intera analisi per un venditore già
+valutato di recente; la cache in-memory evita di ricalcolare
+l'embedding per singoli testi già visti nella stessa sessione.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Calcolo del Trust Score}
+\label{sec:seller-trust}
+% ─────────────────────────────────────────────────────────────
+
+Il modulo \texttt{app/services/trust.py} implementa il calcolo del
+\textbf{trust score} composito $T \in [0, 1]$, che sintetizza in un
+unico indice la reputazione complessiva del venditore. La formula
+finale pesa quattro componenti distinte:
+
+\[
+    T = 0.45 \cdot R + 0.25 \cdot S + 0.20 \cdot \text{REC} + 0.10 \cdot C
+\]
+
+dove:
+\begin{itemize}
+    \item $R$ — \textbf{Feedback Ratio}: media dei valori normalizzati
+        $\frac{r_i - 1}{4}$ su tutti i feedback con rating valido.
+    \item $S$ — \textbf{Sentiment Score}: output della pipeline NLP
+        descritta nella sezione precedente.
+    \item $\text{REC}$ — \textbf{Recency Score}: media pesata
+        temporalmente dei rating, dove il peso di ciascun feedback
+        decade esponenzialmente con l'età.
+    \item $C$ — \textbf{Confidence}: funzione di saturazione che vale
+        0 con zero feedback e converge a 1 con molti feedback.
+\end{itemize}
+
+\subsection{Feedback Ratio}
+\label{subsec:trust-ratio}
+
+Il feedback ratio $R$ è la media aritmetica dei rating normalizzati.
+La normalizzazione lineare
+$v = \frac{r - 1}{r_{\max} - 1}$
+mappa il minimo eBay (1 = Negative) a 0 e il massimo (5 = Positive)
+a 1, con Neutral (3) mappato a 0.5. Rating fuori range o non numerici
+vengono esclusi senza generare errori.
+
+\subsection{Recency Score con Decadimento Esponenziale}
+\label{subsec:trust-recency}
+
+Un venditore con ottimi feedback di tre anni fa ma pessime recensioni
+recenti è più rischioso di quanto il ratio grezzo suggerisca. Il
+\textbf{recency score} risolve questo problema assegnando a ogni
+feedback un peso inversamente proporzionale alla sua età:
+
+\[
+    w_i = e^{-\frac{d_i}{365}}
+\]
+
+dove $d_i$ è l'età del feedback in giorni. Con questa funzione, un
+feedback di 365 giorni fa vale $e^{-1} \approx 0.37$ volte uno di
+oggi; uno di due anni fa vale $e^{-2} \approx 0.14$. Il recency
+score è la media pesata:
+
+\[
+    \text{REC} = \frac{\sum_i v_i \cdot w_i}{\sum_i w_i}
+\]
+
+\subsection{Confidence con Saturazione Esponenziale}
+\label{subsec:trust-confidence}
+
+Un venditore con tre feedback positivi è meno affidabile di uno con
+trecento. Il fattore di \textbf{confidence} $C$ scala il contributo
+del volume dei dati disponibili:
+
+\[
+    C = 1 - e^{-n / 50}
+\]
+
+Con $n = 50$ feedback, $C \approx 0.63$; con $n = 150$, $C \approx 0.95$.
+La costante 50 è calibrata sul dominio eBay: oltre questa soglia, un
+venditore ha un campione statisticamente significativo.
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.82\linewidth}{\centering\vspace{2cm}
+        \textit{[Grafico: curva $C = 1 - e^{-n/50}$ per $n \in [0, 300]$
+        — saturazione a 1 dopo circa 150 feedback]}\\
+        \vspace{2cm}}}
+    \caption{Curva di saturazione del fattore Confidence in funzione
+    del numero di feedback disponibili.}
+    \label{fig:trust-confidence-curve}
+\end{figure}
+
+\subsection{Pesi del Trust Score e Razionale}
+\label{subsec:trust-weights}
+
+I pesi della formula composita riflettono una precisa gerarchia
+di affidabilità:
+
+\begin{table}[htbp]
+\centering
+\caption{Componenti del Trust Score e relative motivazioni}
+\label{tab:trust-weights}
+\begin{tabular}{clcp{0.42\linewidth}}
+\hline
+\textbf{Peso} & \textbf{Componente} & \textbf{Simbolo} & \textbf{Motivazione} \\
+\hline
+0.45 & Feedback Ratio   & $R$            & Segnale primario: voto esplicito lasciato dall'acquirente. \\
+0.25 & Sentiment Score  & $S$            & Cattura la \emph{qualità} del testo anche a prescindere dalla stella. \\
+0.20 & Recency Score    & $\text{REC}$   & Penalizza i venditori con performance recenti deteriorate. \\
+0.10 & Confidence       & $C$            & Corregge l'ottimismo su campioni piccoli. \\
+\hline
+\end{tabular}
+\end{table}
+
+Il sentiment score (25\%) è intenzionalmente più basso del feedback
+ratio (45\%) perché i feedback eBay sono già strutturalmente orientati:
+la maggior parte degli acquirenti lascia solo voti positivi, rendendo
+il testo il segnale più informativo per distinguere i casi intermedi
+e negativi.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{AI Summary Generato da LLM}
+\label{sec:seller-ai-summary}
+% ─────────────────────────────────────────────────────────────
+
+Come passo finale della pipeline, viene generato un \textbf{sommario
+testuale} in italiano del profilo del venditore, direttamente da LLM.
+Fino a 100 testi di feedback vengono campionati, concatenati e passati
+a \texttt{call\_llm()} con un prompt istruttivo:
+
+\begin{quotation}
+\textit{``Analizza queste recenti e autentiche recensioni di acquirenti
+sul venditore '\{seller\_name\}'. Scrivi in lingua italiana al massimo
+2 o 3 frasi (max 50 parole) che riassumono il giudizio generale, i
+pregi e i potenziali difetti o rischi emersi. Sii conciso e diretto,
+senza convenevoli.''}
+\end{quotation}
+
+Il risultato è un campo \texttt{ai\_summary} nel payload di risposta,
+pensato per essere mostrato direttamente nella UI senza ulteriore
+elaborazione. Se la chiamata LLM fallisce, il campo è semplicemente
+assente (\texttt{None}), e la pipeline non solleva eccezioni.
+
+Questa strategia combina il vantaggio della sintesi automatica
+(accessibile all'utente non tecnico) con la robustezza numerica
+del trust score (usabile dall'agente per ranking e confronti).
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Caching Redis e Politica di Invalidazione}
+\label{sec:seller-cache}
+% ─────────────────────────────────────────────────────────────
+
+La pipeline implementa una cache Redis con TTL di 5 minuti. La chiave
+di cache codifica il venditore e il volume di feedback richiesto:
+
+\begin{verbatim}
+cache_key = f"seller_analysis:{seller_name.lower()}:{needed}"
+\end{verbatim}
+
+dove \texttt{needed = page * limit}. Questa strategia garantisce che
+richieste con parametri di paginazione diversi abbiano chiavi distinte,
+evitando la restituzione di risultati troncati per richieste con
+\texttt{limit} maggiore.
+
+Il TTL di 5 minuti è un compromesso deliberato: abbastanza breve da
+non presentare dati obsoleti in scenari di disputa o feedback
+recentemente aggiunti, abbastanza lungo da assorbire picchi di richieste
+parallele per lo stesso venditore (tipico quando più utenti cercano
+lo stesso prodotto nello stesso momento).
+
+In assenza di Redis, la classe \texttt{redis\_client} degrada
+silenziosamente a un dizionario in-memory, preservando la funzionalità.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Normalizzazione dell'Output}
+\label{sec:seller-normalizer}
+% ─────────────────────────────────────────────────────────────
+
+Il risultato grezzo della pipeline viene elaborato dal normalizer
+\texttt{\_normalize\_seller\_output()} (\texttt{app/mcp/normalizers.py}),
+che aggiunge un campo \texttt{summary} leggibile in linguaggio naturale,
+basato su soglie semantiche condivise:
+
+\begin{table}[htbp]
+\centering
+\caption{Soglie e label semantiche del normalizer}
+\label{tab:normalizer-thresholds}
+\begin{tabular}{lll}
+\hline
+\textbf{Metrica} & \textbf{Soglia} & \textbf{Label} \\
+\hline
+Trust Score & $\geq 0.85$ & ``eccellente'' \\
+Trust Score & $\geq 0.70$ & ``affidabile'' \\
+Trust Score & $< 0.70$    & ``scarsa affidabilità'' \\
+\hline
+Sentiment Score & $\geq 0.70$ & ``positivi'' \\
+Sentiment Score & $\leq 0.40$ & ``negativi'' \\
+Sentiment Score & intermedio  & ``misti'' \\
+\hline
+\end{tabular}
+\end{table}
+
+Un esempio di summary generato dal normalizer:
+
+\begin{quotation}
+\textit{``Analisi completata per tech-store-it (287 feedback). Profilo
+eccellente (Trust: 88\%), feedback positivi (Sentiment: 76\%).''}
+\end{quotation}
+
+Questo campo è consumato direttamente dall'agente ReAct per formulare
+la risposta in linguaggio naturale all'utente.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Integrazione con la Search Pipeline e il Reranker LTR}
+\label{sec:seller-ltr-integration}
+% ─────────────────────────────────────────────────────────────
+
+Il trust score prodotto dalla Seller Pipeline non è confinato al tool
+\texttt{analyze\_seller}: viene usato come \textbf{feature di ranking}
+nella pipeline di ricerca prodotti. Il modello LTR
+(\emph{Learning to Rank}) incorpora il trust score del venditore tra
+le sue feature, consentendo al reranker di penalizzare automaticamente
+i prodotti venduti da account con bassa reputazione, anche quando il
+prezzo e la pertinenza semantica sono competitivi.
+
+Questa integrazione trasforma il trust score da semplice etichetta
+descrittiva a componente attivo della strategia di ottimizzazione
+dei risultati, chiudendo il ciclo tra analisi della reputazione e
+qualità delle raccomandazioni.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Riepilogo delle Strategie Implementate}
+\label{sec:seller-summary}
+% ─────────────────────────────────────────────────────────────
+
+La Seller Pipeline combina un insieme articolato di strategie tecniche,
+ciascuna indirizzata a un aspetto specifico del problema:
+
+\begin{table}[htbp]
+\centering
+\caption{Riepilogo delle strategie implementate nella Seller Pipeline}
+\label{tab:seller-strategies}
+\begin{tabular}{p{0.28\linewidth}p{0.62\linewidth}}
+\hline
+\textbf{Strategia} & \textbf{Descrizione} \\
+\hline
+Fetch multi-pagina parallelo & Tutte le pagine eBay necessarie vengono richieste in simultanea con \texttt{asyncio.gather()}, riducendo la latenza di acquisizione. \\
+Fetch dati eterogenei in parallelo & Feedback, dati utente e dati store vengono acquisiti con tre chiamate API concorrenti. \\
+Embedding semantici bilingui & Il modello all-MiniLM-L6-v2 opera su testi italiani e inglesi tramite anchor vector in entrambe le lingue. \\
+Degradazione graceful & Fallback euristico a keyword in caso di indisponibilità del modello di embedding. \\
+Trust score composito & Formula ponderata con quattro segnali (ratio, sentiment, recency, confidence) calibrati sul dominio e-commerce. \\
+Decadimento esponenziale temporale & I feedback recenti pesano proporzionalmente di più nella valutazione della reputazione. \\
+Confidence adattiva & Il contributo dei dati scala con il volume disponibile, evitando stime ottimistiche su campioni piccoli. \\
+AI Summary tramite LLM & Sintesi in italiano del profilo venditore generata dall'LLM a partire dai feedback reali. \\
+Cache a due livelli & Redis (5 min, livello pipeline) + dizionario in-memory (5.000 entry, livello testo) per evitare ricalcoli ridondanti. \\
+Normalizzazione semantica dell'output & Label human-readable generati da soglie condivise, direttamente fruibili dall'agente. \\
+Integrazione con LTR Reranker & Il trust score è feature del reranker di ricerca, impattando il ranking dei prodotti. \\
+\hline
+\end{tabular}
+\end{table}
+
+Il capitolo successivo descrive la pipeline di ricerca prodotti
+(\S\ref{chap:search}), nella quale il trust score del venditore
+si integra con le feature semantiche e di prezzo per il ranking
+finale degli articoli.

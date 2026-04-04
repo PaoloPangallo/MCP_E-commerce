@@ -14,7 +14,11 @@ logger = logging.getLogger(__name__)
 # MODEL (lazy singleton)
 # ============================================================
 
-from app.services.model_singleton import get_sentence_transformer as _get_model
+_POS_WORDS = {"excellent", "great", "perfect", "good", "fast", "ottimo", "perfetto", "veloce", "consigliato", "super", "ok"}
+_NEG_WORDS = {"terrible", "fake", "bad", "pessimo", "truffa", "rotto", "lento", "sconsigliato", "scam"}
+
+
+from app.services.model_singleton import get_sentiment_pipeline
 from app.llm.client import call_llm
 
 
@@ -56,38 +60,7 @@ def _stable_text_fingerprint(texts: Sequence[str]) -> str:
 # EMBEDDING ANCHORS
 # ============================================================
 
-@lru_cache(maxsize=1)
-def _anchor_vectors():
-
-    model = _get_model()
-
-    positive_examples = [
-        "excellent seller fast shipping",
-        "great product highly recommended",
-        "perfect transaction very happy",
-        "ottimo venditore spedizione veloce",
-        "perfetto consigliato"
-    ]
-
-    negative_examples = [
-        "terrible seller never again",
-        "fake item scam seller",
-        "bad service broken product",
-        "venditore pessimo prodotto rotto",
-        "truffa non comprate"
-    ]
-
-    pos = model.encode(
-        positive_examples,
-        normalize_embeddings=True
-    )
-
-    neg = model.encode(
-        negative_examples,
-        normalize_embeddings=True
-    )
-
-    return pos, neg
+# _anchor_vectors removed as we now use a dedicated pipeline
 
 
 def _heuristic_sentiment_single(text: str) -> float:
@@ -170,24 +143,25 @@ def compute_sentiment_score(
                     _cache_put_text(text, val)
         else:
             try:
-                model = _get_model()
-                pos_anchor, neg_anchor = _anchor_vectors()
+                pipeline = get_sentiment_pipeline()
+                
+                # Execute pipeline on the batch
+                results = pipeline(texts_to_encode)
+                
+                for text, f, res in zip(texts_to_encode, feedbacks_to_encode, results):
+                    label = res.get('label', '3 stars')
+                    try:
+                        stars = int(label.split()[0])
+                    except (ValueError, IndexError):
+                        stars = 3
 
-                embs = model.encode(
-                    texts_to_encode,
-                    normalize_embeddings=True,
-                    batch_size=min(32, len(texts_to_encode)),
-                    show_progress_bar=False,
-                ).astype(np.float32)
-
-                sim_pos = np.max(np.dot(embs, pos_anchor.T), axis=1)
-                sim_neg = np.max(np.dot(embs, neg_anchor.T), axis=1)
-
-                raw = sim_pos - sim_neg
-                scores = 1 / (1 + np.exp(-3 * raw))
-
-                for text, f, val in zip(texts_to_encode, feedbacks_to_encode, scores):
-                    score = round(float(val), 4)
+                    # Map 1-5 stars to 0.0-1.0 float score
+                    if stars == 5: score = 0.95
+                    elif stars == 4: score = 0.75
+                    elif stars == 3: score = 0.50
+                    elif stars == 2: score = 0.25
+                    else: score = 0.05
+                    
                     f["nlp_sentiment"] = score
                     if use_cache:
                         _cache_put_text(text, score)
@@ -201,14 +175,23 @@ def compute_sentiment_score(
                         _cache_put_text(text, val)
 
     # Calcoliamo l'overall
-    # Filtriamo prendendo in considerazione solo quelli che avevano davvero un testo, altrimenti 0.5
-    valid_scores = [
-        f["nlp_sentiment"] for f in feedbacks 
-        if len(str(f.get("CommentText") or f.get("comment") or f.get("text") or "").strip()) >= 4
-    ]
-
-    if not valid_scores:
-        valid_scores = [f["nlp_sentiment"] for f in feedbacks]
+    valid_scores = []
+    for f in feedbacks:
+        base_nlp = f.get("nlp_sentiment", 0.5)
+        # Se presente un rating eBay effettivo (1 neg, 3 neu, 5 pos), si bilancia 
+        # l'NLP con il rating oggettivo in modo che 99 recensioni a 5 stelle non passino per neutre.
+        rating = f.get("rating", 3)
+        if rating >= 4:
+            explicit_val = 0.90
+        elif rating <= 2:
+            explicit_val = 0.10
+        else:
+            explicit_val = 0.50
+        
+        # Blend: 60% star rating, 40% text NLP analysis
+        blended = (explicit_val * 0.6) + (base_nlp * 0.4)
+        f["nlp_sentiment"] = round(blended, 4)
+        valid_scores.append(blended)
 
     return round(float(np.mean(valid_scores)), 4) if valid_scores else 0.5
 

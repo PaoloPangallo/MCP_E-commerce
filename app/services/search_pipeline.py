@@ -798,14 +798,15 @@ async def run_search_pipeline(
     # ============================================================
     # 3) USER PROFILE AUTO-UPDATE (coexists with manual MCP overrides)
     # ============================================================
+    # --- Dominant Category Extraction (Common Context) ---
+    _dominant_cat_name: Optional[str] = None
+    if items:
+        cat_names = [it.get("category_name") for it in items if it.get("category_name")]
+        if cat_names:
+            _dominant_cat_name = max(set(cat_names), key=cat_names.count)
+
     if user:
         try:
-            # Determine dominant category name for contextual budgets
-            _dominant_cat_name: Optional[str] = None
-            if items:
-                cat_names = [it.get("category_name") for it in items if it.get("category_name")]
-                if cat_names:
-                    _dominant_cat_name = max(set(cat_names), key=cat_names.count)
             changed = update_user_profile(
                 user=user,
                 parsed=parsed,
@@ -1020,6 +1021,7 @@ async def run_search_pipeline(
         "analysis": analysis,
         "results": results_out,
         "aspect_distributions": aspect_distributions,
+        "dominant_category_name": _dominant_cat_name,
         "rag_context": rag_context_text,
         "metrics": metrics,
         "_timings": timings,

@@ -13,7 +13,13 @@ function formatDate(value?: string | number) {
   if (!value) return null
   const d = typeof value === "number" ? new Date(value) : new Date(String(value))
   if (Number.isNaN(d.getTime())) return String(value)
-  return d.toLocaleDateString("it-IT", { year: "numeric", month: "short", day: "numeric" })
+  return d.toLocaleDateString("it-IT", { 
+    year: "numeric", 
+    month: "short", 
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  })
 }
 
 const ratingMeta = {
@@ -43,50 +49,50 @@ export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
     <Box
       sx={{
         py: 2,
-        borderBottom: "1px solid #f0f0f0",
+        borderBottom: "1px solid var(--border-color)",
         "&:last-child": { borderBottom: "none" }
       }}
     >
       {/* Header row */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, mb: 1 }}>
         <Box
           sx={{
-            width: 24,
-            height: 24,
+            width: 28,
+            height: 28,
             borderRadius: "50%",
-            bgcolor: "#f3f4f6",
+            bgcolor: "var(--bg-secondary)",
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 10,
-            fontWeight: 700,
-            color: "#6b7280",
-            border: '1px solid #e5e7eb',
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--text-primary)",
+            border: '1px solid var(--border-color)',
             flexShrink: 0
           }}
         >
           {initial}
         </Box>
         
-        <Box sx={{ flex: 1 }}>
-           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: "wrap", mb: 0.5 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
               {feedback.user || "Utente"}
             </Typography>
             <Box
               sx={{
                 px: 1,
                 py: "1px",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 bgcolor: meta.bg,
-                border: "1px solid transparent",
+                border: `1px solid ${meta.dot}40`,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 0.5
               }}
             >
               <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: meta.dot }} />
-              <Typography sx={{ fontSize: 10, fontWeight: 700, color: meta.text, textTransform: 'uppercase' }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 800, color: meta.text, textTransform: 'uppercase' }}>
                 {meta.label}
               </Typography>
             </Box>
@@ -102,28 +108,53 @@ export default function FeedbackCard({ feedback }: { feedback: Feedback }) {
               </Tooltip>
             )}
 
+            {date && (
+              <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", ml: "auto", fontWeight: 500 }}>
+                {date.replace(",", " ·")}
+              </Typography>
+            )}
            </Box>
-        </Box>
 
-        {date && (
-          <Typography sx={{ fontSize: 11, color: "#9ca3af" }}>
-            {date}
+           {feedback.item_title && (
+             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, mb: 1 }}>
+               <Typography 
+                 sx={{ 
+                   fontSize: 11, 
+                   color: "var(--text-secondary)", 
+                   whiteSpace: "nowrap", 
+                   overflow: "hidden", 
+                   textOverflow: "ellipsis",
+                   bgcolor: "var(--bg-secondary)",
+                   px: 1,
+                   py: 0.25,
+                   borderRadius: "4px",
+                   border: "1px solid var(--border-color)",
+                   display: "inline-block"
+                 }}
+               >
+                 Acquisto: {feedback.item_title}
+               </Typography>
+             </Box>
+           )}
+
+          {/* Comment */}
+          <Typography
+            sx={{
+              fontSize: 13,
+              color: hasMismatch ? "#dc2626" : "var(--text-primary)",
+              lineHeight: 1.5,
+              fontWeight: hasMismatch ? 500 : 400,
+              mt: feedback.item_title ? 0.5 : 1,
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
+              whiteSpace: "pre-line"
+            }}
+          >
+            {feedback.comment || "Nessun commento fornito."}
           </Typography>
-        )}
+        </Box>
       </Box>
-
-      {/* Comment */}
-      <Typography
-        sx={{
-          fontSize: 13,
-          color: hasMismatch ? "#dc2626" : "#4b5563",
-          lineHeight: 1.5,
-          pl: "36px", // align with text after avatar
-          fontWeight: hasMismatch ? 500 : 400
-        }}
-      >
-        {feedback.comment || "Nessun commento disponibile"}
-      </Typography>
     </Box>
   )
+
 }

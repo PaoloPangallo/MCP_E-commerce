@@ -539,6 +539,11 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
     Fetches full details of a specific item from eBay using the getItem endpoint.
     """
     logger.info("EBAY GET ITEM START | item_id=%s", item_id)
+    
+    # Auto-fix legacy IDs for Browse API
+    if item_id.isdigit():
+        logger.info("Auto-formatting legacy item_id into REST format for Browse API: v1|%s|0", item_id)
+        item_id = f"v1|{item_id}|0"
 
     try:
         token = await _get_oauth_token()
@@ -605,6 +610,10 @@ async def get_similar_items(item_id: str, fallback_title: Optional[str] = None) 
     """
     logger.info("EBAY GET SIMILAR ITEMS START | item_id=%s", item_id)
 
+    # Auto-fix legacy IDs for Browse API
+    if item_id.isdigit():
+        item_id = f"v1|{item_id}|0"
+
     try:
         token = await _get_oauth_token()
     except Exception:
@@ -664,6 +673,10 @@ async def get_shipping_costs(item_id: str, country_code: str, zip_code: str) -> 
     Returns enriched payload with pre-computed cheapest_option, free_shipping_available
     and estimated_delivery_days for quick frontend consumption.
     """
+    # Auto-fix legacy IDs for Browse API
+    if item_id.isdigit():
+        item_id = f"v1|{item_id}|0"
+
     try:
         token = await _get_oauth_token()
     except Exception:

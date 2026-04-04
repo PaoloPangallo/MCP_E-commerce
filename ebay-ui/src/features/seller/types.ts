@@ -7,6 +7,8 @@ export interface Feedback {
   rating?: number
   date?: string
   time?: string
+  item_title?: string
+  item_id?: string
   sentiment?: number
   nlp_sentiment?: number
 }

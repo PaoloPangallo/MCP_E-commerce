@@ -30,20 +30,6 @@ function formatPrice(price?: number, currency?: string) {
   return `${formatted} ${currency ?? ""}`.trim()
 }
 
-function ScoreBar({ label, score, color }: { label: string, score: number, color: string }) {
-  const pct = Math.min(100, Math.round(score * 100))
-  return (
-    <Box sx={{ width: "100%" }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-        <Typography sx={{ fontSize: 9, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: '0.05em' }}>{label}</Typography>
-        <Typography sx={{ fontSize: 9, fontWeight: 800, color }}>{pct}%</Typography>
-      </Box>
-      <Box sx={{ height: 4, bgcolor: "var(--bg-secondary)", borderRadius: 2, overflow: "hidden", border: '1px solid var(--border-color)' }}>
-        <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: color, transition: 'width 0.8s ease' }} />
-      </Box>
-    </Box>
-  )
-}
 
 // ─── Main card ────────────────────────────────────────────────────────────────
 
@@ -111,17 +97,23 @@ export default function SearchResultCard({
     return (
       <Box
         sx={{
-          width: 260,
+          width: 280,
           flexShrink: 0,
-          borderRadius: "16px",
+          borderRadius: "20px",
           bgcolor: "var(--bg-primary)",
+          border: "1px solid",
           borderColor: isSelected ? "var(--brand-primary)" : "var(--border-color)",
-          boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 12px 24px rgba(0,0,0,0.15)" : "none",
+          boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 12px 24px rgba(0,0,0,0.12)" : "0 4px 12px rgba(0,0,0,0.03)",
+          p: 2,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
           "&:hover": {
             transform: "translateY(-4px)",
-            boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 16px 32px rgba(0,0,0,0.2)" : "0 12px 24px rgba(0,0,0,0.1)",
+            boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 16px 32px rgba(0,0,0,0.18)" : "0 12px 24px rgba(0,0,0,0.08)",
             borderColor: "var(--brand-primary)"
           },
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           cursor: "pointer",
           scrollSnapAlign: "start",
           position: "relative"
@@ -134,14 +126,14 @@ export default function SearchResultCard({
           }
         }}
       >
-        <Box sx={{ position: "relative", width: "100%", aspectRatio: "4/3", borderRadius: "10px", overflow: "hidden", bgcolor: "var(--bg-secondary)", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{ position: "relative", width: "100%", aspectRatio: "1/1", borderRadius: "12px", overflow: "hidden", bgcolor: "var(--bg-secondary)", display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)' }}>
           {!imageError && item.image_url ? (
             <Box
               component="img"
               src={item.image_url}
               alt={item.title || ""}
               onError={() => setImageError(true)}
-              sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
+              sx={{ width: "100%", height: "100%", objectFit: "contain", p: 2, mixBlendMode: 'multiply' }}
             />
           ) : (
               <Typography variant="caption" color="text.disabled">No Image</Typography>
@@ -160,7 +152,7 @@ export default function SearchResultCard({
             />
           </Box>
 
-          {/* Selection Overlay for Compact View */}
+          {/* Selection Overlay */}
           {selectable && (
              <Box 
                sx={{ 
@@ -168,7 +160,7 @@ export default function SearchResultCard({
                  top: 8, 
                  left: 8, 
                  zIndex: 20,
-                 bgcolor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.8)",
+                 bgcolor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.9)",
                  color: isSelected ? "#fff" : "var(--text-secondary)",
                  borderRadius: "50%",
                  width: 28,
@@ -176,10 +168,9 @@ export default function SearchResultCard({
                  display: "flex",
                  alignItems: "center",
                  justifyContent: "center",
-                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                 boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
                  border: `2px solid ${isSelected ? "#fff" : "transparent"}`,
                  transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-                 "&:hover": { transform: "scale(1.1)" }
                }}
                onClick={(e) => {
                  e.stopPropagation();
@@ -190,7 +181,6 @@ export default function SearchResultCard({
              </Box>
           )}
 
-          {/* Restored Dropdown Menu */}
           <IconButton
             size="small"
             onClick={handleMenuClick}
@@ -247,107 +237,121 @@ export default function SearchResultCard({
             </MenuItem>
           </Menu>
 
-
           {!selectable && index < 2 && rankingPct && rankingPct > 0.6 && (
             <Chip
-              label="PICK"
+              label="BEST CHOICE"
               size="small"
               sx={{
                 position: "absolute",
-                top: 8,
+                bottom: 8,
                 left: 8,
                 bgcolor: "var(--brand-primary)",
                 color: "#ffffff",
-                fontWeight: 800,
-                fontSize: 9,
-                height: 18
+                fontWeight: 900,
+                fontSize: 8,
+                height: 18,
+                letterSpacing: '0.05em'
               }}
             />
           )}
         </Box>
 
-        <Typography
-          sx={{
-            fontSize: 13.5,
-            fontWeight: 700,
-            color: "var(--text-primary)",
-            lineHeight: 1.3,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            minHeight: "2.6em"
-          }}
-        >
-          {item.title}
-        </Typography>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography sx={{ fontSize: 17, fontWeight: 800, color: "var(--text-primary)" }}>
-            {formatPrice(item.price, item.currency)}
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+          <Typography
+            sx={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "var(--text-primary)",
+              lineHeight: 1.3,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              minHeight: "2.6em",
+              letterSpacing: '-0.01em'
+            }}
+          >
+            {item.title}
           </Typography>
-          {item.condition && (
-             <Typography sx={{ fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", textTransform: 'uppercase', opacity: 0.8 }}>
-               · {item.condition}
-             </Typography>
-          )}
+
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            <Typography sx={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
+              {formatPrice(item.price, item.currency)}
+            </Typography>
+            {item.condition && (
+               <Typography sx={{ fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                 · {item.condition}
+               </Typography>
+            )}
+          </Box>
         </Box>
 
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25, my: 0.5 }}>
-          <ScoreBar label="Match" score={rankingPct || 0} color="var(--brand-primary)" />
-          <ScoreBar label="Valore" score={valuePct} color="var(--success)" />
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Box sx={{ width: "100%" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+              <Typography sx={{ fontSize: 9, fontWeight: 800, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: '0.05em' }}>Affinità</Typography>
+              <Typography sx={{ fontSize: 9, fontWeight: 900, color: "var(--brand-primary)" }}>{Math.round((rankingPct || 0) * 100)}%</Typography>
+            </Box>
+            <Box sx={{ height: 2, bgcolor: "var(--bg-secondary)", borderRadius: 1, overflow: "hidden" }}>
+              <Box sx={{ width: `${Math.round((rankingPct || 0) * 100)}%`, height: "100%", bgcolor: "var(--brand-primary)" }} />
+            </Box>
+          </Box>
+          
+          <Box sx={{ width: "100%" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+              <Typography sx={{ fontSize: 9, fontWeight: 800, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: '0.05em' }}>Valore</Typography>
+              <Typography sx={{ fontSize: 9, fontWeight: 900, color: "var(--success)" }}>{Math.round(valuePct * 100)}%</Typography>
+            </Box>
+            <Box sx={{ height: 2, bgcolor: "var(--bg-secondary)", borderRadius: 1, overflow: "hidden" }}>
+              <Box sx={{ width: `${Math.round(valuePct * 100)}%`, height: "100%", bgcolor: "var(--success)" }} />
+            </Box>
+          </Box>
         </Box>
 
         {item.shipping && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 'auto', p: 1, borderRadius: "24px", bgcolor: "var(--bg-secondary)", border: '1px solid var(--border-color)' }}>
-            <LocalShippingIcon sx={{ fontSize: 14, color: "var(--text-secondary)" }} />
-            <Typography sx={{ fontSize: 10, fontWeight: 700, color: item.shipping.free ? "var(--success)" : "var(--text-primary)" }}>
-              {item.shipping.free ? "CONSEGNA GRATIS" : `SPED. ${formatPrice(item.shipping.cost, item.shipping.currency || '€')}`}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
+            <LocalShippingIcon sx={{ fontSize: 14, color: "var(--text-secondary)", opacity: 0.6 }} />
+            <Typography sx={{ fontSize: 10, fontWeight: 700, color: item.shipping.free ? "var(--success)" : "var(--text-primary)", letterSpacing: '0.02em' }}>
+              {item.shipping.free ? "CONSEGNA GRATUITA" : `SPEDIZIONE: ${formatPrice(item.shipping.cost, item.shipping.currency || '€')}`}
             </Typography>
           </Box>
         )}
 
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, mt: 0.5 }}>
-          {item.url && (
-            <Button
-              fullWidth
-              variant="contained"
-              disableElevation
-              href={item.url}
-              target="_blank"
-              rel="noreferrer"
-              startIcon={<ShoppingCartIcon sx={{ fontSize: 14 }} />}
-              sx={{
-                textTransform: "none",
-                borderRadius: "24px",
-                fontSize: 12,
-                fontWeight: 700,
-                bgcolor: "#0064d2",
-                color: "#fff",
-                py: 0.85,
-                "&:hover": { bgcolor: "#0053b3" }
-              }}
-            >
-              Acquista su eBay
-            </Button>
-          )}
+        <Box sx={{ display: "flex", gap: 1, mt: "auto", pt: 1 }}>
           <Button
             fullWidth
-            variant="outlined"
+            component="a"
+            variant="contained"
+            disableElevation
+            href={item.url || "#"}
+            target="_blank"
+            rel="noreferrer"
             sx={{
               textTransform: "none",
-              borderRadius: "24px",
+              borderRadius: "10px",
               fontSize: 12,
-              fontWeight: 600,
-              borderColor: "var(--border-color)",
-              color: "var(--text-secondary)",
-              py: 0.75,
-              "&:hover": { borderColor: "var(--brand-primary)", color: "var(--brand-primary)", bgcolor: 'transparent' }
+              fontWeight: 800,
+              bgcolor: "var(--brand-primary)",
+              color: "#fff",
+              py: 1,
+              "& .MuiButton-root": { color: "#fff" },
+              "&:hover": { bgcolor: "var(--brand-primary)", opacity: 0.9 }
+            }}
+          >
+            Acquista
+          </Button>
+          <IconButton 
+            size="small"
+            sx={{ 
+                borderRadius: "10px", 
+                border: "1px solid var(--border-color)",
+                color: "var(--text-secondary)",
+                px: 1.5
             }}
             onClick={() => item.url && window.open(item.url, '_blank')}
           >
-            Dettagli <OpenInNewIcon sx={{ fontSize: 12, ml: 0.5 }} />
-          </Button>
+            <OpenInNewIcon sx={{ fontSize: 16 }} />
+          </IconButton>
         </Box>
       </Box>
     )

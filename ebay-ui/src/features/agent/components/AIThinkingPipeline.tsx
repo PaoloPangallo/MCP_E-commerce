@@ -22,6 +22,17 @@ const pulse = keyframes`
   100% { transform: scale(0.95); opacity: 0.5; }
 `
 
+const borderFlow = keyframes`
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 100%; }
+`
+
+const typeWriter = keyframes`
+  0% { opacity: 0.3; transform: translateX(-2px); }
+  50% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0.3; transform: translateX(2px); }
+`
+
 interface Props {
   agentTrace?: AgentStep[]
   loading?: boolean
@@ -29,7 +40,7 @@ interface Props {
   plannedTasks?: PlannedTask[]
 }
 
-function humanizeToolName(action?: string, input?: any) {
+export function humanizeToolName(action?: string, input?: any) {
   const val = (action || "").toLowerCase()
   const q = input?.query || input?.product || ""
   const seller = input?.seller_name || ""
@@ -144,16 +155,28 @@ function StepRow({
             sx={{ 
               width: "2px", 
               flex: 1, 
-              background: isDone ? "linear-gradient(to bottom, #10b981, rgba(255,255,255,0.05))" : "rgba(255,255,255,0.05)", 
+              background: isRunning 
+                ? "linear-gradient(180deg, #3b82f6 0%, rgba(59, 130, 246, 0.1) 50%, #3b82f6 100%)" 
+                : isDone 
+                  ? "linear-gradient(to bottom, #10b981, rgba(255,255,255,0.05))" 
+                  : "rgba(255,255,255,0.05)",
+              backgroundSize: "100% 200%",
+              animation: isRunning ? `${borderFlow} 1.5s linear infinite` : "none",
               mt: 0.5,
-              opacity: 0.4 
+              opacity: isRunning ? 0.8 : 0.4 
             }} 
           />
         )}
       </Box>
 
       {/* Content */}
-      <Box sx={{ pb: isLast ? 0 : 2.5, minWidth: 0, flex: 1 }}>
+      <Box sx={{ pb: isLast ? 0 : 2.5, minWidth: 0, flex: 1, 
+         animation: isRunning ? "slideIn 0.3s ease-out forwards" : "none",
+         "@keyframes slideIn": {
+           "0%": { opacity: 0, transform: "translateX(-10px)" },
+           "100%": { opacity: 1, transform: "translateX(0)" }
+         }
+      }}>
         {/* Action label */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
           <Box 
@@ -252,11 +275,14 @@ function StepRow({
           <Typography 
             sx={{ 
               fontSize: 12, 
-              color: "var(--text-secondary)", 
+              color: isRunning ? "#60a5fa" : "var(--text-secondary)", 
               lineHeight: 1.6, 
               my: 0.75,
-              pl: 1,
-              borderLeft: '2px solid rgba(255,255,255,0.05)'
+              pl: 1.5,
+              borderLeft: isRunning ? '2px solid #3b82f6' : '2px solid rgba(255,255,255,0.05)',
+              animation: isRunning ? `${typeWriter} 2s ease-in-out infinite` : "none",
+              position: 'relative',
+              fontWeight: isRunning ? 500 : 400
             }}
           >
             {step.thought}

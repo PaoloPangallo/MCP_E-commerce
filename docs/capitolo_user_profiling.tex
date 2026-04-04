@@ -1,0 +1,552 @@
+% =============================================================
+% Capitolo: User Profiling
+% Progetto: MCP_ECOM — Agente e-commerce basato su MCP
+% =============================================================
+
+\chapter{User Profiling}
+\label{chap:user-profiling}
+
+% ─────────────────────────────────────────────────────────────
+\section{Introduzione}
+\label{sec:profiling-intro}
+% ─────────────────────────────────────────────────────────────
+
+Il sistema di user profiling in MCP\_ECOM ha l'obiettivo di rendere
+l'agente \emph{progressivamente più personale} ad ogni interazione,
+senza richiedere configurazioni esplicite da parte dell'utente. Il
+principio guida è la \textbf{coesistenza}: le preferenze apprese
+automaticamente non sovrascrivono mai le impostazioni scelte
+consapevolmente dall'utente, ma le arricchiscono.
+
+Il profilo si articola su due assi ortogonali:
+
+\begin{description}
+    \item[Preferenze esplicite] Impostate dall'utente tramite il tool MCP
+        \texttt{update\_user\_preferences}: brand favoriti, fascia di
+        prezzo, istruzioni personalizzate, tono conversazionale, tema UI.
+
+    \item[Preferenze auto-apprese] Derivate automaticamente dalle
+        interazioni di ricerca: affinità di categoria, budget contestuale,
+        condizione preferita (nuovo / usato / ricondizionato), profilo
+        comportamentale.
+\end{description}
+
+Tutto il profilo viene persistito su \textbf{PostgreSQL}, sincronizzato
+nella \textbf{memoria a lungo termine} Redis ad ogni richiesta, ed esposto
+all'agente tramite una \textbf{risorsa MCP} dedicata.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Schema del Profilo Utente}
+\label{sec:profiling-schema}
+% ─────────────────────────────────────────────────────────────
+
+Il modello SQLAlchemy \texttt{User} (\texttt{app/models/user.py})
+definisce due gruppi di colonne distinti.
+
+\subsection{Preferenze Esplicite}
+\label{subsec:explicit-prefs}
+
+\begin{lstlisting}[language=Python,caption={Colonne di preferenza esplicita nel modello User (app/models/user.py)},label=lst:user-model-explicit]
+favorite_brands     = Column(String(255), nullable=True)
+price_preference    = Column(String(50),  nullable=True)
+custom_instructions = Column(String(1000),nullable=True)
+conversation_tone   = Column(String(50),  default="neutral")
+theme               = Column(String(20),  default="light")
+\end{lstlisting}
+
+\subsection{Campi Auto-Appresi (Retrocompatibili)}
+\label{subsec:auto-learned-cols}
+
+I quattro campi di apprendimento automatico sono stati aggiunti in una
+fase successiva del progetto e sono dichiarati con \texttt{nullable=True}
+e \texttt{server\_default=None}, garantendo piena retrocompatibilità con
+gli utenti pre-esistenti:
+
+\begin{lstlisting}[language=Python,caption={Colonne auto-apprese nel modello User (app/models/user.py)},label=lst:user-model-auto]
+# JSON: {"Cellulari & smartphone": 12, "Scarpe": 5}
+category_affinities = Column(String(2000), nullable=True,
+                              server_default=None)
+
+# Formato counter: "new:5,used:2" oppure valore piatto legacy "new"
+condition_preference = Column(String(20), nullable=True,
+                               server_default=None)
+
+# Tier: "browser" | "researcher" | "power_buyer"
+interaction_depth   = Column(String(20), nullable=True,
+                              server_default=None)
+
+# JSON: {"auto_cat:scarpe": 150.0, "auto_brand:nike": 200.0}
+contextual_budgets  = Column(String(2000), nullable=True)
+\end{lstlisting}
+
+La scelta di serializzare strutture complesse come stringhe JSON all'interno
+di colonne \texttt{VARCHAR} — anziché usare colonne \texttt{JSONB} di
+PostgreSQL — è stata adottata per massimizzare la portabilità verso
+qualunque backend SQL.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Pipeline di Auto-Apprendimento}
+\label{sec:auto-learning}
+% ─────────────────────────────────────────────────────────────
+
+Il punto di ingresso del sistema di apprendimento è la funzione
+\texttt{update\_user\_profile()} (\texttt{app/services/user\_profiling.py}),
+chiamata dalla search pipeline al termine di ogni ricerca andata a buon
+fine. La funzione è \textbf{non-committing}: modifica l'oggetto ORM ma
+lascia al chiamante la responsabilità del \texttt{db.commit()}, evitando
+conflitti di transazione.
+
+\begin{lstlisting}[language=Python,caption={Chiamata a update\_user\_profile() dalla search pipeline (app/services/search\_pipeline.py)},label=lst:auto-learn-trigger]
+changed = update_user_profile(
+    user=user,
+    parsed=parsed,                   # Output del parser semantico
+    db=db,
+    dominant_category_name=_dominant_cat_name,
+    items=items[:10],
+    action="search"
+)
+if changed:
+    db.commit()
+\end{lstlisting}
+
+La funzione orchestra cinque sotto-aggiornamenti indipendenti, ciascuno
+isolato in un blocco \texttt{try/except} per garantire che il fallimento
+di uno non comprometta gli altri.
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.88\linewidth}{\centering\vspace{2.2cm}
+        \textit{[Diagramma: query utente → parser → search pipeline →
+        update\_user\_profile() → 5 sotto-funzioni → PostgreSQL commit]}\\
+        \vspace{2.2cm}}}
+    \caption{Pipeline di auto-apprendimento del profilo utente.}
+    \label{fig:profiling-pipeline}
+\end{figure}
+
+\subsection{Brand Preference}
+\label{subsec:brand-learning}
+
+I brand vengono appresi esclusivamente dai brand \emph{validati} dal
+parser semantico (campo \texttt{parsed["brands"]}), non da estrazioni
+euristiche sul testo grezzo. I nuovi brand vengono preposti alla lista
+esistente (LIFO), con deduplicazione case-insensitive e cap a 10 elementi:
+
+\begin{lstlisting}[language=Python,caption={Aggiornamento brand preference (app/services/user\_profiling.py)},label=lst:brand-update]
+# Prepend nuovi brand, deduplica, cap a 10
+merged = brands + [b for b in current_list
+                   if b.lower() not in {nb.lower() for nb in brands}]
+user.favorite_brands = ",".join(merged[:10])
+\end{lstlisting}
+
+Le scelte manuali dell'utente vengono sempre preservate: il meccanismo
+\emph{aggiunge} nuovi brand in testa, ma non ne rimuove mai di esistenti.
+
+\subsection{Global Price Preference — EMA}
+\label{subsec:price-ema}
+
+La fascia di prezzo globale viene aggiornata tramite una
+\textbf{Exponential Moving Average} (EMA) con fattore di apprendimento
+$\alpha = 0.20$:
+
+\begin{equation}
+    p_{\text{new}} = \lfloor p_{\text{old}} \times 0.80 + p_{\text{signal}} \times 0.20 \rfloor
+    \label{eq:ema-price}
+\end{equation}
+
+Questo meccanismo smussante evita che un singolo acquisto anomalo (es.
+una ricerca spot per un prodotto di lusso) distorca eccessivamente il
+profilo di budget abituale.
+
+\subsection{Category Affinities}
+\label{subsec:category-affinities}
+
+Ogni ricerca incrementa il contatore della categoria dominante
+(derivata dai risultati eBay). Le affinità sono memorizzate come
+dizionario JSON ordinato per conteggio decrescente, con cap a 20
+categorie:
+
+\begin{lstlisting}[language=Python,caption={Aggiornamento category affinities (app/services/user\_profiling.py)},label=lst:cat-affinities]
+affinities[cat] = int(affinities.get(cat, 0)) + 1
+
+# Mantieni solo le top 20 categorie
+sorted_cats = sorted(affinities.items(),
+                     key=lambda x: x[1], reverse=True)
+affinities = dict(sorted_cats[:20])
+
+user.category_affinities = json.dumps(affinities)
+# Esempio: {"Cellulari & smartphone": 12, "Scarpe": 5, "Laptop": 3}
+\end{lstlisting}
+
+\subsection{Contextual Budgets}
+\label{subsec:contextual-budgets}
+
+Questo è il meccanismo più granulare: viene mantenuto un budget EMA
+separato per categoria e per brand, usando chiavi con prefisso
+\texttt{auto\_} per distinguerle dalle voci manuali (che non vengono
+mai sovrascritte):
+
+\begin{lstlisting}[language=Python,caption={Aggiornamento contextual budgets con prefisso auto\_ (app/services/user\_profiling.py)},label=lst:contextual-budgets]
+# Budget per categoria
+cat_key = f"auto_cat:{dominant_category_name.lower()}"
+if cat_key in budgets:
+    # EMA: 80% vecchio + 20% nuovo segnale
+    budgets[cat_key] = round(old * 0.80 + price_signal * 0.20, 2)
+else:
+    budgets[cat_key] = round(price_signal, 2)
+
+# Budget per brand
+brand_key = f"auto_brand:{brand.lower()}"
+# ... stesso aggiornamento EMA ...
+
+# Risultato in DB:
+# {"auto_cat:scarpe": 175.0, "auto_brand:nike": 200.0,
+#  "manual_premium_brands": 500.0}  <- voci manuali intatte
+\end{lstlisting}
+
+\subsection{Condition Preference — Majority Counter}
+\label{subsec:condition-counter}
+
+La condizione preferita (nuovo / usato / ricondizionato) viene determinata
+tramite un \textbf{contatore a maggioranza}: si commette una preferenza
+solo dopo almeno 3 segnali, di cui il candidato dominante deve
+rappresentare oltre il 50\% del totale:
+
+\begin{lstlisting}[language=Python,caption={Logica majority counter per condition preference (app/services/user\_profiling.py)},label=lst:condition-counter]
+# Formato storage: "new:5,used:2"
+counter[condition] = counter.get(condition, 0) + 1
+total = sum(counter.values())
+
+# Soglia: >= 3 segnali, share > 50%
+if total >= 3:
+    top = max(counter, key=lambda k: counter[k])
+    if counter[top] / total >= 0.5:
+        dominant = top   # <- preferenza confermata
+
+user.condition_preference = ",".join(f"{k}:{v}"
+                                      for k, v in sorted(counter.items()))
+\end{lstlisting}
+
+Il formato counter viene anche usato per l'override manuale: impostare
+\texttt{"new:99"} tramite il tool MCP forza la dominanza di
+\emph{nuovo} indipendentemente dai segnali precedenti.
+
+\subsection{Interaction Depth — State Machine}
+\label{subsec:interaction-depth}
+
+Il profilo comportamentale dell'utente avanza attraverso tre tier con
+una state machine deterministica. Il tier viene alzato in base
+all'azione eseguita:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{llll}
+\hline
+\textbf{Tier corrente} & \textbf{Azione} & \textbf{Nuovo tier}
+    & \textbf{Score azione} \\
+\hline
+\texttt{browser}    & \texttt{detail / compare / seller} & \texttt{researcher}   & 3 / 3 / 2 \\
+\texttt{browser}    & \texttt{contact}                   & \texttt{power\_buyer} & 5 \\
+\texttt{researcher} & \texttt{contact}                   & \texttt{power\_buyer} & 5 \\
+qualsiasi           & \texttt{search}                    & invariato             & 1 \\
+\hline
+\end{tabular}
+\caption{State machine dell'interaction depth.}
+\label{tab:interaction-depth}
+\end{table}
+
+I tre tier hanno un significato semantico preciso che l'agente usa
+nella fase di final answer:
+
+\begin{description}
+    \item[\texttt{browser}] Utente che esplora, prevalentemente ricerche.
+    \item[\texttt{researcher}] Utente approfondito: analizza venditori,
+        legge specifiche tecniche, confronta modelli.
+    \item[\texttt{power\_buyer}] Acquirente esperto: contatta venditori,
+        tratta prezzi, ha un'alta frequenza di interazione.
+\end{description}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Gestione Manuale delle Preferenze}
+\label{sec:manual-prefs}
+% ─────────────────────────────────────────────────────────────
+
+L'utente può aggiornare esplicitamente qualunque campo del profilo
+tramite il tool MCP \texttt{update\_user\_preferences}
+(\texttt{app/mcp/tools/profile.py}). Il tool accetta i seguenti
+parametri opzionali:
+
+\begin{center}
+\begin{tabular}{lp{8cm}}
+\hline
+\textbf{Parametro} & \textbf{Effetto} \\
+\hline
+\texttt{favorite\_brands}           & Sovrascrive i brand preferiti \\
+\texttt{price\_preference}          & Imposta il budget di riferimento \\
+\texttt{custom\_instructions}       & Regole di sistema personalizzate \\
+\texttt{conversation\_tone}         & Stile conversazionale dell'agente \\
+\texttt{theme}                      & Tema UI (\texttt{light} / \texttt{dark}) \\
+\texttt{condition\_preference}      & Override condizione con \texttt{"value:99"} \\
+\texttt{reset\_category\_affinities} & Cancella le affinità apprese \\
+\hline
+\end{tabular}
+\end{center}
+
+Dopo ogni aggiornamento manuale, il tool notifica il frontend via
+\texttt{notify\_resource\_updated("profile://\{user\_id\}")} in modo
+che l'interfaccia rifletta immediatamente il nuovo stato.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Esposizione del Profilo all'Agente}
+\label{sec:profile-exposure}
+% ─────────────────────────────────────────────────────────────
+
+Il profilo raggiunge l'LLM attraverso due canali distinti che si
+completano a vicenda.
+
+\subsection{Canale 1 — Risorsa MCP \texttt{profile://}}
+\label{subsec:mcp-resource-channel}
+
+Il profilo viene servito come risorsa MCP dall'endpoint
+\texttt{profile://\{session\_id\}} (\texttt{app/mcp/resources.py}).
+La risorsa costruisce il JSON di risposta fondendo i campi espliciti
+con quelli auto-appresi elaborati da \texttt{build\_profile\_context()}:
+
+\begin{lstlisting}[language=Python,caption={Endpoint risorsa MCP profile (app/mcp/resources.py)},label=lst:mcp-resource]
+@mcp.resource("profile://{session_id}")
+async def get_user_profile(session_id: str) -> str:
+    profile_data = {
+        "user_id": user.id,
+        "favorite_brands": user.favorite_brands,
+        "price_preference": user.price_preference,
+        "conversation_tone": user.conversation_tone,
+        "language": user.language,
+        ...
+    }
+    # Arricchisce con i campi auto-appresi
+    profile_ctx = build_profile_context(user)
+    profile_data["condition_preference"] = profile_ctx["condition_preference"]
+    profile_data["interaction_depth"]    = profile_ctx["interaction_depth"]
+    profile_data["category_affinities"]  = profile_ctx["category_affinities"]
+    profile_data["contextual_budgets"]   = profile_ctx["contextual_budgets"]
+    return _safe_json({"status": "ok", "profile": profile_data})
+\end{lstlisting}
+
+La funzione \texttt{build\_profile\_context()} effettua due
+post-elaborazioni rilevanti prima di esporre il dato:
+
+\begin{itemize}
+    \item \textbf{Category affinities}: restituisce solo le top~3 categorie
+        ordinate per conteggio, per non sovraccaricare il prompt.
+    \item \textbf{Contextual budgets}: rimuove il prefisso \texttt{auto\_}
+        dalle chiavi, rende il JSON leggibile dall'LLM e mantiene
+        separate le voci manuali.
+\end{itemize}
+
+\subsection{Canale 2 — Iniezione nelle Custom Instructions}
+\label{subsec:injection-channel}
+
+All'avvio di ogni sessione, l'agente (\texttt{app/agent/ebay\_agent.py})
+recupera la risorsa MCP e ne traduce i campi principali in istruzioni
+testuali, aggiungendole alle \texttt{custom\_instructions} dell'utente
+con il tag \texttt{[MCP PROFILE]}:
+
+\begin{lstlisting}[language=Python,caption={Fetch e iniezione del profilo MCP nell'agente (app/agent/ebay\_agent.py)},label=lst:agent-profile-inject]
+raw_profile = await self.mcp_client.read_resource_async(
+    f"profile://{user_id}"
+)
+prof_data = json.loads(raw_profile).get("profile", {})
+
+addons = []
+if prof_data.get("language"):
+    addons.append(
+        f"Rispondi sempre all'utente nella lingua "
+        f"'{prof_data['language']}'"
+    )
+if prof_data.get("favorite_brands"):
+    addons.append(
+        f"L'utente preferisce questi brand: {prof_data['favorite_brands']}"
+    )
+if prof_data.get("price_preference"):
+    addons.append(
+        f"Note sul budget dell'utente: {prof_data['price_preference']}"
+    )
+
+extra = " ".join(addons)
+# Aggiunge al custom_instructions esistente
+setattr(self.user, "custom_instructions",
+        current + " | [MCP PROFILE] " + extra)
+\end{lstlisting}
+
+Oltre al profilo utente, l'agente recupera anche il prompt MCP
+\texttt{shopping\_expert\_prompt} e lo prepone alle custom instructions,
+fornendo all'LLM l'identità base di \emph{assistente e-commerce
+professionale} prima ancora delle preferenze dell'utente.
+
+\subsection{Canale 3 — Long-Term Memory nello Scratchpad}
+\label{subsec:ltm-channel}
+
+La memoria a lungo termine (\texttt{app/agent/memory.py}) sincronizza
+i campi del profilo DB nella struttura \texttt{long\_term\_memory}
+dello scratchpad all'inizio di ogni richiesta. Questo terzo canale
+è quello consumato dalla funzione \texttt{build\_final\_answer\_prompt()}
+per personalizzare la risposta finale:
+
+\begin{lstlisting}[language=Python,caption={Struttura long\_term\_memory nello scratchpad},label=lst:ltm-structure]
+long_term_memory = {
+    "user_preferences": {
+        "db_favorite_brands":      "Nike,Adidas",
+        "db_price_preference":     "175",
+        "db_condition_preference": "new",      # dominant se >= 3 segnali
+        "db_interaction_depth":    "researcher",
+        "validated_brands":        ["Nike"],   # parser-validated (sessione)
+        "category_history":        ["Scarpe", "Abbigliamento"],
+        "favorite_sellers":        ["monclick"],
+        "recent_brand_hints":      ["Nike"]    # legacy token hints
+    },
+    "user_behaviour": {
+        "search_count": 12,
+        "interaction_counts": {
+            "search": 10, "detail": 2,
+            "compare": 1, "seller": 1, "contact": 0
+        }
+    },
+    "previous_searches": ["nike air max", "scarpe running"]
+}
+\end{lstlisting}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Wishlist e Tracking dei Prezzi}
+\label{sec:wishlist}
+% ─────────────────────────────────────────────────────────────
+
+Il sistema di wishlist (\texttt{app/models/wishlist.py},
+\texttt{app/mcp/tools/wishlist\_tool.py}) è strettamente integrato con
+il profilo utente: consente di salvare prodotti eBay di interesse e di
+ricevere notifiche di variazione del prezzo.
+
+\begin{lstlisting}[language=Python,caption={Campi principali del modello WishlistItem},label=lst:wishlist-model]
+id, user_id (FK -> users.id),
+ebay_id, title, price, previous_price,   # price tracking
+currency, condition, image_url, url,
+seller_name,
+added_at, last_checked_at
+\end{lstlisting}
+
+Il campo \texttt{previous\_price} permette di rilevare riduzioni di
+prezzo tra un controllo e il successivo. Il tool MCP
+\texttt{manage\_wishlist} supporta le operazioni \texttt{add},
+\texttt{remove} e \texttt{list}, con sincronizzazione asincrona in
+background verso la Watchlist ufficiale di eBay.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Flusso Dati Complessivo}
+\label{sec:profiling-dataflow}
+% ─────────────────────────────────────────────────────────────
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.9\linewidth}{\centering\vspace{3cm}
+        \textit{[Diagramma: query → parser → search pipeline →
+        update\_user\_profile() → PostgreSQL →
+        hydrate\_request\_state() → Redis (LTM) →
+        MCP resource fetch → custom\_instructions →
+        planner + final answer]}\\
+        \vspace{3cm}}}
+    \caption{Flusso dati del sistema di user profiling.}
+    \label{fig:profiling-dataflow}
+\end{figure}
+
+Il profilo percorre il seguente ciclo ad ogni richiesta:
+
+\begin{enumerate}
+    \item \textbf{Apprendimento} (fine ricerca): \texttt{update\_user\_profile()}
+        aggiorna i campi ORM e il chiamante esegue \texttt{db.commit()}.
+
+    \item \textbf{Idratazione} (inizio richiesta successiva):
+        \texttt{hydrate\_request\_state()} sincronizza i campi DB nella
+        struttura \texttt{long\_term\_memory} in Redis (TTL 30 giorni).
+
+    \item \textbf{Fetch MCP} (avvio sessione agente): l'agente legge
+        \texttt{profile://\{user\_id\}}, costruisce le istruzioni
+        personalizzate e le inietta come prefisso nelle
+        \texttt{custom\_instructions}.
+
+    \item \textbf{Planning personalizzato}: il planner riceve le
+        \texttt{custom\_instructions} arricchite e le usa come strato
+        a priorità massima nel prompt.
+
+    \item \textbf{Final answer personalizzata}: \texttt{build\_final\_answer\_prompt()}
+        legge la \texttt{long\_term\_memory} e inietta nel prompt
+        brand, budget, condizione, categorie, profilo comportamentale
+        e ricerche precedenti.
+\end{enumerate}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Riepilogo dei Meccanismi}
+\label{sec:profiling-summary}
+% ─────────────────────────────────────────────────────────────
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{p{3.2cm} p{2.5cm} p{3cm} p{4cm}}
+\hline
+\textbf{Campo} & \textbf{Tipo} & \textbf{Algoritmo} & \textbf{Note} \\
+\hline
+\texttt{favorite\_brands}
+    & Esplicito + Auto
+    & Prepend + dedup (cap 10)
+    & Solo brand validati dal parser \\
+\hline
+\texttt{price\_preference}
+    & Esplicito + Auto
+    & EMA $\alpha=0.20$
+    & Budget globale smussato \\
+\hline
+\texttt{category\_affinities}
+    & Auto
+    & Hit counter (cap 20)
+    & Top 3 esposte al prompt \\
+\hline
+\texttt{contextual\_budgets}
+    & Esplicito + Auto
+    & EMA per chiave (prefisso \texttt{auto\_})
+    & Manuale e auto coesistono \\
+\hline
+\texttt{condition\_preference}
+    & Esplicito + Auto
+    & Majority counter
+    & Commit dopo $\geq3$ segnali, $>50\%$ \\
+\hline
+\texttt{interaction\_depth}
+    & Auto
+    & State machine (3 tier)
+    & browser → researcher → power\_buyer \\
+\hline
+\texttt{custom\_instructions}
+    & Esplicito
+    & Concatenazione
+    & Priorità assoluta nel prompt \\
+\hline
+\texttt{conversation\_tone}
+    & Esplicito
+    & Lookup table
+    & Iniettato nel final answer \\
+\hline
+\end{tabular}
+\caption{Riepilogo dei meccanismi di aggiornamento del profilo utente.}
+\label{tab:profiling-mechanisms}
+\end{table}
+
+Il sistema garantisce tre proprietà architetturali fondamentali:
+\textbf{retrocompatibilità} (colonne nullable, degradazione graceful),
+\textbf{coesistenza} (chiave \texttt{auto\_} per non sovrascrivere le
+scelte manuali) e \textbf{isolamento transazionale} (nessun commit
+dentro \texttt{update\_user\_profile()}, delegato al chiamante).

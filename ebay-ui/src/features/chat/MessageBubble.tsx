@@ -275,9 +275,16 @@ export default function MessageBubble({
                       />
                     ),
                     td: ({ node, children, ...props }) => {
-                      const text = String(children || "");
+                      const extractText = (nodes: React.ReactNode): string => {
+                        if (typeof nodes === "string" || typeof nodes === "number") return String(nodes);
+                        if (Array.isArray(nodes)) return nodes.map(extractText).join("");
+                        if (React.isValidElement(nodes) && (nodes.props as any).children) return extractText((nodes.props as any).children);
+                        return "";
+                      };
+                      
+                      const text = extractText(children);
                       const isTrust = text.includes("%") && /\d+/.test(text.trim());
-                      const isPrice = text.includes("€") || text.includes("$") || (text.includes(",") && /\d/.test(text));
+                      const isPrice = (text.includes("€") || text.includes("$") || (text.includes(",") && /\d/.test(text))) && text.length < 20;
                       const isCondition = text.toLowerCase().includes("nuovo") || text.toLowerCase().includes("usato");
                       const isLink = React.Children.toArray(children).some(child => 
                         typeof child === 'object' && child !== null && 'type' in child && child.type === 'a'
@@ -302,7 +309,7 @@ export default function MessageBubble({
                       } else if (isPrice && !isLink) {
                         renderedContent = (
                           <Box sx={{ fontWeight: 700, color: "var(--text-primary)", fontSize: "0.9375rem" }}>
-                            {text}
+                            {children}
                           </Box>
                         );
                       } else if (isCondition && !isLink) {
@@ -315,7 +322,7 @@ export default function MessageBubble({
                             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em',
                             border: `1px solid var(--border-color)`
                           }}>
-                            {text}
+                            {children}
                           </Box>
                         );
                       }

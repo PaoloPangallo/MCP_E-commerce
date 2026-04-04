@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 async def analyze_seller(
     seller_name: Annotated[str, Field(description="Nome o username del venditore su eBay (es. 'shopping_ita')")],
     page: Annotated[int, Field(description="Numero di pagina per la paginazione dei feedback")] = 1,
-    limit: Annotated[int, Field(description="Numero di feedback da analizzare (max 40)")] = 10,
+    limit: Annotated[int, Field(description="Numero di feedback da analizzare (default 100, max 300) per sentiment e trust")] = 100,
     session_id: Annotated[str, Field(description="ID di sessione")] = ""
 ) -> Dict[str, Any]:
     try:

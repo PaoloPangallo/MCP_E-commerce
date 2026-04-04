@@ -97,6 +97,8 @@ def _parse_feedback_page(xml_text: str) -> List[Dict]:
                 "rating": numeric_rating,
                 "comment": _safe_find_text(fb, "e:CommentText", ""),
                 "time": _safe_find_text(fb, "e:CommentTime", ""),
+                "item_title": _safe_find_text(fb, "e:ItemTitle", ""),
+                "item_id": _safe_find_text(fb, "e:ItemID", ""),
             }
         )
 

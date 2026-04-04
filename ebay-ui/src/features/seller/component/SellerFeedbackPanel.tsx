@@ -119,17 +119,17 @@ export default function SellerFeedbackPanel({ seller }: Props) {
         }}
       >
         {loading ? (
-          <CircularProgress size={12} sx={{ color: "#9ca3af" }} />
+          <CircularProgress size={12} sx={{ color: "var(--text-secondary)" }} />
         ) : (
           <>
             <Typography
               sx={{
                 fontSize: 12,
-                color: "#6b7280",
+                color: "var(--text-secondary)",
                 textDecoration: "underline",
-                textDecorationColor: "#e5e7eb",
+                textDecorationColor: "var(--border-color)",
                 textUnderlineOffset: "3px",
-                "&:hover": { color: "#374151" }
+                "&:hover": { color: "var(--text-primary)" }
               }}
             >
               {open ? "Nascondi analisi" : "Analisi venditore"}
@@ -137,7 +137,7 @@ export default function SellerFeedbackPanel({ seller }: Props) {
             <KeyboardArrowDownIcon
               sx={{
                 fontSize: 14,
-                color: "#9ca3af",
+                color: "var(--text-secondary)",
                 transform: open ? "rotate(180deg)" : "none",
                 transition: "transform 0.2s"
               }}
@@ -157,12 +157,13 @@ export default function SellerFeedbackPanel({ seller }: Props) {
           sx={{
             mt: 1.25,
             p: 1.75,
-            border: "1px solid #f0f0f0",
+            border: "1px solid var(--border-color)",
             borderRadius: 3,
-            bgcolor: "#fafafa",
+            bgcolor: "var(--bg-primary)",
             display: "flex",
             flexDirection: "column",
-            gap: 1.5
+            gap: 1.5,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.03)"
           }}
         >
           {/* Trust gauge */}
@@ -173,57 +174,71 @@ export default function SellerFeedbackPanel({ seller }: Props) {
           )}
 
           {/* Sentiment + counts */}
-          <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-end" }}>
             {sentiment !== null && (
               <Box>
-                <Typography sx={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <Typography sx={{ fontSize: 10, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.5 }}>
                   Sentiment
                 </Typography>
-                <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>
-                  {Math.round(sentiment * 100)}%
-                </Typography>
+                <Box 
+                  sx={{ 
+                    px: 1, py: 0.25, borderRadius: '6px', 
+                    bgcolor: sentiment >= 0.7 ? '#ecfdf5' : sentiment >= 0.4 ? '#fffbeb' : '#fef2f2',
+                    border: `1px solid ${sentiment >= 0.7 ? '#10b981' : sentiment >= 0.4 ? '#f59e0b' : '#ef4444'}40`
+                  }}
+                >
+                  <Typography sx={{ fontSize: 13, fontWeight: 800, color: sentiment >= 0.7 ? '#059669' : sentiment >= 0.4 ? '#d97706' : '#dc2626' }}>
+                    {Math.round(sentiment * 100)}%
+                  </Typography>
+                </Box>
               </Box>
             )}
+            
             <Box>
-              <Typography sx={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <Typography sx={{ fontSize: 10, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.5 }}>
                 Distribuzione
               </Typography>
-              <Box sx={{ display: "flex", gap: 0.75, mt: 0.25, flexWrap: "wrap" }}>
+              <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
                 {[
-                  { label: `${positive.length} pos`, color: "#059669" },
-                  { label: `${neutral} neu`,          color: "#d97706" },
-                  { label: `${negative.length} neg`,  color: "#dc2626" }
+                  { label: positive.length, desc: 'pos', color: "#10b981", bg: '#ecfdf5' },
+                  { label: neutral,         desc: 'neu', color: "#f59e0b", bg: '#fffbeb' },
+                  { label: negative.length, desc: 'neg', color: "#ef4444", bg: '#fef2f2' }
                 ].map((item) => (
                   <Box
-                    key={item.label}
+                    key={item.desc}
                     sx={{
                       px: 0.75,
-                      py: 0.15,
+                      py: 0.25,
                       borderRadius: "6px",
-                      bgcolor: "#f3f4f6",
-                      border: "1px solid #e5e7eb"
+                      bgcolor: "var(--bg-secondary)",
+                      border: `1px solid var(--border-color)`,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.5
                     }}
                   >
-                    <Typography sx={{ fontSize: 11, color: item.color }}>{item.label}</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 800, color: item.color }}>{item.label}</Typography>
+                    <Typography sx={{ fontSize: 10, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase" }}>{item.desc}</Typography>
                   </Box>
                 ))}
               </Box>
             </Box>
+
             {flaggedFeedbacks.length > 0 && (
-              <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 0.75, mt: 1, p: 1, bgcolor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px' }}>
-                <WarningAmberIcon sx={{ fontSize: 14, color: '#dc2626' }} />
-                <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#991b1b', lineHeight: 1.3 }}>
-                  L'Intelligenza Artificiale ha rilevato <strong>{flaggedFeedbacks.length}</strong> recensioni il cui testo contraddice il rating rilasciato.
+              <Box sx={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 1, mt: 0.5, p: 1.25, bgcolor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', borderLeft: '3px solid #dc2626' }}>
+                <WarningAmberIcon sx={{ fontSize: 16, color: '#dc2626', mt: "2px" }} />
+                <Typography sx={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                  L'AI ha rilevato <strong>{flaggedFeedbacks.length}</strong> recensioni potenzialmente fuorvianti, con testo in disaccordo col rating.
                 </Typography>
               </Box>
             )}
           </Box>
 
           {/* Feedback lists */}
-          <Box sx={{ borderTop: "1px solid #f0f0f0", pt: 1 }}>
+          <Box sx={{ borderTop: "1px solid var(--border-color)", pt: 1.5 }}>
             {positive.length > 0 && (
               <Box sx={{ mb: 1.5 }}>
-                <Typography sx={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
+                <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
                   Top positivi
                 </Typography>
                 <SellerFeedbackList feedbacks={positive.slice(0, 3)} initialLimit={3} title="" />
@@ -231,13 +246,13 @@ export default function SellerFeedbackPanel({ seller }: Props) {
             )}
             {negative.length > 0 && (
               <Box sx={{ mb: 1.5 }}>
-                <Typography sx={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
+                <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
                   Da attenzionare
                 </Typography>
                 <SellerFeedbackList feedbacks={negative.slice(0, 3)} initialLimit={3} title="" />
               </Box>
             )}
-            <Typography sx={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
+            <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75 }}>
               Tutti i feedback
             </Typography>
             <SellerFeedbackList feedbacks={feedbacks} title="" />

@@ -8,7 +8,6 @@ import {
   TableHead,
   TableRow,
   Typography,
-  Chip,
   Button,
   IconButton,
   Avatar,
@@ -389,9 +388,12 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
       
       {/* 2. Carousel */}
       <Box sx={{ position: "relative" }}>
-        <Typography sx={{ fontSize: 10, fontWeight: 800, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.15em", mb: 2, px: 1 }}>
-          Candidati considerati
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1.5, px: 1 }}>
+          <Box sx={{ width: 3, height: 14, bgcolor: "var(--brand-primary)", borderRadius: 4, opacity: 0.8 }} />
+          <Typography sx={{ fontSize: 10.5, fontWeight: 800, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+            Candidati considerati
+          </Typography>
+        </Box>
 
         {showLeftScroll && (
           <IconButton
@@ -417,12 +419,23 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
           onScroll={checkScroll}
           sx={{
             display: "flex",
-            gap: 2,
+            gap: 2.5,
             overflowX: "auto",
             scrollbarWidth: "none",
             "&::-webkit-scrollbar": { display: "none" },
             px: 1,
-            py: 1
+            py: 1.5,
+            maskImage: `linear-gradient(to right, 
+              transparent, 
+              black 20px, 
+              black calc(100% - 20px), 
+              transparent 100%)`,
+            // Fallback for Safari
+            WebkitMaskImage: `linear-gradient(to right, 
+              transparent, 
+              black 20px, 
+              black calc(100% - 20px), 
+              transparent 100%)`,
           }}
         >
           {comparison_matrix.map((item, idx) => (

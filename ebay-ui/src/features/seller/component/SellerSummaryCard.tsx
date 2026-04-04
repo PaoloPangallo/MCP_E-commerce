@@ -161,8 +161,8 @@ export default function SellerSummaryCard(props: Props) {
   }, [regDate])
 
   const trustColor = (score: number) => {
-    if (score >= 90) return { main: '#10b981', bg: '#ecfdf5', text: '#065f46', label: 'Ecellente' }
-    if (score >= 70) return { main: '#f59e0b', bg: '#fffbeb', text: '#92400e', label: 'Discreto' }
+    if (score >= 0.90) return { main: '#10b981', bg: '#ecfdf5', text: '#065f46', label: 'Ecellente' }
+    if (score >= 0.70) return { main: '#f59e0b', bg: '#fffbeb', text: '#92400e', label: 'Discreto' }
     return { main: '#ef4444', bg: '#fef2f2', text: '#991b1b', label: 'Rischioso' }
   }
 

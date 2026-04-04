@@ -1,0 +1,386 @@
+% =============================================================
+% Capitolo: Il Model Context Protocol (MCP)
+% Progetto: MCP_ECOM — Agente e-commerce basato su MCP
+% =============================================================
+
+\chapter{Il Model Context Protocol (MCP)}
+\label{chap:mcp}
+
+% ─────────────────────────────────────────────────────────────
+\section{Introduzione}
+\label{sec:mcp-intro}
+% ─────────────────────────────────────────────────────────────
+
+Il Model Context Protocol (MCP) è uno standard aperto proposto da
+Anthropic nel novembre 2024 con l'obiettivo di risolvere un problema
+fondamentale nell'ingegneria dei sistemi basati su Large Language Model
+(LLM): la \emph{frammentazione} tra modelli e sorgenti di dati.
+
+Prima dell'avvento di MCP, ogni integrazione tra un LLM e uno
+strumento esterno — che fosse un database, un'API REST o un sistema di
+file — richiedeva un connettore \emph{ad~hoc}, scritto e mantenuto
+separatamente per ciascun modello e ciascun provider. Il risultato era
+un ecosistema a silos, costoso da mantenere e difficile da evolvere.
+
+MCP definisce un'interfaccia universale basata sul modello
+\textbf{Host / Client / Server}: il modello non comunica direttamente
+con le sorgenti di dati, bensì attraverso un protocollo strutturato che
+consente di esporre \emph{strumenti}, \emph{risorse} e \emph{prompt}
+in modo indipendente dall'implementazione sottostante.
+
+\begin{figure}[htbp]
+    \centering
+    % Placeholder: inserire diagramma "Host–Client–Server MCP"
+    \fbox{\parbox{0.7\linewidth}{\centering\vspace{2cm}
+        \textit{[Diagramma: Host — MCP Client — MCP Server]}\\
+        \vspace{2cm}}}
+    \caption{Architettura generale del Model Context Protocol.}
+    \label{fig:mcp-architecture}
+\end{figure}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Architettura del Protocollo}
+\label{sec:mcp-arch}
+% ─────────────────────────────────────────────────────────────
+
+\subsection{Ruoli: Host, Client e Server}
+\label{subsec:mcp-roles}
+
+Il protocollo distingue tre ruoli distinti:
+
+\begin{description}
+    \item[Host] È l'applicazione con cui l'utente interagisce
+        direttamente (ad esempio una chat, un IDE o — nel nostro caso —
+        un agente ReAct). L'Host avvia le sessioni MCP e coordina uno
+        o più Client.
+
+    \item[MCP Client] Componente software che gestisce la connessione
+        con un singolo Server MCP. Si occupa della negoziazione del
+        protocollo (\texttt{initialize}/\texttt{initialized}), del
+        catalogo degli strumenti disponibili e della chiamata ai tool.
+
+    \item[MCP Server] Processo o microservizio che espone
+        \emph{capabilities} al client: \textbf{Tools}, \textbf{Resources}
+        e \textbf{Prompts}. Ogni server dichiara staticamente le proprie
+        capabilities al momento dell'inizializzazione.
+\end{description}
+
+\subsection{Primitive del Protocollo}
+\label{subsec:mcp-primitives}
+
+MCP definisce tre primitive fondamentali:
+
+\begin{enumerate}
+    \item \textbf{Tools} — Funzioni invocabili dall'LLM con argomenti
+        strutturati (schema JSON). Il server esegue la logica e
+        restituisce un risultato testuale o strutturato. Sono la
+        primitiva più usata per l'integrazione con API esterne.
+
+    \item \textbf{Resources} — Endpoint di lettura identificati da un
+        URI (anche templatizzato, es.\ \texttt{profile://\{session\_id\}}).
+        Permettono all'LLM di leggere dati contestuali senza invocazioni
+        esplicite di tool, analogamente a file o endpoint REST in sola
+        lettura.
+
+    \item \textbf{Prompts} — Template di sistema o di turno che il
+        server può iniettare nella conversazione. Consentono di
+        centralizzare le istruzioni di sistema nel server, mantenendole
+        disaccoppiate dal codice dell'Host.
+\end{enumerate}
+
+\subsection{Meccanismi di Trasporto}
+\label{subsec:mcp-transport}
+
+La specifica MCP prevede due meccanismi di trasporto:
+
+\begin{description}
+    \item[\texttt{stdio}] Comunicazione tramite standard input/output:
+        il server è un sottoprocesso avviato dall'Host. Adatto per
+        tool locali (CLI, script, filesystem).
+
+    \item[HTTP + Server-Sent Events (SSE) / Streamable HTTP]
+        Il server è un processo HTTP separato. Il client invia richieste
+        POST e può ricevere risposte in streaming tramite SSE. Questo
+        trasporto è preferito per deployment distribuiti e per server
+        condivisi tra più sessioni. Lo standard più recente
+        (\emph{streamable HTTP}) unifica il canale bidirezionale su
+        un singolo endpoint HTTP.
+\end{description}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Implementazione nel Progetto MCP\_ECOM}
+\label{sec:mcp-impl}
+% ─────────────────────────────────────────────────────────────
+
+Il progetto MCP\_ECOM adotta MCP come \emph{layer di disaccoppiamento}
+tra l'agente ReAct (l'Host) e tutti i servizi e-commerce sottostanti.
+La libreria utilizzata è \textbf{FastMCP} (pacchetto \texttt{mcp}),
+che consente di dichiarare tool, resource e prompt con decoratori Python
+analoghi a quelli di FastAPI.
+
+\subsection{Architettura Dual-World}
+\label{subsec:mcp-dual-world}
+
+Una scelta architetturale distintiva del progetto è la presenza di
+\emph{due istanze MCP indipendenti}, montate sulla stessa applicazione
+FastAPI tramite ASGI sub-routing:
+
+\begin{description}
+    \item[Standard World (\texttt{/standard})] Espone tutti i tool di
+        business logic (ricerca prodotti, analisi venditore, wishlist,
+        ecc.) che non richiedono un browser reale. I risultati sono
+        deterministici e cacheable.
+
+    \item[Playwright World (\texttt{/playwright})] Espone i tool che
+        richiedono una sessione Chromium reale (browser automation).
+        Al momento dell'avvio, questo mondo eredita \emph{per
+        sincronizzazione esplicita} tutti i tool non-browser dal mondo
+        Standard, garantendo che l'agente in modalità browser abbia
+        comunque accesso ai tool di supporto.
+\end{description}
+
+\begin{figure}[htbp]
+    \centering
+    % Placeholder: inserire diagramma "Dual-World MCP su FastAPI"
+    \fbox{\parbox{0.8\linewidth}{\centering\vspace{2.5cm}
+        \textit{[Diagramma: FastAPI Router → /standard (FastMCP) + /playwright (FastMCP)]}\\
+        \vspace{2.5cm}}}
+    \caption{Architettura Dual-World: due istanze FastMCP montate sullo
+    stesso processo FastAPI.}
+    \label{fig:mcp-dual-world}
+\end{figure}
+
+Il file \texttt{app/mcp/asgi.py} è il punto di entrata ASGI: crea le
+due sub-app, ne avvia i \texttt{session\_manager} tramite un
+\texttt{lifespan} asincrono e provvede alla sincronizzazione
+\texttt{sync\_standard\_tools()} all'avvio.
+
+\subsection{Modalità di Connessione del Client}
+\label{subsec:mcp-client-modes}
+
+Il componente \texttt{MCPToolClient} (\texttt{app/mcp/client.py})
+implementa una doppia modalità di connessione:
+
+\begin{enumerate}
+    \item \textbf{Local Direct Mode} — Se il server URL è
+        \texttt{127.0.0.1} o \texttt{localhost}, il client risolve
+        direttamente l'istanza FastMCP in memoria tramite Python,
+        eliminando la latenza HTTP. Questa modalità è quella utilizzata
+        in produzione, poiché l'agente e il server MCP condividono lo
+        stesso processo.
+
+    \item \textbf{HTTP Remote Mode} — Se il server è remoto, il
+        client utilizza \texttt{streamable\_http\_client} della libreria
+        MCP ufficiale, aprendo una sessione asincrona con handshake
+        \texttt{initialize}/\texttt{initialized}.
+\end{enumerate}
+
+Il client espone tre operazioni chiave, ciascuna disponibile in entrambe
+le modalità:
+
+\begin{itemize}
+    \item \texttt{list\_tools\_async()} — Recupera il catalogo dei tool.
+    \item \texttt{call\_tool\_async(name, args)} — Invoca un tool e
+        normalizza il risultato.
+    \item \texttt{read\_resource\_async(uri)} — Legge una risorsa tramite URI.
+    \item \texttt{get\_prompt\_async(name)} — Recupera un prompt
+        registrato nel server.
+\end{itemize}
+
+\subsection{Tool Esposti}
+\label{subsec:mcp-tools}
+
+La Tabella~\ref{tab:mcp-tools-standard} elenca i tool registrati nel
+mondo Standard; la Tabella~\ref{tab:mcp-tools-playwright} quelli
+esclusivi del mondo Playwright.
+
+\begin{table}[htbp]
+\centering
+\caption{Tool MCP — Mondo Standard}
+\label{tab:mcp-tools-standard}
+\begin{tabular}{lp{0.55\linewidth}}
+\hline
+\textbf{Nome Tool} & \textbf{Funzione} \\
+\hline
+\texttt{search\_products}       & Pipeline completa di ricerca prodotti: parsing LLM della query, chiamata eBay API, ranking ibrido BM25+dense, reranking LTR. \\
+\texttt{compare\_products}      & Confronto multi-prodotto per attributi, prezzo e trust score. \\
+\texttt{profile\_query}         & Arricchisce la query con le preferenze dell'utente profilato. \\
+\texttt{get\_item\_details}     & Recupera i dettagli completi di un articolo eBay tramite item ID. \\
+\texttt{get\_shipping\_costs}   & Stima i costi di spedizione per un articolo verso un paese target. \\
+\texttt{get\_similar\_items}    & Suggerisce articoli simili a quello indicato. \\
+\texttt{get\_ebay\_deals}       & Recupera le offerte del giorno e promozioni attive su eBay. \\
+\texttt{market\_trends}         & Analizza i trend di mercato per categoria o keyword. \\
+\texttt{analyze\_seller}        & Estrae feedback, trust score e sentiment ratio di un venditore. \\
+\texttt{contact\_seller}        & Contatta un venditore tramite il form eBay (modalità headless). \\
+\texttt{manage\_wishlist}       & Gestisce la wishlist utente con sincronizzazione eBay. \\
+\texttt{update\_user\_preferences} & Aggiorna le preferenze persistite nel profilo utente. \\
+\texttt{conversation}           & Gestisce il contesto conversazionale multi-turno. \\
+\texttt{ebay\_scrape}           & Estrae dati da pagine eBay tramite Playwright (headless). \\
+\texttt{browser\_navigate}      & Naviga a un URL nella sessione browser aperta. \\
+\texttt{browser\_click}         & Clicca su un elemento identificato da selettore CSS o testo. \\
+\texttt{browser\_type}          & Inserisce testo in un campo della pagina corrente. \\
+\texttt{browser\_get\_view}     & Restituisce il contenuto testuale/HTML della pagina corrente. \\
+\texttt{browser\_close}         & Chiude la sessione browser. \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Tool MCP — Mondo Playwright (esclusivi)}
+\label{tab:mcp-tools-playwright}
+\begin{tabular}{lp{0.55\linewidth}}
+\hline
+\textbf{Nome Tool} & \textbf{Funzione} \\
+\hline
+\texttt{contact\_seller\_playwright} & Automazione completa dell'invio messaggi al venditore tramite browser Chromium visibile con profilo Chrome persistente. Gestisce navigazione, compilazione form e submit. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Resource Esposte}
+\label{subsec:mcp-resources}
+
+Il server standard espone una risorsa dinamica templatizzata:
+
+\begin{itemize}
+    \item \texttt{profile://\{session\_id\}} — Restituisce il profilo
+        completo dell'utente autenticato: username, email, brand
+        preferiti, budget per categoria, preferenze di condizione
+        (nuovo/usato) e profondità di interazione. Il profilo viene
+        arricchito dinamicamente dal servizio di \emph{user profiling}
+        basato su apprendimento dalle sessioni passate.
+\end{itemize}
+
+\subsection{Prompt Esposti}
+\label{subsec:mcp-prompts}
+
+È registrato un prompt di sistema centralizzato:
+
+\begin{itemize}
+    \item \texttt{shopping\_expert\_prompt} — Istruisce l'LLM a
+        comportarsi come un assistente e-commerce professionale ed
+        etico. Fa riferimento esplicito all'utilizzo attivo dei tool
+        di ricerca e alla lettura delle Resource utente per la
+        personalizzazione delle risposte.
+\end{itemize}
+
+Centralizzare il system prompt nel server MCP — anziché nell'Host —
+consente di aggiornarlo indipendentemente dalla logica dell'agente e di
+riutilizzarlo in contesti diversi (web app, CLI, API).
+
+\subsection{Contesto e Dipendenze dei Tool}
+\label{subsec:mcp-context}
+
+Ogni tool riceve un oggetto \texttt{MCPToolContext} costruito
+dinamicamente a partire da:
+
+\begin{itemize}
+    \item Una \textbf{sessione database} (SQLAlchemy) aperta e chiusa
+        tramite context manager, per garantire la corretta gestione
+        delle risorse anche in caso di eccezione.
+    \item Un oggetto \textbf{User} risolto dall'identificativo di
+        sessione, per la personalizzazione dei risultati.
+    \item Il parametro \textbf{llm\_engine}, che specifica il backend
+        LLM da utilizzare all'interno del tool (Ollama, Gemini, ecc.).
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    % Placeholder: inserire diagramma "Request Flow"
+    \fbox{\parbox{0.8\linewidth}{\centering\vspace{2.5cm}
+        \textit{[Diagramma: Agent → Executor → MCPToolClient
+        → FastMCP (Local) → Tool → Service → eBay API]}\\
+        \vspace{2.5cm}}}
+    \caption{Flusso completo di una richiesta: dall'agente ReAct
+    al tool MCP fino all'API eBay.}
+    \label{fig:mcp-request-flow}
+\end{figure}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Vantaggi Tecnici dell'Adozione di MCP}
+\label{sec:mcp-benefits}
+% ─────────────────────────────────────────────────────────────
+
+\subsection{Modularità e Separazione delle Responsabilità}
+\label{subsec:mcp-modularity}
+
+L'adozione di MCP introduce una separazione netta tra \emph{orchestrazione}
+(l'agente) e \emph{esecuzione} (i tool). Ogni tool è un modulo Python
+indipendente — con il proprio file in \texttt{app/mcp/tools/} — che può
+essere sviluppato, testato e deployato autonomamente. L'agente non ha
+conoscenza dell'implementazione interna dei tool: conosce solo il loro
+schema di input/output, descritto in JSON Schema.
+
+Questa architettura consente di:
+\begin{itemize}
+    \item Aggiungere nuovi tool senza modificare il codice dell'agente
+        (basta registrare il decoratore \texttt{@mcp.tool}).
+    \item Sostituire l'implementazione di un tool (es.\ migrare da
+        scraping a API ufficiale) in modo trasparente all'agente.
+    \item Testare i tool in isolamento, invocandoli direttamente
+        tramite la Local Direct Mode del client.
+\end{itemize}
+
+\subsection{Sicurezza e Controllo degli Accessi}
+\label{subsec:mcp-security}
+
+Il layer MCP agisce come \emph{boundary di sicurezza} naturale:
+l'LLM non ha accesso diretto al database, all'API eBay o al
+filesystem. Ogni operazione passa attraverso un tool con schema
+validato (Pydantic/Annotated), che può applicare:
+
+\begin{itemize}
+    \item Validazione degli argomenti prima dell'esecuzione.
+    \item Autorizzazione basata sul profilo utente (session\_id).
+    \item Rate limiting applicabile a livello di tool.
+    \item Logging strutturato di ogni invocazione per audit.
+\end{itemize}
+
+\subsection{Caching e Performance}
+\label{subsec:mcp-caching}
+
+Il layer MCP si integra con il sistema di caching Redis del progetto
+(definito in \texttt{app/config/cache.py}). La chiave di cache segue
+il pattern \texttt{\{mcp\_mode\}:\{tool\_name\}:\{hash(input)\}},
+con TTL differenziati per tier (2 min per l'executor, fino a 24 h
+per la history utente). I risultati degli strumenti browser
+(\texttt{contact\_seller\_playwright}) sono marcati come terminali
+e non vengono cachati, evitando loop di retry su operazioni
+con effetti collaterali.
+
+\subsection{Interoperabilità e Portabilità}
+\label{subsec:mcp-interop}
+
+Poiché il server MCP parla un protocollo standard, i tool sviluppati
+per questo progetto sono in linea di principio riutilizzabili da
+qualsiasi client MCP-compatibile (Claude Desktop, altri agenti,
+strumenti di sviluppo come IDE plugin). Viceversa, il progetto può
+integrare server MCP di terze parti — dati finanziari, cataloghi
+prodotto, sistemi di pagamento — senza modificare l'architettura
+dell'agente.
+
+% ─────────────────────────────────────────────────────────────
+\section{Riepilogo}
+\label{sec:mcp-summary}
+% ─────────────────────────────────────────────────────────────
+
+Il Model Context Protocol costituisce la spina dorsale architetturale
+del progetto MCP\_ECOM. La scelta di adottare lo standard Anthropic ha
+permesso di strutturare il sistema in componenti disaccoppiati e
+testabili, di gestire in modo sicuro l'accesso ai dati sensibili e di
+rendere l'agente indipendente dalle implementazioni concrete dei servizi
+sottostanti.
+
+L'architettura Dual-World — con un mondo Standard per la business logic
+e un mondo Playwright per l'automazione browser — è una soluzione
+originale che estende il protocollo per gestire tool con requisiti
+d'esecuzione eterogenei, mantenendo un'interfaccia uniforme verso
+l'agente.
+
+I capitoli successivi descriveranno nel dettaglio la pipeline di
+ricerca prodotti (\S\ref{chap:search}), il sistema di analisi venditore
+e la pipeline di ranking LTR.

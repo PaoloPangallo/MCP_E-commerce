@@ -261,23 +261,53 @@ def update_interaction_depth(user: User, action: str) -> bool:
 
 def _update_brands(user: User, parsed: Dict) -> bool:
     """
-    Update favorite_brands using ONLY brands validated by the parser.
-    Manual MCP overrides are preserved: if user explicitly set brands via
-    update_user_preferences, the auto-learning only adds new ones to the front,
-    never removes existing ones.
+    Update favorite_brands with a counter format: "Brand1:5,Brand2:2".
+    Only keeps active/frequent brands to avoid UI pollution.
     Returns True if changed.
     """
-    brands = [str(b).strip() for b in (parsed.get("brands") or []) if str(b).strip()]
-    if not brands:
+    new_brands = [str(b).strip() for b in (parsed.get("brands") or []) if str(b).strip()]
+    if not new_brands:
         return False
 
-    current_str = getattr(user, "favorite_brands", "") or ""
-    current_list = [b.strip() for b in current_str.split(",") if b.strip()]
+    raw = getattr(user, "favorite_brands", "") or ""
+    counter: Dict[str, int] = {}
+    
+    # Parse existing: "Apple:3,JBL:1" or legacy "Apple,JBL"
+    if raw:
+        if ":" in raw:
+            for part in raw.split(","):
+                kv = part.split(":")
+                if len(kv) == 2:
+                    try:
+                        counter[kv[0].strip()] = int(kv[1])
+                    except ValueError:
+                        pass
+        else:
+            # Migration from legacy flat list: give each existing brand 1 hit
+            for b in raw.split(","):
+                if b.strip():
+                    counter[b.strip()] = 1
 
-    # Put new validated brands at front, dedupe, cap at 10
-    merged = brands + [b for b in current_list if b.lower() not in {nb.lower() for nb in brands}]
-    merged = merged[:10]
-    new_str = ",".join(merged)
+    # Increment hits for new brands
+    for nb in new_brands:
+        # Match case-insensitively but preserve original casing for display
+        found = False
+        for existing in list(counter.keys()):
+            if existing.lower() == nb.lower():
+                counter[existing] += 1
+                found = True
+                break
+        if not found:
+            counter[nb] = 1
+
+    # Sort by hits (descending)
+    sorted_brands = sorted(counter.items(), key=lambda x: x[1], reverse=True)
+    
+    # To keep the UI clean, we only keep brands that have at least 2 hits, 
+    # OR the top 5 most recent even if they have 1 hit.
+    # For now, let's just keep top 10 by affinity.
+    merged = sorted_brands[:10]
+    new_str = ",".join(f"{k}:{v}" for k, v in merged)
 
     if user.favorite_brands != new_str:
         user.favorite_brands = new_str

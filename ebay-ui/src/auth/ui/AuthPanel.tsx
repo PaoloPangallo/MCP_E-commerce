@@ -2,7 +2,6 @@ import {
   Avatar,
   Box,
   Button,
-  Chip,
   Divider,
   Stack,
   Typography,
@@ -116,40 +115,7 @@ export default function AuthPanel() {
             </Box>
           </Stack>
 
-          {/* Chips */}
-          {(user.favorite_brands || user.price_preference) && (
-            <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" mb={1.5}>
-              {user.favorite_brands && (
-                <Chip
-                  size="small"
-                  label={user.favorite_brands}
-                  sx={{
-                    height: 20,
-                    borderRadius: "6px",
-                    bgcolor: "var(--bg-secondary)",
-                    color: "var(--text-secondary)",
-                    fontSize: 10,
-                    fontWeight: 600
-                  }}
-                />
-              )}
-              {user.price_preference && (
-                <Chip
-                  size="small"
-                  label={`€${user.price_preference}`}
-                  sx={{
-                    height: 20,
-                    borderRadius: "6px",
-                    bgcolor: "var(--bg-secondary)",
-                    color: "var(--text-secondary)",
-                    fontSize: 10,
-                    fontWeight: 600
-                  }}
-                />
-              )}
-            </Stack>
-          )}
-
+          {/* Divider */}
           <Divider sx={{ mb: 1.5, borderColor: "var(--border-color)" }} />
 
           <Stack spacing={0.5}>

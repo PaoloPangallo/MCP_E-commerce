@@ -1,0 +1,553 @@
+% =============================================================
+% Capitolo: Playwright — Modalità Browser Alternativa dell'Agente
+% Progetto: MCP_ECOM — Agente e-commerce basato su MCP
+% =============================================================
+
+\chapter{Playwright: Modalità Browser Alternativa dell'Agente}
+\label{chap:playwright}
+
+% ─────────────────────────────────────────────────────────────
+\section{Motivazione e Ruolo nel Sistema}
+\label{sec:pw-intro}
+% ─────────────────────────────────────────────────────────────
+
+Le API ufficiali di eBay coprono la grande maggioranza dei casi d'uso
+dell'agente — ricerca prodotti, dettagli articolo, feedback venditore —
+ma esistono scenari in cui esse risultano insufficienti o inaccessibili:
+
+\begin{itemize}
+    \item La messaggistica diretta al venditore non è esposta come API
+        REST pubblica; richiede una sessione browser autenticata.
+    \item Alcune informazioni visibili nella pagina pubblica (spedizione
+        stimata, condizione dettagliata, banner promozionali) non
+        compaiono nella risposta JSON dell'API.
+    \item In contesti di test o demo, è desiderabile mostrare all'utente
+        il browser mentre l'agente opera, rendendo visibile e verificabile
+        ogni azione intrapresa.
+\end{itemize}
+
+Per rispondere a questi casi, il progetto integra \textbf{Playwright}
+come modalità operativa alternativa. Playwright è una libreria di
+browser automation che controlla istanze reali di Chromium via
+protocollo CDP (\emph{Chrome DevTools Protocol}), permettendo
+all'agente di navigare pagine web, compilare form e cliccare elementi
+esattamente come farebbe un utente umano.
+
+Il sottosistema Playwright espone due categorie di funzionalità distinte,
+disponibili come tool MCP nel \emph{Playwright World}
+(\S\ref{subsec:mcp-dual-world}):
+
+\begin{enumerate}
+    \item \textbf{Ricerca prodotti via scraping} — navigazione della
+        pagina pubblica di ricerca eBay e parsing degli annunci
+        (\texttt{ebay\_scrape}).
+    \item \textbf{Browser interattivo persistente} — sessione Chromium
+        condivisa tra più chiamate, con tool primitivi per navigare,
+        cliccare, digitare e leggere la pagina corrente
+        (\texttt{browser\_navigate}, \texttt{browser\_click},
+        \texttt{browser\_type}, \texttt{browser\_get\_view},
+        \texttt{browser\_close}).
+    \item \textbf{Contatto autonomo al venditore} — automazione completa
+        del flusso di messaggistica eBay, dall'apertura del form
+        all'invio del messaggio, usando la sessione Chrome reale
+        dell'utente (\texttt{contact\_seller\_playwright}).
+\end{enumerate}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Architettura del Sottosistema Playwright}
+\label{sec:pw-arch}
+% ─────────────────────────────────────────────────────────────
+
+\subsection{Il Problema: Windows + Uvicorn + Playwright}
+\label{subsec:pw-eventloop}
+
+Su Windows, Uvicorn usa di default un \texttt{SelectorEventLoop},
+che non supporta la chiamata \texttt{asyncio.create\_subprocess\_exec()}
+necessaria al backend Node.js di Playwright per lanciare un processo
+Chromium. Tentare di avviare Playwright direttamente nell'event loop di
+Uvicorn genera un'eccezione bloccante.
+
+La soluzione adottata nel progetto è la creazione di un
+\textbf{ProactorEventLoop isolato} in un thread dedicato, separato
+dal loop principale di Uvicorn. Ogni operazione Playwright viene
+delegata a questo thread tramite il thread pool
+\texttt{\_PLAYWRIGHT\_EXECUTOR}:
+
+\begin{verbatim}
+_PLAYWRIGHT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="playwright"
+)
+
+# Invocazione dal loop principale Uvicorn:
+loop = asyncio.get_event_loop()
+result = await loop.run_in_executor(
+    _PLAYWRIGHT_EXECUTOR,
+    _run_in_proactor_loop,   # crea ProactorEventLoop e chiama Playwright
+    query, max_results, ...
+)
+\end{verbatim}
+
+Il file \texttt{app/main.py} imposta esplicitamente
+\texttt{WindowsProactorEventLoopPolicy} all'avvio per garantire che
+il processo principale stesso sia compatibile, ma il pattern
+\texttt{run\_in\_executor} rimane necessario per le chiamate a
+sottoprocessi all'interno di contesti coroutine.
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.82\linewidth}{\centering\vspace{2cm}
+        \textit{[Diagramma: Uvicorn (SelectorEventLoop) →
+        run\_in\_executor → ThreadPoolExecutor →
+        ProactorEventLoop (thread) → Playwright → Chromium]}\\
+        \vspace{2cm}}}
+    \caption{Isolamento dell'event loop Playwright rispetto a Uvicorn
+    su Windows.}
+    \label{fig:pw-eventloop}
+\end{figure}
+
+\subsection{BrowserManager: Sessione Persistente Singleton}
+\label{subsec:pw-browsermanager}
+
+Per i tool di navigazione interattiva (\texttt{browser\_navigate},
+\texttt{browser\_click}, ecc.), il progetto utilizza un
+\textbf{BrowserManager singleton} (\texttt{app/services/browser\_manager.py})
+che mantiene una sessione Chromium aperta tra invocazioni successive
+dello stesso strumento.
+
+La classe implementa:
+
+\begin{itemize}
+    \item \textbf{Thread dedicato con loop persistente} —
+        \texttt{asyncio.ProactorEventLoop} in esecuzione continua su un
+        thread daemon. Tutte le operazioni Playwright vengono schedulate
+        con \texttt{asyncio.run\_coroutine\_threadsafe()}, rendendo le
+        chiamate sincrone thread-safe dal lato MCP.
+    \item \textbf{Auto-recovery} — alla chiamata di qualsiasi metodo,
+        \texttt{\_ensure\_browser()} verifica se il browser è connesso
+        e la pagina è aperta; in caso contrario rilancia Chromium
+        automaticamente (gestisce anche il caso in cui l'utente chiuda
+        manualmente la finestra).
+    \item \textbf{Inactivity timeout} — un task asincrono monitora il
+        tempo dall'ultima azione ogni 5 secondi e chiude il browser se
+        supera la soglia configurata (default 60 secondi). Il timer viene
+        resettato a ogni operazione.
+    \item \textbf{Visual tools iniettati} — a ogni apertura di pagina,
+        viene iniettato un cursore virtuale rosso e uno stile CSS di
+        evidenziazione (\texttt{.pw-highlight}). Questi strumenti
+        rendono visibili all'utente i movimenti del mouse e gli elementi
+        cliccati dall'agente, aumentando la trasparenza delle azioni.
+\end{itemize}
+
+Il \textbf{movimento del mouse è simulato in modo fluido} (15 step
+intermedi via \texttt{page.mouse.move()}) prima di ogni click, e la
+\textbf{digitazione è carattere per carattere} con un delay di 50 ms,
+replicando il comportamento umano e riducendo il rischio di essere
+identificati come bot da sistemi anti-automazione.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Tool 1: Ricerca Prodotti via Scraping (ebay\_scrape)}
+\label{sec:pw-scrape}
+% ─────────────────────────────────────────────────────────────
+
+Il tool \texttt{ebay\_scrape} permette all'agente di cercare prodotti
+su eBay.it navigando la pagina pubblica dei risultati di ricerca,
+\emph{senza utilizzare le API eBay}. Questo lo rende indipendente da
+limiti di quota API e consente di raccogliere dati presenti solo nella
+UI (ad esempio il prezzo spedizione stimato in homepage).
+
+\subsection{URL e User Agent}
+\label{subsec:pw-scrape-url}
+
+La ricerca viene effettuata sull'endpoint eBay con filtro
+\texttt{LH\_BIN=1} (solo annunci "Compralo subito"):
+
+\begin{verbatim}
+EBAY_SEARCH_URL = "https://www.ebay.it/sch/i.html?_nkw={query}&_ipg=48&LH_BIN=1"
+\end{verbatim}
+
+Il browser Chromium è configurato con locale \texttt{it-IT} e un
+User-Agent Chrome realistico per minimizzare il rischio di blocchi
+anti-bot.
+
+\subsection{Selettori Multi-Livello Resiliente}
+\label{subsec:pw-scrape-selectors}
+
+eBay modifica periodicamente il layout delle sue pagine di risultati.
+Per garantire la robustezza del parser, ogni campo viene estratto
+con \textbf{liste ordinate di selettori CSS alternativi}: viene usato
+il primo che trova corrispondenza nel DOM. Sono definite liste separate
+per container, link, titolo, prezzo, immagine, condizione, spedizione,
+venditore e location (Tabella~\ref{tab:pw-selectors}).
+
+\begin{table}[htbp]
+\centering
+\caption{Principali selettori CSS multi-livello usati dallo scraper}
+\label{tab:pw-selectors}
+\begin{tabular}{lp{0.62\linewidth}}
+\hline
+\textbf{Campo} & \textbf{Selettori (in ordine di priorità)} \\
+\hline
+Container & \texttt{li.s-item}, \texttt{li:has(.s-item\_\_info)}, \texttt{li:has(.su-card-container)}, \texttt{div.s-item} \\
+Prezzo    & \texttt{.s-item\_\_price}, \texttt{.s-item\_\_price .POSITIVE}, \texttt{.s-card\_\_price} \\
+Immagine  & \texttt{.s-item\_\_image img} (con fallback su \texttt{data-src} per lazy load) \\
+\hline
+\end{tabular}
+\end{table}
+
+Il \textbf{parsing del prezzo} gestisce la localizzazione europea:
+rimuove i punti separatori delle migliaia e converte la virgola
+decimale in punto prima di estrarre il valore numerico con regex.
+
+\subsection{Modalità Headed e Headless}
+\label{subsec:pw-scrape-mode}
+
+Il parametro \texttt{visible} del tool MCP permette all'agente di
+avviare il browser in modalità \emph{headed} (finestra visibile) per
+scopi di debug o demo. In modalità headless il processo è invisibile
+e più rapido. Il tool restituisce una lista di dict con i campi:
+\texttt{title}, \texttt{price}, \texttt{price\_raw}, \texttt{url},
+\texttt{image\_url}, \texttt{condition}, \texttt{seller},
+\texttt{location}, \texttt{shipping} e il tag \texttt{\_source:
+"playwright"} per tracciabilità.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Tool 2: Browser Interattivo Persistente}
+\label{sec:pw-browser}
+% ─────────────────────────────────────────────────────────────
+
+I cinque tool primitivi di navigazione permettono all'agente ReAct di
+operare sul browser in modo iterativo, step-by-step, leggendo
+l'output di ogni azione prima di decidere quella successiva — esattamente
+come un operatore umano.
+
+\begin{table}[htbp]
+\centering
+\caption{Tool primitivi del BrowserManager}
+\label{tab:pw-browser-tools}
+\begin{tabular}{lp{0.65\linewidth}}
+\hline
+\textbf{Tool} & \textbf{Comportamento} \\
+\hline
+\texttt{browser\_navigate} & Naviga a un URL. Restituisce URL corrente, titolo della pagina, testo estratto dal \texttt{\#mainContent} e screenshot JPEG base64. \\
+\texttt{browser\_click}    & Muove il mouse verso il selettore (15 step fluidi), evidenzia l'elemento, clicca. Restituisce lo stato aggiornato. \\
+\texttt{browser\_type}     & Digita testo carattere per carattere (delay 50 ms). Opzionale: preme Invio e attende 4 s per il caricamento AJAX di eBay. \\
+\texttt{browser\_get\_view} & Restituisce lo stato corrente senza eseguire azioni (URL, titolo, testo, screenshot). \\
+\texttt{browser\_close}    & Chiude browser, context e rilascia tutte le risorse Playwright. \\
+\hline
+\end{tabular}
+\end{table}
+
+Ogni risposta include un \textbf{screenshot JPEG compresso al 60\%},
+codificato in base64, che l'agente multimodale può analizzare per
+verificare il contenuto visivo della pagina prima di procedere. Questa
+capacità trasforma l'agente in un operatore visuale a tutti gli effetti.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Tool 3: Contatto Autonomo al Venditore}
+\label{sec:pw-contact}
+% ─────────────────────────────────────────────────────────────
+
+Il tool \texttt{contact\_seller\_playwright} è il componente più
+complesso dell'intero progetto: automatizza in modo completamente
+autonomo l'invio di un messaggio a un venditore eBay, bypassando
+la necessità di un'API di messaggistica che eBay non espone
+pubblicamente.
+
+Il flusso si articola in sei step sequenziali, con strategia di
+fallback dedicata a ogni punto critico.
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.88\linewidth}{\centering\vspace{2.5cm}
+        \textit{[Diagramma a stati: CDP check → Connessione Chrome →
+        Risoluzione URL → Navigazione → Login wall? → Item page? →
+        IntermediatedFAQ? → Compilazione messaggio → Click Invia →
+        Verifica svuotamento textarea → Successo/Fallback manuale]}\\
+        \vspace{2.5cm}}}
+    \caption{Diagramma a stati del flusso \texttt{contact\_seller\_playwright}.}
+    \label{fig:pw-contact-flow}
+\end{figure}
+
+\subsection{Step 0: Connessione a Chrome con Sessione Utente Reale}
+\label{subsec:pw-contact-conn}
+
+Per accedere alle pagine autenticate di eBay (messaggistica, account),
+il tool non lancia un browser vergine ma si collega alla sessione
+Chrome \emph{già loggata dall'utente}, usando due strategie in ordine
+di priorità:
+
+\begin{enumerate}
+    \item \textbf{CDP (Chrome DevTools Protocol)} — se Chrome è in
+        esecuzione con il flag \texttt{--remote-debugging-port=9222},
+        il tool si connette direttamente alla sessione attiva via
+        \texttt{playwright.chromium.connect\_over\_cdp()}, ereditando
+        tutti i cookie e il profilo esistente. La disponibilità
+        della porta CDP viene verificata con un tentativo di connessione
+        socket da 500 ms prima di procedere.
+
+    \item \textbf{Profilo Chrome persistente} — se la porta CDP non
+        è disponibile, Playwright lancia Chrome direttamente usando
+        il profilo reale dell'utente (\texttt{launch\_persistent\_context}
+        con il percorso \texttt{\%LOCALAPPDATA\%\textbackslash{}Google\textbackslash{}Chrome\textbackslash{}User Data}
+        su Windows). Questo richiede che Chrome sia chiuso al momento
+        dell'invocazione.
+\end{enumerate}
+
+Questa strategia dual-mode garantisce che le credenziali eBay non
+debbano mai essere fornite all'agente: è l'utente che effettua il login
+una volta, e il tool riutilizza quella sessione.
+
+\subsection{Step 1: Risoluzione dell'URL di Contatto}
+\label{subsec:pw-contact-url}
+
+Prima di navigare, il tool determina l'URL ottimale su cui atterrare.
+La logica distingue tre casi:
+
+\begin{description}
+    \item[URL diretto sendmsg] Se l'URL fornito contiene già
+        \texttt{sendmsg}, viene usato direttamente senza ulteriore
+        elaborazione.
+
+    \item[Solo nome venditore] Se è noto il \texttt{seller\_name} ma
+        non un URL diretto, il tool naviga la pagina SRP del venditore
+        (\texttt{https://www.ebay.it/sch/i.html?\_ssn=\{seller\}\&\_sop=10}),
+        estrae via JavaScript il primo link \texttt{/itm/} con ID
+        numerico a 10+ cifre (filtrando placeholder e link invisibili),
+        e usa quell'URL come punto di partenza.
+
+    \item[URL sendmsg senza item\_id] Se l'URL contiene già il
+        destinatario ma manca del parametro \texttt{item\_id}, il tool
+        chiama l'API eBay Browse per trovare il primo articolo attivo
+        del venditore e arricchisce l'URL con l'ID recuperato. Senza
+        un \texttt{item\_id} valido, l'endpoint AJAX di messaggistica
+        restituisce errore 500.
+\end{description}
+
+\subsection{Step 2: Navigazione e Attesa networkidle}
+\label{subsec:pw-contact-nav}
+
+La navigazione attende prima \texttt{domcontentloaded} e poi lo stato
+\texttt{networkidle} (max 10 s), garantendo che le chiamate AJAX
+iniziali di eBay siano completate prima di cercare elementi nel DOM.
+Uno screenshot di debug viene salvato in \texttt{tmp/debug\_nat\_01\_nav.png}.
+
+\subsection{Step 3: Gestione Login Wall}
+\label{subsec:pw-contact-login}
+
+Se dopo la navigazione l'URL contiene \texttt{signin} o \texttt{login},
+il tool non fallisce immediatamente: attende fino a \textbf{120 secondi}
+che l'URL cambi (via \texttt{page.wait\_for\_function()}), dando
+all'utente il tempo di autenticarsi manualmente nel browser aperto.
+Se il timeout scade, il tool restituisce un messaggio esplicito
+con \texttt{contact\_status: "login\_required"} e lascia il browser
+aperto per l'interazione manuale.
+
+\subsection{Step 3a: Pagina Articolo — Click sul Link di Contatto}
+\label{subsec:pw-contact-item}
+
+Se l'URL di destinazione è una pagina prodotto (\texttt{/itm/}),
+il tool cerca il link ``Contatta il venditore'' con una lista di
+\textbf{14 selettori CSS alternativi} (in italiano e inglese, per
+\texttt{data-testid}, \texttt{href}, e testo visibile). Il click
+viene eseguito via \texttt{page.evaluate()} anziché tramite i metodi
+nativi di Playwright, perché eBay usa routing SPA con React che
+intercetta i click tramite \texttt{event.preventDefault()} e non
+produce navigazioni di pagina standard. Il click JavaScript bypassa
+questa intercettazione e apre l'overlay di messaggistica.
+
+\subsection{Step 3b: IntermediatedFAQ — Bypass del Routing SPA}
+\label{subsec:pw-contact-faq}
+
+Se la pagina corrente è la schermata \texttt{IntermediatedFAQ}
+(pagina interstitial che eBay mostra prima del form messaggio), il
+tool applica una strategia di estrazione diretta dell'URL:
+
+\begin{enumerate}
+    \item Cerca nel DOM il primo link con \texttt{href} contenente
+        \texttt{sendmsg} (link diretto al form messaggi).
+    \item In alternativa, cerca il link ``Continua'' / ``Continue''.
+    \item Se nessuno dei precedenti è presente, cerca qualsiasi link
+        contenente ``contact'' o ``sendmsg''.
+\end{enumerate}
+
+Anziché simulare il click sul link (che fallirebbe per il routing SPA
+React di eBay con \texttt{event.preventDefault()}), il tool usa
+\textbf{\texttt{page.goto()} direttamente sull'URL estratto}, eseguendo
+una navigazione HTTP standard. Questo bypass è stato la soluzione a
+un bug critico in cui l'agente si bloccava indefinitamente sulla
+pagina FAQ senza riuscire a proseguire.
+
+\subsection{Step 5: Compilazione del Messaggio}
+\label{subsec:pw-contact-fill}
+
+La logica di compilazione distingue due contesti fisicamente diversi
+in cui il form messaggi può apparire su eBay:
+
+\begin{description}
+    \item[Pagina sendmsg dedicata] Il form è direttamente nel DOM
+        principale. Il tool localizza il campo via
+        \texttt{\#imageupload\_\_sendmessage--textbox} o
+        \texttt{[data-testid="message-input-textarea"]}, lo popola
+        tramite \texttt{page.evaluate()} impostando la proprietà
+        nativa del campo React (via \texttt{Object.getOwnPropertyDescriptor}
+        per bypassare il virtual DOM), e poi digita fisicamente il
+        messaggio carattere per carattere per triggerare i listener
+        React di change detection.
+
+    \item[Overlay su pagina prodotto] Il form è all'interno di un
+        iframe (\texttt{.m2m-dialog\_\_ifr}). Il tool ottiene il
+        frame handle tramite \texttt{iframe\_el.content\_frame()} e
+        opera su di esso come contesto separato. Se l'iframe non è
+        presente, opera direttamente sul DOM principale.
+\end{description}
+
+Dopo la digitazione, vengono dispatchati esplicitamente gli eventi
+\texttt{input} e \texttt{change} per attivare il bottone ``Invia''
+nel componente React (che altrimenti rimane disabilitato).
+
+\subsection{Step 6: Click sul Bottone ``Invia''}
+\label{subsec:pw-contact-send}
+
+Il click sul pulsante di invio è implementato con quattro livelli di
+fallback, applicati in sequenza fino al successo:
+
+\begin{enumerate}
+    \item \textbf{Selettori CSS diretti} — lista di 10 selettori
+        specifici per l'interfaccia messaggi eBay (attributi
+        \texttt{aria-label}, \texttt{data-testid}, classi CSS).
+
+    \item \textbf{Rilevamento per icona SVG} — cerca il bottone che
+        contiene un SVG con path di una ``freccia di invio'' (paper
+        plane), identificato da coordinate SVG caratteristiche.
+
+    \item \textbf{ARIA scoring} — filtra tutti i pulsanti visibili
+        e assegna uno score:
+        \begin{itemize}
+            \item \texttt{aria-label} inizia con ``seleziona'' → score 0
+                (esclusi — erano inbox row, causa del bug originale)
+            \item contiene ``invia'' o ``send'' → score 3
+            \item contiene ``messaggio'' o ``message'' → score 2
+            \item altri → score 1
+        \end{itemize}
+        Il candidato con score più alto viene selezionato.
+
+    \item \textbf{Fallback posizionale} — se nessun candidato viene
+        trovato, cerca il pulsante visivamente posizionato
+        \emph{a destra} del campo textarea (entro 50 px dal bordo
+        destro e nella stessa fascia verticale), usando le coordinate
+        \texttt{getBoundingClientRect()} via JavaScript.
+\end{enumerate}
+
+\paragraph{Verifica dell'invio.}
+Dopo il click, il tool non si fida ciecamente del risultato:
+verifica che la \textbf{textarea sia stata svuotata}, il che indica
+che React ha processato l'invio e resettato il form. Se il testo
+è ancora presente, tenta il fallback \texttt{Enter} sul campo
+attivo, poi una seconda verifica. Se il campo rimane popolato,
+il tool segnala \texttt{submit\_button\_not\_found} e lascia il
+browser aperto affinché l'utente completi manualmente l'invio.
+
+\subsection{Gestione degli Errori e Trasparenza all'Utente}
+\label{subsec:pw-contact-errors}
+
+In caso di fallimento a qualsiasi step, il tool \emph{non chiude il
+browser}: lo lascia aperto sul punto di blocco e restituisce
+un messaggio in linguaggio naturale che guida l'utente
+(Tabella~\ref{tab:pw-contact-errors}).
+
+\begin{table}[htbp]
+\centering
+\caption{Codici di stato e messaggi restituiti da contact\_seller\_playwright}
+\label{tab:pw-contact-errors}
+\begin{tabular}{lp{0.60\linewidth}}
+\hline
+\textbf{contact\_status} & \textbf{Significato e azione suggerita all'utente} \\
+\hline
+\texttt{message\_sent}            & Successo completo. Il browser può essere chiuso. \\
+\texttt{login\_required}          & eBay richiede autenticazione. L'utente deve loggarsi nel browser aperto e riprovare. \\
+\texttt{contact\_button\_not\_found} & Il link di contatto non è trovato nella pagina prodotto. Il browser è aperto per intervento manuale. \\
+\texttt{message\_form\_not\_found}   & La pagina di messaggistica è raggiunta ma il campo testo non è localizzabile. \\
+\texttt{submit\_button\_not\_found}  & Il messaggio è compilato ma il bottone Invia non è stato trovato o cliccato con successo. \\
+\texttt{error}                    & Eccezione inaspettata — dettaglio nell'apposito campo. \\
+\hline
+\end{tabular}
+\end{table}
+
+In caso di successo, il tool \emph{non chiude nemmeno la tab}:
+la lascia aperta per permettere all'utente di verificare l'invio
+nella propria casella messaggi eBay.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Debugging e Osservabilità}
+\label{sec:pw-debug}
+% ─────────────────────────────────────────────────────────────
+
+Il tool \texttt{contact\_seller\_playwright} salva screenshot di
+debug in punti chiave del flusso (Tabella~\ref{tab:pw-debug-shots}),
+permettendo la diagnosi post-mortem di ogni sessione senza rieseguire
+il flusso.
+
+\begin{table}[htbp]
+\centering
+\caption{Screenshot di debug salvati durante il flusso di contatto}
+\label{tab:pw-debug-shots}
+\begin{tabular}{ll}
+\hline
+\textbf{File} & \textbf{Momento} \\
+\hline
+\texttt{tmp/debug\_nat\_01\_nav.png}   & Dopo la navigazione all'URL target \\
+\texttt{tmp/debug\_nat\_02\_after\_click.png} & Dopo il click sul link di contatto (item page) \\
+\texttt{tmp/debug\_nat\_03\_filled.png} & Dopo la compilazione del messaggio \\
+\texttt{tmp/debug\_nat\_FAIL\_form.png} & Se il campo messaggio non viene trovato \\
+\hline
+\end{tabular}
+\end{table}
+
+In caso di fallimento nella compilazione del form, viene inoltre
+salvato il DOM completo della pagina in \texttt{tmp/debug\_form.html},
+consentendo l'analisi offline della struttura HTML effettivamente
+presente nel momento del blocco.
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Riepilogo delle Strategie Implementate}
+\label{sec:pw-summary}
+% ─────────────────────────────────────────────────────────────
+
+Il sottosistema Playwright implementa un insieme articolato di
+tecniche per operare in modo affidabile su un'applicazione web
+complessa e in continua evoluzione come eBay.
+
+\begin{table}[htbp]
+\centering
+\caption{Riepilogo delle strategie implementate nel sottosistema Playwright}
+\label{tab:pw-strategies}
+\begin{tabular}{p{0.30\linewidth}p{0.60\linewidth}}
+\hline
+\textbf{Strategia} & \textbf{Descrizione} \\
+\hline
+ProactorEventLoop isolato & Risolve l'incompatibilità tra Playwright e il SelectorEventLoop di Uvicorn su Windows tramite thread pool dedicato. \\
+Sessione Chrome reale (CDP) & Riutilizzo della sessione già autenticata dell'utente via CDP, senza mai richiedere credenziali all'agente. \\
+Profilo persistente fallback & Lancio con profilo utente reale se la porta CDP non è disponibile. \\
+BrowserManager singleton & Sessione Chromium condivisa e persistente tra chiamate MCP successive, con auto-recovery su chiusura manuale. \\
+Visual tools iniettati & Cursore rosso e highlighting CSS iniettati nel DOM per rendere visibili all'utente le azioni dell'agente. \\
+Movimento mouse fluido & Interpolazione in 15 step verso ogni elemento, con digitazione carattere per carattere (50 ms delay). \\
+Selettori CSS multi-livello & Liste ordinate di selettori alternativi per ogni elemento UI, resiliente ai cambiamenti di layout. \\
+Bypass routing SPA React & Uso di \texttt{page.goto()} diretto sull'URL estratto invece di simulare click intercettati da React Router. \\
+React state injection & Impostazione del valore via \texttt{Object.getOwnPropertyDescriptor} e dispatch eventi \texttt{input}/\texttt{change} per triggerare React. \\
+Submit ARIA scoring & Sistema di punteggio per identificare il bottone di invio tra tutti gli elementi visibili, con esclusione inbox rows. \\
+Verifica post-invio & Controllo dello svuotamento della textarea come prova semantica che il messaggio è stato processato. \\
+Graceful degradation & A ogni step di fallimento, il browser rimane aperto e il tool guida l'utente con un messaggio in linguaggio naturale. \\
+Screenshot debug automatici & 4 screenshot in punti chiave del flusso + dump HTML per diagnosi offline. \\
+\hline
+\end{tabular}
+\end{table}
+
+Il capitolo successivo descrive la pipeline di ricerca prodotti e il
+sistema di reranking LTR, in cui Playwright e le API ufficiali eBay
+operano come sorgenti dati complementari.

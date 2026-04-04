@@ -53,16 +53,22 @@ export default function ProfileBadge() {
       .catch(() => {})
   }, [])
 
-  const isEmpty = !settings.favoriteBrands && !settings.pricePreference
-  
-  const brands = settings.favoriteBrands
-    ? settings.favoriteBrands.split(",").filter(b => b.trim()).slice(0, 3)
-    : []
+  const brandsList = useMemo(() => {
+    if (!settings.favoriteBrands) return []
+    return settings.favoriteBrands.split(",")
+      .map(part => {
+        const [name, hits] = part.split(":")
+        return { name: name.trim(), hits: hits ? parseInt(hits) : 1 }
+      })
+      .filter(b => b.name)
+  }, [settings.favoriteBrands])
+
+  const isEmpty = brandsList.length === 0 && !settings.pricePreference
 
   const registrationYear = formatYear(ebayInfo?.registration_date)
   const siteLabel = ebayInfo?.site ? (SITE_LABELS[ebayInfo.site] ?? `🌍 ${ebayInfo.site}`) : null
 
-  // 🔹 CONTEXTUAL BUDGET LOGIC
+  // 🔹 CONTEXTUAL BUDGET & BRAND LOGIC
   const activeSession = sessions.find(s => s.id === (activeSessionId || sessions[0]?.id))
   const lastSearch = useMemo(() => {
     if (!activeSession) return null
@@ -81,11 +87,10 @@ export default function ProfileBadge() {
   const activeContext = useMemo(() => {
     const pq = lastSearch?.search?.metadata?.parsed_query
     if (!pq) return null
-    // Priorità al prodotto specifico (es "iPhone"), poi al brand (es "Apple"), poi alla categoria
     return {
       product: pq.product?.toLowerCase(),
       brand: (pq.brands && pq.brands[0])?.toLowerCase(),
-      category: lastSearch?.search?.metadata?.ebay_category_id
+      categoryName: lastSearch?.search?.metadata?.dominant_category_name
     }
   }, [lastSearch])
 
@@ -100,14 +105,23 @@ export default function ProfileBadge() {
     if (activeContext.brand && contextualBudgetsMap[`auto_brand:${activeContext.brand}`]) {
       return { val: contextualBudgetsMap[`auto_brand:${activeContext.brand}`], label: activeContext.brand, auto: true }
     }
-    // 3. Auto category budget
-    // Nota: qui dovremmo avere il nome categoria, ma per ora usiamo l'ID se presente in auto_cat:ID
-    if (activeContext.category && contextualBudgetsMap[`auto_cat:${activeContext.category}`]) {
-       return { val: contextualBudgetsMap[`auto_cat:${activeContext.category}`], label: "categoria", auto: true }
+    // 3. Auto category budget (Matched by dominant_category_name)
+    if (activeContext.categoryName && contextualBudgetsMap[`auto_cat:${activeContext.categoryName.toLowerCase()}`]) {
+       return { val: contextualBudgetsMap[`auto_cat:${activeContext.categoryName.toLowerCase()}`], label: activeContext.categoryName, auto: true }
     }
     
     return null
   }, [activeContext, contextualBudgetsMap])
+
+  const brands = useMemo(() => {
+    const activeBrand = activeContext?.brand
+    if (activeBrand) {
+       const match = brandsList.find(b => b.name.toLowerCase() === activeBrand.toLowerCase())
+       if (match) return [match.name]
+    }
+    // Fallback: top 3 by affinity
+    return brandsList.slice(0, 3).map(b => b.name)
+  }, [brandsList, activeContext])
 
   const dominantCondition = useMemo(() => {
     if (!settings.conditionPreference) return null

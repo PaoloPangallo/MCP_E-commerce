@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 VALID_INTENTS = {"conversation", "seller_analysis", "product_search", "hybrid", "comparison", "item_details", "shipping", "market_trends", "deals", "wishlist", "contact_seller", "playwright_search"}
 
-EBAY_ID_RE = re.compile(r"\b(?:v1\|)?\d{12,13}(?:\|\d)?\b|\b\d{12,13}\b", re.IGNORECASE)
+EBAY_ID_RE = re.compile(r"\b(?:v1\|)\d+(?:\|\d+)*\b|\b\d{11,13}\b", re.IGNORECASE)
 
 
 class ReactPlanner:
