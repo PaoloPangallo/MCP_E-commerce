@@ -13,7 +13,6 @@ import { Menu, MenuItem, ListItemIcon, ListItemText, IconButton } from "@mui/mat
 import ContactMailIcon from "@mui/icons-material/ContactMail"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
-import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"
@@ -111,12 +110,13 @@ export default function SearchResultCard({
     return (
       <Box
         sx={{
-          width: 260,
+          width: 280,
           flexShrink: 0,
           borderRadius: "16px",
           bgcolor: "var(--bg-primary)",
           borderColor: isSelected ? "var(--brand-primary)" : "var(--border-color)",
           boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 12px 24px rgba(0,0,0,0.15)" : "none",
+          overflow: "hidden", // Ensure child content is clipped
           "&:hover": {
             transform: "translateY(-4px)",
             boxShadow: isSelected ? "0 0 0 2px var(--brand-primary), 0 16px 32px rgba(0,0,0,0.2)" : "0 12px 24px rgba(0,0,0,0.1)",
@@ -134,14 +134,21 @@ export default function SearchResultCard({
           }
         }}
       >
-        <Box sx={{ position: "relative", width: "100%", aspectRatio: "4/3", borderRadius: "10px", overflow: "hidden", bgcolor: "var(--bg-secondary)", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{ position: "relative", width: "100%", aspectRatio: "1/1", borderRadius: "16px", overflow: "hidden", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {!imageError && item.image_url ? (
             <Box
               component="img"
               src={item.image_url}
               alt={item.title || ""}
               onError={() => setImageError(true)}
-              sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
+              sx={{ 
+                width: "100%", 
+                height: "100%", 
+                objectFit: "contain", 
+                borderRadius: "16px",
+                transition: 'transform 0.5s ease',
+                "&:hover": { transform: 'scale(1.05)' }
+              }}
             />
           ) : (
               <Typography variant="caption" color="text.disabled">No Image</Typography>
@@ -168,8 +175,8 @@ export default function SearchResultCard({
                  top: 8, 
                  left: 8, 
                  zIndex: 20,
-                 bgcolor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.8)",
-                 color: isSelected ? "#fff" : "var(--text-secondary)",
+                 bgcolor: isSelected ? "var(--brand-primary)" : "var(--bg-primary)",
+                 color: isSelected ? "var(--bg-primary)" : "var(--text-secondary)",
                  borderRadius: "50%",
                  width: 28,
                  height: 28,
@@ -177,7 +184,7 @@ export default function SearchResultCard({
                  alignItems: "center",
                  justifyContent: "center",
                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                 border: `2px solid ${isSelected ? "#fff" : "transparent"}`,
+                 border: `2px solid ${isSelected ? "var(--bg-primary)" : "transparent"}`,
                  transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
                  "&:hover": { transform: "scale(1.1)" }
                }}
@@ -198,10 +205,11 @@ export default function SearchResultCard({
               position: "absolute",
               top: 8,
               right: 8,
-              bgcolor: "rgba(255, 255, 255, 0.9)",
+              bgcolor: "var(--bg-primary)",
+              opacity: 0.9,
               color: "var(--text-primary)",
               boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              "&:hover": { bgcolor: "#fff", transform: "scale(1.05)" }
+              "&:hover": { bgcolor: "var(--bg-secondary)", transform: "scale(1.05)" }
             }}
           >
             <MoreVertIcon sx={{ fontSize: 18 }} />
@@ -220,7 +228,8 @@ export default function SearchResultCard({
                 boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15)",
                 border: "1px solid var(--border-color)",
                 borderRadius: "12px",
-                minWidth: 200
+                minWidth: 200,
+                bgcolor: "var(--bg-primary)"
               }
             }}
           >
@@ -254,13 +263,14 @@ export default function SearchResultCard({
               size="small"
               sx={{
                 position: "absolute",
-                top: 8,
-                left: 8,
+                top: 12,
+                left: 12,
                 bgcolor: "var(--brand-primary)",
-                color: "#ffffff",
+                color: "var(--bg-primary)",
                 fontWeight: 800,
                 fontSize: 9,
-                height: 18
+                height: 18,
+                zIndex: 5
               }}
             />
           )}
@@ -395,8 +405,8 @@ export default function SearchResultCard({
             top: 12, 
             left: 12, 
             zIndex: 20,
-            bgcolor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.9)",
-            color: isSelected ? "#fff" : "var(--text-secondary)",
+            bgcolor: isSelected ? "var(--brand-primary)" : "var(--bg-primary)",
+            color: isSelected ? "var(--bg-primary)" : "var(--text-secondary)",
             borderRadius: "50%",
             width: 24,
             height: 24,
@@ -404,7 +414,7 @@ export default function SearchResultCard({
             alignItems: "center",
             justifyContent: "center",
             boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
-            border: `2px solid ${isSelected ? "#fff" : "transparent"}`,
+            border: `2px solid ${isSelected ? "var(--bg-primary)" : "transparent"}`,
           }}
         >
           {isSelected ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 16 }} />}
@@ -419,14 +429,15 @@ export default function SearchResultCard({
         sx={{
           width: 88,
           height: 88,
-          borderRadius: "12px",
+          borderRadius: "16px",
           overflow: "hidden",
-          bgcolor: "var(--bg-primary)",
+          bgcolor: "var(--bg-secondary)",
           border: "1px solid var(--border-color)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          p: 0, 
           textDecoration: "none",
           transition: "all 0.2s ease-in-out",
           boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
@@ -444,7 +455,12 @@ export default function SearchResultCard({
             alt={item.title || ""}
             loading="lazy"
             onError={() => setImageError(true)}
-            sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
+            sx={{ 
+              width: "100%", 
+              height: "100%", 
+              objectFit: "contain", 
+              borderRadius: "16px" 
+            }}
           />
         ) : (
           <Box sx={{ width: 32, height: 32, bgcolor: "var(--bg-secondary)", borderRadius: "8px", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

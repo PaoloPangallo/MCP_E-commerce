@@ -23,10 +23,10 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        bgcolor: "rgba(255, 255, 255, 0.8)",
+        bgcolor: "var(--bg-primary)",
         backdropFilter: "blur(20px) saturate(180%)",
-        borderLeft: "1px solid rgba(255, 255, 255, 0.3)",
-        boxShadow: "-10px 0 30px rgba(0,0,0,0.05)",
+        borderLeft: "1px solid var(--border-color)",
+        boxShadow: "-10px 0 30px rgba(0,0,0,0.1)",
         position: "relative"
       }}
     >
@@ -38,8 +38,9 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
           justifyContent: "space-between",
           px: 3,
           py: 3,
-          borderBottom: "1px solid rgba(0,0,0,0.05)",
-          bgcolor: "rgba(255, 255, 255, 0.4)"
+          borderBottom: "1px solid var(--border-color)",
+          bgcolor: "var(--bg-secondary)",
+          opacity: 0.8
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
@@ -57,10 +58,10 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
             <FavoriteIcon sx={{ fontSize: 20, color: "#ef4444" }} />
           </Box>
           <Box>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: "#1f2937", letterSpacing: -0.5 }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", letterSpacing: -0.5 }}>
               I tuoi preferiti
             </Typography>
-            <Typography sx={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}>
+            <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 500 }}>
               {items.length} {items.length === 1 ? 'oggetto salvato' : 'oggetti salvati'}
             </Typography>
           </Box>
@@ -69,9 +70,9 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
           size="medium" 
           onClick={onClose} 
           sx={{ 
-            color: "#6b7280",
-            bgcolor: "rgba(0,0,0,0.03)",
-            "&:hover": { bgcolor: "rgba(0,0,0,0.06)", transform: "rotate(90deg)" },
+            color: "var(--text-secondary)",
+            bgcolor: "var(--bg-secondary)",
+            "&:hover": { bgcolor: "var(--bg-primary)", transform: "rotate(90deg)" },
             transition: "all 0.3s ease"
           }}
         >
@@ -91,10 +92,10 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
               justifyContent: "center",
               p: 4, 
               textAlign: "center", 
-              color: "#9ca3af" 
+              color: "var(--text-secondary)" 
             }}>
                <FavoriteBorderIcon sx={{ fontSize: 80, mb: 2, opacity: 0.1, color: "#ef4444" }} />
-               <Typography sx={{ fontWeight: 600, color: "#4b5563" }}>Nessun preferito salvato</Typography>
+               <Typography sx={{ fontWeight: 600, color: "var(--text-primary)" }}>Nessun preferito salvato</Typography>
                <Typography variant="caption" sx={{ mt: 1, display: "block" }}>
                  Salva gli oggetti che ti piacciono per ritrovarli facilmente qui.
                </Typography>
@@ -113,9 +114,9 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                         size="small"
                         onClick={() => removeItem(item.ebay_id)}
                         sx={{ 
-                          color: "#9ca3af", 
+                          color: "var(--text-secondary)", 
                           mr: 1,
-                          "&:hover": { color: "#ef4444", bgcolor: "rgba(239, 68, 68, 0.05)" } 
+                          "&:hover": { color: "#ef4444", bgcolor: "rgba(239, 68, 68, 0.1)" } 
                         }}
                       >
                         <DeleteOutlineIcon sx={{ fontSize: 20 }} />
@@ -129,9 +130,9 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                     borderRadius: 3,
                     border: "1px solid transparent",
                     "&:hover": { 
-                      bgcolor: "#fff", 
-                      borderColor: "rgba(0,0,0,0.05)",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
+                      bgcolor: "var(--bg-secondary)", 
+                      borderColor: "var(--border-color)",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                       transform: "translateY(-2px)"
                     },
                     transition: "all 0.2s ease",
@@ -147,7 +148,7 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                       borderRadius: 2,
                       objectFit: "cover",
                       mr: 2,
-                      bgcolor: "#f3f4f6",
+                      bgcolor: "var(--bg-secondary)",
                       display: item.image_url ? "block" : "none",
                       boxShadow: "0 2px 5px rgba(0,0,0,0.05)"
                     }}
@@ -165,7 +166,7 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                           fontSize: 13,
                           lineHeight: 1.4,
                           fontWeight: 700,
-                          color: "#1f2937",
+                          color: "var(--text-primary)",
                           textDecoration: "none",
                           display: "-webkit-box",
                           overflow: "hidden",
@@ -211,7 +212,7 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
                           </Box>
                         )}
                         {item.seller_name && (
-                          <Typography sx={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>
+                          <Typography sx={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 500 }}>
                              {item.seller_name}
                           </Typography>
                         )}
@@ -227,8 +228,8 @@ export default function WishlistPanel({ onClose }: { onClose?: () => void }) {
 
       {/* Footer Info */}
       {items.length > 0 && (
-        <Box sx={{ p: 2.5, borderTop: "1px solid rgba(0,0,0,0.05)", bgcolor: "rgba(255, 255, 255, 0.4)" }}>
-           <Typography variant="caption" sx={{ color: "#9ca3af", lineHeight: 1.4, display: "block" }}>
+        <Box sx={{ p: 2.5, borderTop: "1px solid var(--border-color)", bgcolor: "var(--bg-secondary)", opacity: 0.8 }}>
+           <Typography variant="caption" sx={{ color: "var(--text-secondary)", lineHeight: 1.4, display: "block" }}>
              * Prezzi e disponibilità visualizzati potrebbero subire variazioni su eBay.
            </Typography>
         </Box>

@@ -7,8 +7,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Set
 
+from app.utils.scalars import sanitize_scalars
 from sqlalchemy.orm import Session
-
 from app.db.database import SessionLocal
 from app.db.redis import redis_client
 from app.config.cache import SEARCH_PIPELINE_TTL
@@ -116,28 +116,6 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     return " ".join(final_tokens).strip()
 
 
-def _sanitize_floats(obj: Any) -> Any:
-    """Ricorsivamente converte numpy floats o NaN/Inf in tipi Python-native."""
-    import math
-    try:
-        import numpy as np
-    except ImportError:
-        np = None
-
-    if isinstance(obj, dict):
-        return {k: _sanitize_floats(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_sanitize_floats(i) for i in obj]
-    elif np and isinstance(obj, (np.integer,)):
-        return int(obj)
-    elif np and isinstance(obj, (np.floating,)):
-        v = float(obj)
-        return None if (math.isnan(v) or math.isinf(v)) else v
-    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
-        return None
-    elif hasattr(obj, 'item') and callable(getattr(obj, 'item')): # NumPy scalars
-        return obj.item()
-    return obj
 
 
 async def _fetch_feedback_cached(seller_name: str, limit: int = MAX_FEEDBACK_PER_SELLER) -> List[Dict[str, Any]]:
@@ -436,98 +414,6 @@ def _apply_final_ranking(
     items.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
 
 
-async def _compute_llm_value_scores(
-    top_items: List[Dict[str, Any]],
-    all_items: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Usa l'LLM (Ollama) per valutare il 'Value for Money' dei top prodotti.
-    Passa le statistiche di mercato calcolate dall'intera SERP eBay corrente
-    come contesto — nessuna chiamata API esterna aggiuntiva.
-    """
-    if not top_items:
-        return {}
-
-    # ── Calcola statistiche di mercato dai risultati eBay completi ──────────
-    prices = [float(it["price"]) for it in all_items if isinstance(it.get("price"), (int, float)) and it["price"] > 0]
-    
-    market_ctx: Dict[str, Any] = {}
-    if prices:
-        market_ctx["count"] = len(prices)
-        market_ctx["avg_price"]    = round(sum(prices) / len(prices), 2)
-        market_ctx["min_price"]    = round(min(prices), 2)
-        market_ctx["max_price"]    = round(max(prices), 2)
-        sorted_p = sorted(prices)
-        mid = len(sorted_p) // 2
-        market_ctx["median_price"] = round(
-            sorted_p[mid] if len(sorted_p) % 2 else (sorted_p[mid - 1] + sorted_p[mid]) / 2, 2
-        )
-
-    # Distribuzione condizioni per contestualizzare l'LLM
-    from collections import Counter
-    cond_counter = Counter(
-        (it.get("condition") or "unknown").lower()
-        for it in all_items
-    )
-    market_ctx["condition_distribution"] = dict(cond_counter.most_common(5))
-
-    # ── Prepara i candidati da valutare ─────────────────────────────────────
-    candidates = []
-    for item in top_items:
-        price = item.get("price")
-        price_vs_avg = None
-        if prices and isinstance(price, (int, float)):
-            avg = market_ctx["avg_price"]
-            price_vs_avg = f"{round((price - avg) / avg * 100, 1):+.1f}% rispetto alla media"
-        
-        candidates.append({
-            "id":            item.get("ebay_id"),
-            "title":         (item.get("title") or "")[:70],
-            "price":         f"{price} {item.get('currency', 'EUR')}",
-            "price_vs_avg":  price_vs_avg,
-            "condition":     item.get("condition"),
-            "seller_trust":  item.get("trust_score"),
-            "seller_rating": item.get("seller_rating"),
-        })
-
-    prompt = f"""Sei un esperto di mercato eBay. Valuta il rapporto qualità-prezzo di questi annunci.
-
-CONTESTO MERCATO (prezzi reali dalla ricerca corrente):
-- Prodotti trovati: {market_ctx.get('count', '?')}
-- Prezzo medio: {market_ctx.get('avg_price', '?')} EUR
-- Range prezzi: {market_ctx.get('min_price', '?')} – {market_ctx.get('max_price', '?')} EUR
-- Prezzo mediano: {market_ctx.get('median_price', '?')} EUR
-- Condizioni presenti: {market_ctx.get('condition_distribution', {})}
-
-ANNUNCI DA VALUTARE:
-{json.dumps(candidates, ensure_ascii=False, indent=2)}
-
-ISTRUZIONI:
-- Usa il contesto mercato per dare un punteggio relativo, non assoluto.
-- Un articolo sotto la mediana in buone condizioni merita 0.75+.
-- Un articolo sopra la media senza vantaggi evidenti merita < 0.45.
-- seller_trust 0–1 (più alto = più affidabile); None = non valutato (penalizzare leggermente).
-- "reason" deve essere breve (max 10 parole, in italiano).
-
-Rispondi SOLO con un array JSON valido:
-[{{"id": "...", "value_score": 0.XX, "reason": "..."}}]"""
-
-    try:
-        response, _ = await call_llm(prompt)
-        if not response:
-            return {}
-        match = re.search(r"\[.*?\]", response, re.DOTALL)
-        if match:
-            data = json.loads(match.group(0))
-            return {
-                s["id"]: {"score": float(s["value_score"]), "reason": s.get("reason")}
-                for s in data
-                if "id" in s and "value_score" in s
-            }
-    except Exception as e:
-        logger.warning("LLM value score computation failed: %s", e)
-    return {}
-
 
 def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict], query: str = "", parsed: Dict = None) -> List[Dict]:
     """
@@ -716,47 +602,6 @@ async def run_search_pipeline(
     aspect_distributions = search_res.get("aspectDistributions", [])
     category_distributions = search_res.get("categoryDistributions", [])
     
-    # -------------------------------------------------------------------------
-    # SMART CATEGORY FILTERING (Anti-Accessory Logic)
-    # -------------------------------------------------------------------------
-    intent_type = parsed.get("product_type", "Unknown")
-    
-    if intent_type == "Main" and items:
-        accessory_cats = ["Accessori", "Parti", "Cover", "Case", "Protective", "Replacement", "Cavo", "Caricatore"]
-        
-        # Check top 5 items for accessory categories
-        top_items = [items[i] for i in range(len(items)) if i < 5]
-        acc_count = 0
-        for it in top_items:
-            cat_name = it.get("category_name") or ""
-            if any(word.lower() in cat_name.lower() for word in accessory_cats):
-                acc_count += 1
-        
-        # If > 60% are accessories but we want Main
-        if acc_count >= 3:
-            logger.info("SMART FILTER | Detected accessory dominance (%d/5) for Main intent. Attempting re-search.", acc_count)
-            
-            best_cat_id = None
-            for dist in category_distributions:
-                c_name = dist.get("categoryName") or ""
-                if not any(word.lower() in c_name.lower() for word in accessory_cats):
-                    best_cat_id = dist.get("categoryId")
-                    logger.info("SMART FILTER | Found better category: '%s' (%s)", c_name, best_cat_id)
-                    break
-            
-            if best_cat_id:
-                logger.info("SMART FILTER | Triggering RE-SEARCH with categoryId=%s", best_cat_id)
-                # Modify a copy of parsed query to add the category filter
-                parsed_copy = parsed.copy()
-                constraints = list(parsed_copy.get("constraints") or [])
-                constraints.append({"type": "category_id", "value": best_cat_id})
-                parsed_copy["constraints"] = constraints
-                
-                new_search_res = await search_items(parsed_copy, limit=MAX_RESULTS_FROM_EBAY)
-                items = new_search_res.get("itemSummaries", [])
-                aspect_distributions = new_search_res.get("aspectDistributions", [])
-                category_distributions = new_search_res.get("categoryDistributions", [])
-
     logger.info("Final eBay results count: %d", len(items))
     expanded_query, rag_docs = results[1]
     
@@ -769,6 +614,31 @@ async def run_search_pipeline(
         if memory_items:
             logger.info("Merging %d items from Global Memory", len(memory_items))
             items = _merge_hybrid_results(items, memory_items, query=query, parsed=parsed)
+            
+            # --- Verifica esistenza live degli item provenienti SOLO dal RAG ---
+            memory_only = [it for it in items if it.get("_source_memory") and not it.get("_source_ebay")]
+            if memory_only:
+                from app.services.ebay import get_item_details
+                logger.info(f"PIPELINE: Verifico l'esistenza di {len(memory_only)} item recuperati dalla memoria...")
+                
+                async def verify_item(item):
+                    res = await get_item_details(item["ebay_id"])
+                    if res:
+                        # Arricchisci con dati freschi
+                        item["price"] = res.get("price", {}).get("value")
+                        item["currency"] = res.get("price", {}).get("currency")
+                        item["shipping_cost"] = res.get("shipping_cost")
+                        item["condition"] = res.get("condition")
+                        item["title"] = res.get("title")  # Titolo aggiornato
+                    return item if res is not None else None
+                
+                verified = await asyncio.gather(*(verify_item(it) for it in memory_only))
+                dead_ids = {it["ebay_id"] for it, v in zip(memory_only, verified) if v is None}
+                
+                if dead_ids:
+                    logger.info(f"PIPELINE: Rimossi {len(dead_ids)} item dal RAG non più attivi su eBay")
+                    items = [it for it in items if it.get("ebay_id") not in dead_ids]
+            
             timings["memory_hit"] = True
     except Exception as e:
         logger.warning("Memory fetch failed: %s", e)
@@ -836,6 +706,32 @@ async def run_search_pipeline(
     # ============================================================
     # 5) RERANK  (ora ha trust_score disponibile per ogni item)
     # ============================================================
+    # ============================================================
+    # 5.5) TOTAL ENRICHMENT (getItem API for all unique IDs)
+    # ============================================================
+    logger.info("PIPELINE STEP 5.5: total_enrichment")
+    t_enrich = time.time()
+    if items:
+        # Recuperiamo gli ID unici da Live e RAG per l'arricchimento totale
+        all_ids = list(set([it.get("ebay_id") for it in items if it.get("ebay_id")]))
+        if all_ids:
+            from app.services.ebay import get_item_details
+            # Fetch parallelo (con limite di concorrenza implicito se molti)
+            enrich_results = await asyncio.gather(*[get_item_details(eid) for eid in all_ids], return_exceptions=True)
+            enrich_map = {eid: res for eid, res in zip(all_ids, enrich_results) if isinstance(res, dict)}
+            
+            # Iniettiamo i dati profondi negli item
+            for it in items:
+                eid = it.get("ebay_id")
+                details = enrich_map.get(eid)
+                if details:
+                    it["full_description"] = details.get("description")
+                    it["full_item_specifics"] = details.get("item_specifics")
+                    # Se il brand manca nel riepilogo, lo prendiamo dai dettagli
+                    if not it.get("brand"):
+                        it["brand"] = details.get("brand")
+    timings["total_enrichment_s"] = round(time.time() - t_enrich, 3)
+
     logger.info("PIPELINE STEP 6: rerank")
 
     t = time.time()
@@ -848,30 +744,23 @@ async def run_search_pipeline(
                 seller_docs=seller_docs,
                 constraints=parsed.get("constraints"),
             )
+            
+            # --- FASE FINALE: LLM Come Giudice (Deep-Check) ---
+            logger.info("PIPELINE STEP 7: llm_judge (LTR Deep-Check)")
+            from app.services.ltr import rerank_items
+            items = await rerank_items(
+                query=query, 
+                items=items, 
+                exclusions=parsed.get("exclusions"),
+                rag_context=product_docs
+            )
+            
         except Exception as e:
             logger.exception("Rerank failed: %s", e)
             logger.warning("Rerank failed, keeping original order")
     delta_rerank = time.time() - t
-    timings["rerank_s"] = int(float(delta_rerank) * 1000) / 1000.0
+    timings["rerank_s"] = round(time.time() - t, 3)
 
-    # ============================================================
-    # 5.5) NER ATTRIBUTE EXTRACTION
-    # ============================================================
-    logger.info("PIPELINE STEP 6.5: ner_extraction")
-    t = time.time()
-    if items:
-        # Extract attributes for top few items only for performance
-        top_n = 6
-        top_titles = [items[i].get("title", "") for i in range(len(items)) if i < top_n]
-        try:
-            ner_results = await extract_attributes_batch(top_titles)
-            top_items_ner = [items[i] for i in range(len(items)) if i < top_n]
-            for it, ner in zip(top_items_ner, ner_results):
-                it["ner_attributes"] = ner
-        except Exception as e:
-            logger.warning("NER extraction skipped: %s", e)
-    delta_ner = time.time() - t
-    timings["ner_extraction_s"] = int(float(delta_ner) * 1000) / 1000.0
 
     # ============================================================
     # 6) DB PERSIST (Isolated Session)
@@ -906,26 +795,6 @@ async def run_search_pipeline(
 
     _apply_final_ranking(results_out, user=user)
 
-    # ------------------------------------------------------------
-    # 7.5) LLM VALUATION (TOP-K REFINEMENT)
-    # ------------------------------------------------------------
-    logger.info("PIPELINE STEP 8.5: llm_value_refinement")
-    top_n_for_llm = results_out[:8]
-    if top_n_for_llm:
-        llm_valuations = await _compute_llm_value_scores(
-            top_items=top_n_for_llm,
-            all_items=results_out,  # Mercato = intera SERP eBay corrente, zero costi extra
-        )
-        for item in results_out:
-            eid = item.get("ebay_id")
-            if eid and eid in llm_valuations:
-                val = llm_valuations[eid]
-                item["value_score"] = val["score"]
-                if val.get("reason"):
-                    explanations = list(item.get("explanations") or [])
-                    item["explanations"] = [f"💡 {val['reason']}"] + explanations[:5]
-
-    
     # Attach RAG feedback
     logger.info("PIPELINE STEP 9: rag_attach")
     for item in [results_out[i] for i in range(len(results_out)) if i < 15]:
@@ -951,21 +820,6 @@ async def run_search_pipeline(
           extra_info = f"\n[INFO EBAY] In questa categoria ({dominant_category}), il reso è generalmente {accepted} {period}."
           rag_context_text += extra_info
           logger.info("PIPELINE: Enriched RAG context with return policies")
-
-    # ============================================================
-    # 8) EXPLAIN (if results exist)
-    # ============================================================
-    logger.info("PIPELINE STEP 10: explain")
-
-    t = time.time()
-    analysis = None
-    if results_out:
-        try:
-            analysis = await asyncio.to_thread(explain_results, query, [results_out[i] for i in range(len(results_out)) if i < 3])
-        except Exception:
-            pass
-    delta_explain = time.time() - t
-    timings["explain_s"] = int(float(delta_explain) * 1000) / 1000.0
 
     # ============================================================
     # 9) IR METRICS
@@ -1007,8 +861,11 @@ async def run_search_pipeline(
     timings["total_s"] = int(float(time.time() - t0) * 1000) / 1000.0
 
     # Sanitize EVERYTHING before returning to ensure JSON serializability
-    results_out = _sanitize_floats(results_out)
-    metrics = _sanitize_floats(metrics)
+    results_out = sanitize_scalars(results_out)
+    metrics = sanitize_scalars(metrics)
+    
+    # Analysis is now handled by the Agent at the end of the conversation
+    analysis = None
     
     logger.debug("PIPELINE DONE | results=%d | time=%ss", len(results_out), timings['total_s'])
 

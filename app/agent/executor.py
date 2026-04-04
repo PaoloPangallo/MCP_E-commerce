@@ -196,7 +196,7 @@ class ToolExecutor:
             "message_form_not_found", "submit_button_not_found", "message_sent",
         }
         contact_status = result.get("contact_status", "")
-        terminal = contact_status in playwright_terminal_statuses
+        terminal = bool(result.get("terminal", False)) or (contact_status in playwright_terminal_statuses)
         summary = result.get("summary", f"Tool {tool_call.tool} completato con status {status}.")
 
         # For browser tools, enrich the summary with actual page content so the LLM

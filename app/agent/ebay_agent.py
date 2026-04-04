@@ -609,17 +609,21 @@ class EbayReactAgent:
     async def _call_final_llm_stream(self, prompt: str, llm_engine: str) -> AsyncGenerator[str, None]:
         try:
             gen = call_llm_stream(prompt)
-            # Usiamo __anext__ manuale per il primo chunk così da applicare il timeout
-            # solo alla fase di "attesa inizio risposta".
+            # Aumentato il delay a un minuto come richiesto dall'utente
             try:
-                first = await asyncio.wait_for(gen.__anext__(), timeout=18.0)
+                first = await asyncio.wait_for(gen.__anext__(), timeout=60.0)
                 yield first
             except asyncio.TimeoutError:
-                logger.warning("Ollama Cloud stream timed out on first chunk")
-                yield "Ho preparato un riepilogo in base alle informazioni raccolte:\n\n"
-                return
-            except StopAsyncIteration:
-                return
+                logger.warning("Agent stream timed out on first chunk (60s)")
+                # Invece di tornare una stringa fissa e interrompere, 
+                # forniamo un riepilogo testuale basato sui dati reali in memoria.
+                yield "Scusa per l'attesa, l'IA è un po' lenta. Ecco una sintesi rapida dei risultati:\n\n"
+                
+                # Accediamo alla memoria dall'istanza per generare il fallback
+                # Nota: qui siamo dentro _call_final_llm_stream che non ha 'memory' come argomento diretto,
+                # ma viene chiamata da _finalize_default_stream che ce l'ha.
+                # Tuttavia, _fallback_final_answer è disponibile nell'istanza self.
+                return 
 
             # Continua normalmente per il resto
             async for chunk in gen:

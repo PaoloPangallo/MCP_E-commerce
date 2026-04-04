@@ -568,6 +568,21 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
             return None
 
         data = response.json()
+        
+        # Estrai costo spedizione (cheapest option)
+        shipping_cost = None
+        shipping_options = data.get("shippingOptions", []) or []
+        if shipping_options:
+            costs = []
+            for opt in shipping_options:
+                c = opt.get("shippingCost", {})
+                try:
+                    costs.append(float(c.get("value", 0)))
+                except (TypeError, ValueError):
+                    pass
+            if costs:
+                shipping_cost = min(costs)
+
         item_details = {
             "item_id": data.get("itemId"),
             "title": data.get("title"),
@@ -580,6 +595,8 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
             "additional_images": data.get("additionalImages", []),
             "item_url": data.get("itemWebUrl"),
             "condition": data.get("condition"),
+            "shipping_cost": shipping_cost,
+            "category_name": data.get("categoryPath", "")
         }
         
         # Enrich with similar items

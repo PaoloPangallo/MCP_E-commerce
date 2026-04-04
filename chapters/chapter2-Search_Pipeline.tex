@@ -1,0 +1,269 @@
+% ============================================================
+% chapter2-Search_Pipeline.tex
+% ============================================================
+\section{La Pipeline di Elaborazione della Query}
+
+La Search Pipeline costituisce il nucleo operativo dell'assistente ed è
+orchestrata interamente all'interno del modulo \path{search_pipeline.py}.
+Alla ricezione di una richiesta in linguaggio naturale, il sistema attiva
+una sequenza strutturata di elaborazioni che sfrutta in modo sistematico
+la concorrenza asincrona offerta da \path{asyncio}, combinando interrogazioni
+parallele a database interni ed API esterne per produrre risultati
+classificati, arricchiti e contestualizzati. L'intera pipeline si articola
+in undici fasi distinte, ciascuna delle quali alimenta le successive con
+strutture dati progressivamente più raffinate.
+
+\vspace{0.4cm}
+\noindent
+\textbf{1. Recupero Anticipato della Memoria (Phantom Fetch)}\\
+Non appena il testo grezzo della richiesta raggiunge la pipeline, viene
+immediatamente avviata in background un'operazione di interrogazione su
+\textbf{Qdrant}, il database vettoriale del sistema, tramite il metodo
+\path{retrieve_context}. Questa operazione, denominata \emph{Phantom Fetch},
+non attende il completamento delle fasi di analisi semantica: agisce sul
+testo non ancora analizzato per recuperare, con il massimo anticipo
+temporale, le inserzioni storiche già validate o consigliate in sessioni
+precedenti su query semanticamente affini. Il principio sottostante è che
+prodotti già incontrati e giudicati positivamente rappresentano una
+baseline informativa di alta qualità, e il loro recupero anticipato
+consente di parallelizzare il costo di latenza con le fasi computazionalmente
+più intensive che seguono.
+
+\vspace{0.4cm}
+\noindent
+\textbf{2. Recupero dello Storico Conversazionale a Breve Termine}\\
+Per consentire all'assistente di mantenere la coerenza su conversazioni
+multi-turno, nelle quali l'utente può affinare progressivamente i propri
+criteri, la pipeline recupera la cronologia recente della sessione attiva tramite \path{redis_client.get_user_queries}.
+Vengono estratte le ultime tre query (\path{history[:3]}), costruendo uno
+\textit{snapshot} contestuale volutamente leggero: la Search Pipeline
+necessita di un riferimento minimo per risolvere anafore e riferimenti
+impliciti, senza sovraccaricare la \textit{context window} dell'LLM
+impiegato nella fase di parsing. La gestione della memoria a lungo
+termine, incluse le eventuali logiche di \textit{summarization},
+è deliberatamente demandata all'Orchestratore ReAct, circoscrivendo
+il compito della pipeline al solo \textit{intent-matching} istantaneo
+sulla sessione corrente.
+
+\vspace{0.4cm}
+\noindent
+\textbf{3. Analisi Logica della Query (NLP Parsing)}\\
+Il testo grezzo e lo storico conversazionale vengono consegnati al servizio
+\path{parse_query_service}, responsabile della trasformazione del linguaggio
+naturale in strutture rigide e interrogabili dai sistemi a valle. Il processo
+si articola in due livelli complementari. 
+Il primo livello è un'estrazione rapida basata su \textbf{spaCy}: il modello
+individua in modo deterministico elementi lessicali ad alta rilevanza, come
+soglie numeriche di budget (\emph{"sotto i 200 euro"} genera il vincolo
+\path{max_price=200}) e indicatori di condizione (\emph{"rovinato"} forza
+il filtro \path{condition="usato"}). Questo stadio garantisce latenza
+minima per i casi più frequenti e ben strutturati.
+Il secondo livello delega a un LLM l'interpretazione delle
+ambiguità semantiche non risolvibili con regole lessicali. Il modello
+restituisce un oggetto strutturato che include il marchio, le specifiche
+tecniche e il campo \path{intent_product_type}: un classificatore binario 
+che distingue se l'utente intende acquistare un dispositivo principale (\texttt{Main}) 
+o un accessorio (\texttt{Accessory}). Questa distinzione governa le fasi di filtraggio successive.
+In parallelo, il modulo \path{_build_ebay_query} effettua una traduzione
+sistematica delle negazioni in linguaggio naturale italiano, ad esempio espressioni
+come \emph{"senza cover"}, \emph{"no usati"}, \emph{"nessun graffio"},
+nella sintassi di esclusione supportata dalle API di ricerca di eBay,
+prependendovi il segno aritmetico meno (\texttt{-}). Questa sostituzione
+è fondamentale per evitare che termini negativi del linguaggio naturale
+vengano interpretati come keyword di inclusione dai motori di ricerca esterni.
+
+\vspace{0.4cm}
+\noindent
+\textbf{4. Ricerca Parallela API eBay ed Espansione Semantica Locale (RAG)}\\
+La pipeline lancia simultaneamente, tramite \path{asyncio.gather}, due
+flussi di recupero indipendenti che operano su sorgenti dati eterogenee.
+Da un lato, \path{search_items} interroga le \textbf{Browse API di eBay},
+richiedendo un sottoinsieme ristretto delle inserzioni più
+rilevanti secondo i criteri costruiti nella fase precedente (massimo 15 risultati). La scelta
+di limitare il volume dei risultati è deliberata: un insieme pre-selezionato 
+consente elaborazioni successive più rapide rispetto a un ampio dataset rumoroso.
+Dall'altro lato, si attiva il modulo \path{_do_rag}, che implementa un approccio \textbf{Retrieval-Augmented Generation} sul corpus documentale interno. La query viene prima espansa semanticamente tramite \path{expand_query}, che identifica sinonimi e varianti terminologiche per massimizzare la copertura del recupero. L'interrogazione si biforca quindi su due collezioni Qdrant distinte: \path{product_docs}, contenente schede tecniche e documentazione di prodotto, e \path{seller_docs}, che raccoglie guide operative e casistiche di problemi ricorrenti segnalati dai venditori. L'integrazione di queste due sorgenti consente all'assistente di contestualizzare le inserzioni eBay con informazioni qualitative non presenti nelle schede commerciali.
+
+\vspace{0.4cm}
+\noindent
+\textbf{5. Filtro Anti-Accessori (Candidate Pool Fallback)}\\
+Un problema strutturale delle ricerche su marketplace generalisti è la prominenza degli accessori nei risultati per query relative a dispositivi principali: interrogando le API di eBay con un termine sintetico come \emph{"iPhone 13"}, la risposta di default può essere composta interamente da cover, pellicole protettive e caricatori.
+Sebbene la pipeline disponga di un algoritmo di Reranking vettoriale a valle, affidarvisi per correggere questo degrado sarebbe architetturalmente scorretto. Il problema non riguarda l'ordinamento, bensì la \textbf{Candidate Generation}: un reranker, per quanto sofisticato, non può promuovere in prima posizione un dispositivo che non sia presente nel pool di candidati. Poiché il pool è deliberatamente limitato a un massimo di quindici inserzioni, è sufficiente che il corpus estratto contenga accidentalmente quattordici accessori per rendere il reranker incapace di restituire risultati utili.
+Il filtro interviene pertanto a monte, analizzando i primi cinque risultati eBay: se almeno tre recano etichette categoriali riconducibili ad Accessori, Ricambi o Custodie (\emph{accessory dominance}) e l'intento classificato in Fase 3 è \texttt{Main}, l'intero sottoinsieme viene scartato. Il sistema esegue quindi il crawling degli \emph{Aspect Distributions} della prima pagina per recuperare dinamicamente il \path{categoryId} corrispondente alla sezione Elettronica pertinente, e invia una seconda richiesta alle API di eBay vincolata a quella categoria, garantendo che il pool per le fasi successive sia composto esclusivamente da dispositivi attesi.
+
+\vspace{0.4cm}
+\noindent
+\textbf{6. Fusione Ibrida dei Risultati (Reciprocal Rank Fusion)}\\
+I risultati provenienti dalla ricerca live su eBay vengono fusi con
+il corpus storico recuperato durante il Phantom Fetch all'interno
+del modulo \path{_merge_hybrid_results}. Prima della
+fusione vera e propria, ogni inserzione storica viene sottoposta a
+una verifica di conformità rispetto ai vincoli di budget attuali:
+gli elementi che non soddisfano i limiti di prezzo correnti vengono
+scartati, garantendo che il corpus storico non introduca risultati
+obsoleti o non pertinenti alla sessione in corso.
+Su questa base, il sistema applica un meccanismo di rinforzo
+(\path{_hybrid_bonus}): se un prodotto risulta presente \emph{sia} nel
+corpus storico \emph{sia} tra i risultati live di eBay, il suo score RRF
+viene incrementato di \(+0.15\) punti. La motivazione è diretta: un
+prodotto che compare spontaneamente in due sorgenti indipendenti,
+costruite in momenti e con logiche diverse, ha maggiori probabilità
+di essere genuinamente rilevante rispetto a uno che appare in una sola di esse.
+
+\vspace{0.4cm}
+\noindent
+\textbf{7. Architettura del Sistema di Ranking (Reranker e Cross-Encoder)}\\
+Questa fase concentra le operazioni di riordinamento semantico
+più computazionalmente intensive dell'intera pipeline, affidandosi
+a un'architettura di ranking a due stadi che combina feature
+ingegnerizzate manualmente con un modello neurale di tipo Cross-Encoder.
+L'implementazione attuale è il risultato di un percorso evolutivo
+di tre stadi. Un primo approccio basato su \textbf{LightGBM},
+addestrato sull'intero dataset SIGIR Coveo E-commerce,
+ha prodotto performance insoddisfacenti a causa della scarsa qualità
+intrinseca dei segnali di click. Questa evidenza ha orientato lo sviluppo verso l'architettura attualmente in produzione.
+Il processo ha inizio con il pre-calcolo del \path{trust_score} di
+ciascun venditore tramite \path{_prefetch_top_sellers_feedback}: i
+feedback vengono scaricati in parallelo e sottoposti ad
+algoritmi di \textit{sentiment analysis}, producendo un punteggio
+reputazionale aggregato. Ottenuti questi valori, la pipeline invoca il modulo di
+\textbf{Vector Reranking} (\path{rerank_products}), che opera
+attraverso due stadi in cascata:
+Il primo è uno \textbf{stadio Base-Score} a ponderazione pesata,
+che valuta ogni inserzione su un sistema di oltre quindici feature
+ingegnerizzate manualmente, tra cui figurano la similarità
+semantica (\path{semantic_sim}), la similarità lessicale
+(\path{lexical_sim}), il punteggio di fiducia (\path{trust_score}), la distanza normalizzata dal prezzo mediano
+(\path{price_z}), il boost derivante dal corpus RAG
+(\path{rag_product_boost}) e il punteggio di accessorietà
+(\path{accessory_score}). Il secondo è uno \textbf{stadio
+Cross-Encoder vettoriale}, applicato ai soli dieci risultati
+provvisoriamente in testa per ammortizzare il costo computazionale:
+il modello \path{ms-marco-MiniLM-L-6-v2} genera un'inferenza
+profonda (\emph{cross-score}) tra il testo della query originale
+e i documenti \path{product_docs}. I due score vengono infine combinati mediante un blending
+pesato che assegna il \textbf{70\%} del peso al cross-score
+vettoriale e il restante \textbf{30\%} al base-score,
+privilegiando la componente semantica senza eliminare il contributo delle feature deterministiche.
+Nel medesimo intervallo temporale operano in background tre micro-moduli: \path{get_return_policies} per identificare l'idoneità ai resi della categoria dominante, \path{update_user_profile} per aggiornare le affinità del cliente su Postgres in base alla chiamata odierna e \path{extract_attributes_batch} che esegue la \textbf{Named Entity Recognition (NER)} estraendo attributi base dai titoli e pulendoli.
+
+\vspace{0.4cm}
+\noindent
+\textbf{8. Persistenza Transazionale Preliminare}\\
+Per isolare la latenza fisiologica indotta dalle operazioni sul
+database relazionale dal percorso critico della classificazione
+finale, la memorizzazione permanente viene avviata prima ancora
+che la graduatoria euristica sia conclusa.
+Il modulo \path{_prepare_and_persist_items} opera in un \textit{thread}
+isolato, effettuando i salvataggi necessari sulla tabella Postgres.
+\textbf{Redis} agisce a monte come layer di deduplicazione: tramite
+la chiave \path{known_ebay_ids}, il sistema intercetta ogni
+operazione di scrittura e blocca gli identificatori eBay già
+presenti nell'archivio, inviando in \texttt{INSERT} unicamente le
+inserzioni inedite, scongiurando \textit{bottleneck} e collisioni.
+
+\vspace{0.4cm}
+\noindent
+\textbf{9. Classificazione Euristica Finale (Score Composito)}\\
+Ogni inserzione sopravvissuta ai controlli precedenti riceve in
+questa fase la sua calibrazione definitiva, calcolata da
+\path{_apply_final_ranking}. All'ordinamento vettoriale prodotto
+dal reranker nella Fase 7 vengono sovrapposti dei bonus deterministici 
+cuciti sulle preferenze in memoria dell'utente che invia la query.
+Il primo modificatore è il \textbf{Brand Affinity Bonus}: se il
+database utente documenta una predilezione storica per un
+determinato produttore, le inserzioni appartenenti a tale brand
+ricevono un incremento di \(+0.15\) punti. Il secondo è costituito
+dal \textbf{Condition Match Bonus}: se lo stato dell'oggetto 
+collima con l'abitudine d'acquisto registrata dell'utente (ad es. predilezione per il \emph{nuovo} 
+o il \emph{ricondizionato}), scatta un incentivo calcolato di \(+0.08\). In ultimo interviene 
+un'\textbf{euristica sul value-for-money}: laddove il prezzo stimato si posizioni all'interno
+o al di sotto delle proiezioni di budget tollerate dall'utente 
+(\path{contextual_budgets}), viene erogato un premio addizionale di \(+0.10\) punti, 
+premiando i prodotti che assecondino un superbo rapporto qualità/spesa per quel profilo.
+
+\vspace{0.4cm}
+\noindent
+\textbf{10. Valutazione Qualitativa e Comparativa tramite LLM Discriminator}\\
+Gli otto risultati in cima alla graduatoria vengono inviati al
+modulo \path{_compute_llm_value_scores} per ricevere una
+validazione in linguaggio naturale. A differenza di
+un utilizzo esplorativo, il discriminatore opera su un \textit{market scope}
+ristretto e dedotto esclusivamente dalle misurazioni della SERP eBay corrente:
+riceve il prezzo mediano calcolato a runtime, l'escursione finanziaria e le distribuzioni delle condizioni.
+Su questa base rigorosa, il modello formula per ciascun item uno \path{score} fluttuante da \(-1.0\) a \(1.0\) 
+ed un giudizio in compendio (es: \emph{"💡 Eccellente condizione hardware del touch..."}), inibendo allucinazioni esterne.
+In successione una invocazione analoga (\path{explain_results})
+analizza unicamente i primi \textbf{tre risultati primatisti}: ne distilla una valutazione 
+mirata stilando elenchi dettagliati di Pro e Contro (\emph{Pros \& Cons}). 
+A conclusione organica della fase, vengono innestate le referenze dirette alle stringhe di policy (RAG Attach) scoperte in Fase 7.
+
+\vspace{0.4cm}
+\noindent
+\textbf{11. Metriche IR e Indicizzazione Finale su Qdrant}\\
+A conclusione dell'elaborazione, la pipeline formalizza in memoria
+le metriche di qualità del recupero valutate secondo gli stringenti standard operativi
+dall'\textbf{Information Retrieval}: in questa istanza sono approntate misurazioni formali su
+\textbf{Precision@5}, \textbf{Recall@10} e \textbf{nDCG@10} (Normalized Discounted Cumulative Gain).
+Tali metriche, esposte nel backend, saranno serbate per le diagnosi offline sulle performance dell'IR engine.
+In chiusura del canale, i quindici elementi emersi vengono inseriti in pretesa allo spooler per l'indicizzazione (\path{index_search_items}).
+Trascritti vettorialmente ed impacchettati su \textbf{Qdrant}, questi ultimi vanno a colmare stabilmente 
+la riserva locale per le esecuzioni Phantom Fetch successive: la pipeline completa la propria esecuzione 
+lasciando un'eredità circolare e resiliente valida a supportare le latenze del domani.
+
+\vspace{1cm}
+% ============================================================
+% LTR EXPERIMENT
+% ============================================================
+\section{Approfondimento di Ricerca: Learning to Rank Personalizzato (LTR)}
+
+Come richiamato in precedenza nell'evoluzione della pipeline (Fase 7), l'architettura di classificazione 
+ha attraversato una fase di sviluppo intensivo mirata all'addestramento di un modello 
+supervisionato nativo. Benché tale approccio sia stato scalzato in produzione dall'attuale sistema ibrido a Reranker, le complesse logiche simulative 
+e ingegneristiche gettate per sopperire alle limitazioni del dominio costituiscono un impianto architetturale
+di assoluto rilievo che merita documentazione formale.
+
+\subsection{Obiettivo Generale e Scelta dell'Infrastruttura}
+L'obiettivo iniziale era addestrare un modello di Learning to Rank (LTR) capace di riordinare i risultati di ricerca in base al netto profilo comportamentale dell'utente. A dispetto delle API primordiali standardizzate, il sistema mirava a comprendere che un consumatore votato al risparmio anela a posizioni economiche, slegandosi dalle pertinenze nominali. 
+Il problema è stato formulato come ranking supervisionato: un modello tarato su \textbf{Pointwise LTR} in cui ogni coppia \emph{(utente, prodotto)} riceveva un'etichetta di rilevanza da $0$ a $N-1$, con addestramento pilotato su framework \textbf{LightGBM} (\path{rank:ndcg}).
+
+A differenza di un \textit{cross-encoder} puro isolato, l'L2R permetteva il vaglio simultaneo dell'intera mole di prodotti in parallelo e forzava le \textit{feature demografiche/utente} all'interno del peso di predizione finale.
+
+\subsection{Il Problema Critico e L'Ecosystem Simulation}
+La criticità strutturale di tutto l'impianto è subentrata a causa della mancanza cronica di dataset pubblici di \textit{clickstream} o di giudizi di rilevanza massivi per eBay. Eseguire l'acquisizione su \textit{dwell time} o log umani si è rivelato proibitivo sia economicamente sia in termini d'utenza attiva reclutabile.
+
+Per sormontare l'ostacolo, abbiamo progettato ed ingegnerizzato l'estrazione di un \textbf{Dataset Sintetico} per simulazione algoritmica (\textit{Ecosystem Simulaton}): uno strato di Agenti LLM delegati all'impersonificazione matematica di precisi profili comportamentali stereotipati (le \textit{Persona}). Tali profili erano vincolati a rigidità psicometriche:
+\begin{enumerate}
+    \item \textbf{Parametri Numerici}: Sensibilità assoluta al prezzo (\path{price_sensitivity}), affidabilità (\path{quality_preference}), condizione ambita (\path{condition_affinity}), fedeltà aziendale (\path{brand_loyalty}).
+    \item \textbf{Limiti Qualitativi}: Un \textit{System Prompt} ideato per condizionare ferocemente lo stampo inferenziale del modello in assenza di scostamenti creativi.
+\end{enumerate}
+
+Le 10 \textit{Persona} sono state plasmate per marcare le estremità delle varianze demografiche d'impiego: profilazioni come il \textit{Bargain Hunter} (totale esasperazione del risparmio), \textit{L'Auction Sniper} (vigliacco ricercatore dell'affare occasionale), il \textit{Luxory Buyer} ed il prudente \textit{Safety Focused} esasperato dai feedback.
+
+\subsection{Diversità Architetturale e Normalizzazione Estesa}
+Un fattore decisionale saliente ai fini dell'onesta integrità algoritmica è scaturito dall'impedire un imprinting univoco da \emph{Foundation Models}. Un singolo LLM su dieci prompt avrebbe inquinato le estrazioni riversandovi pattern ed allucinazioni monolitiche legate all'architettura costruttrice di base. L'esecutivo logico è stato diviso frammentandone la paternità intellettuale: le elaborazioni asincrone venivano distribuite su \textbf{Groq Llama 3.3/3.1} (architettura Meta), \textbf{Qwen} ed \textbf{DeepSeek} (Cinese ad elevate asimmetrie concettuali), \textbf{Mistral-Nemo NVIDIA} e un'istanza locale \textbf{Ollama} a \textit{temperature} elevatissima a garanzia di entropia per profilazioni irrazionali (\emph{Emotional Bidder}).
+
+Le iterazioni in serie processavano le richieste calcolando il valore \textit{prezzo/mediana-SERP} e le sottoponevano alle intelligenze con vincoli di ordinamento inverso (da $N-1$ d'eccellenza al fallimento pari a \(0\)). Le discrepanze numeriche scaturite — al netto di sistemi di ripiego sui \textit{Silent Fallback} dell'inferenza — venivano normalizzate tramite scale lineari assolute o scale logaritmiche (\(\log(1+x)/\log(1+p_{99})\)) al fine specifico di smorzare derive esponenziali di \textit{seller_feedback} milionari. 
+
+\subsection{Integrazione LightGBM e Conclusioni Sperimentali}
+Una volta depurate, le estrazioni fornivano una spina dorsale di \textbf{19 Colonne} e migliaia di inferenze \textit{Batch-Ranking} incrociate (\texttt{training\_set\_v2.csv}). Ne misurammo i tassi di collisione ricorrenze ed asimmetrie ideali mediante \textbf{Cohen's Kappa Quadratico Pesato} validando un \(\kappa \in [0.4, 0.6]\) quale sintomo di eccellenza eterogenea, iniettando la mole addestrativa finalmente nello spool \textit{lambdarank}:
+\begin{verbatim}
+import lightgbm as lgb
+import pandas as pd
+
+df = pd.read_csv("training_set_v2.csv")
+groups = df.groupby(["query", "persona_id"]).size().values
+
+dataset = lgb.Dataset(
+    df[feature_cols],
+    label=df["relevance"],
+    group=groups
+)
+
+model = lgb.train(
+    {"objective": "lambdarank", "metric": "ndcg", "ndcg_eval_at": [5, 10]},
+    dataset
+)
+\end{verbatim}
+
+A discapito delle premesse simulatrici e dell'eccellente distribuzione analitica implementata, i test pratici di validazione hanno evidenziato criticità insanabili sul mercato nativo: la propensione innata di qualsivoglia LLM a compiacere descrizioni organiche a discapito dell'istinto brutale da consumatore (\textit{residual bias in cross-models}), accavallati con l'assenza insormontabile di un \textit{gold set} confermativo di base organica su vasta scala. Pur abbandonando il \textit{lightgbm} puro in favore d'un asset ibrido (vedi Fase 7), si attesta e convalida un massiccio impianto formativo nella scalabilità della simulazione e della sintesi multi-rete per i \textit{Cold-start domain} di futura applicazione.

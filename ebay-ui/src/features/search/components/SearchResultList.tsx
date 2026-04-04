@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
 import { Box, Typography, Button } from "@mui/material"
-import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GppGoodIcon from "@mui/icons-material/GppGood"
 import ListIcon from "@mui/icons-material/List"
 import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
@@ -55,10 +54,10 @@ export default function SearchResultList({
   if (safeResults.length === 0) {
     return (
       <Box sx={{ py: 4, px: 2.5, textAlign: "center" }}>
-        <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "#6b7280", mb: 0.4 }}>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-secondary)", mb: 0.4 }}>
           Nessun risultato trovato
         </Typography>
-        <Typography sx={{ fontSize: 12.5, color: "#b0b0b0" }}>
+        <Typography sx={{ fontSize: 12.5, color: "var(--text-secondary)", opacity: 0.8 }}>
           Prova a cambiare brand, fascia di prezzo o parole chiave.
         </Typography>
       </Box>
@@ -118,7 +117,7 @@ export default function SearchResultList({
               bgcolor: selectable ? "var(--brand-soft)" : "transparent",
               borderRadius: "6px",
               px: 1,
-              "&:hover": { bgcolor: selectable ? "var(--brand-soft)" : "rgba(0,0,0,0.05)" }
+              "&:hover": { bgcolor: selectable ? "var(--brand-soft)" : "var(--bg-secondary)" }
             }}
           >
             {selectable ? "SELEZIONE ATTIVA" : "CONFRONTA"}
