@@ -304,6 +304,17 @@ function StepRow({
             </Typography>
           </Box>
         )}
+
+        {/* Screenshot (Playwright visual feedback) */}
+        {step.observation_data?.screenshot && (
+          <Box sx={{ mt: 1.5, position: 'relative', borderRadius: "12px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <img 
+              src={`data:image/jpeg;base64,${step.observation_data.screenshot}`} 
+              alt="Browser Render" 
+              style={{ display: "block", maxWidth: "100%", height: "auto", objectFit: "cover" }} 
+            />
+          </Box>
+        )}
       </Box>
     </Box>
   )

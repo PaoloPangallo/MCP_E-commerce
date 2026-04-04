@@ -63,7 +63,6 @@ export function useAgentStream(options?: {
   sessionId?: string | null
   onDone?: (payload: FinalPayload, originalQuery: string) => void
 }) {
-  const mcpMode = useSettingsStore((state) => state.settings.mcpMode)
   const [state, dispatch] = useReducer(agentReducer, initialState)
   
   // We use a Ref to track the current state because SSE events arrive asynchronously
@@ -148,10 +147,10 @@ export function useAgentStream(options?: {
            }, 0)
         }
       }
-    }, undefined, mcpMode)
+    }, undefined, useSettingsStore.getState().settings.mcpMode)
 
     sourceRef.current = nextSource
-  }, [reset, options?.sessionId, mcpMode])
+  }, [reset, options?.sessionId])
 
   useEffect(() => {
     return () => {

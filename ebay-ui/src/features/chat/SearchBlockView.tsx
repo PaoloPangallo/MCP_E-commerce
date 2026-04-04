@@ -13,6 +13,7 @@ import SellerSummaryCard from "../seller/component/SellerSummaryCard.tsx"
 import MetadataCard from "./MetadataCard.tsx"
 import DealsDisplay from "../search/components/DealsDisplay.tsx"
 import VisionAnalysisCard from "./VisionAnalysisCard.tsx"
+import ContactSellerCard from "./ContactSellerCard.tsx"
 
 import ToolSkeleton from "../../components/ToolSkeleton.tsx"
 
@@ -305,6 +306,13 @@ const SearchBlockView = memo(function SearchBlockView({
 
       {search.market_trends && <MarketTrendsCard data={search.market_trends} />}
       {search.deals && <DealsDisplay data={search.deals} />}
+
+      {(search as any).contact_seller_playwright && (
+        <ContactSellerCard data={(search as any).contact_seller_playwright} />
+      )}
+      {(search as any).contact_seller && !((search as any).contact_seller_playwright) && (
+        <ContactSellerCard data={(search as any).contact_seller} />
+      )}
 
 
       {search.errors && search.errors.length > 0 && (

@@ -18,6 +18,7 @@ import app.mcp.tools.wishlist_tool
 import app.mcp.tools.contact_seller
 import app.mcp.tools.playwright_tool
 import app.mcp.tools.playwright_contact
+import app.mcp.tools.browser_tools
 import app.mcp.resources
 
 __all__ = ["mcp", "configure_mcp"]

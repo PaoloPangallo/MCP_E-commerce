@@ -1,318 +1,355 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP_ECOM — Architettura</title>
-  <script src="mermaid.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP_ECOM — Full Architecture Documentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #eef3f8;
+      --bg-soft: #f8fbff;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-strong: #ffffff;
+      --border: #dbe4ee;
+      --border-bright: rgba(255, 255, 255, 0.65);
+      --text: #0f172a;
+      --muted: #5b6b80;
+      --font: 'Inter', system-ui, sans-serif;
+      --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.1);
+      
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-      background: #f8fafc;
-      color: #0f172a;
+      font-family: var(--font);
+      background: radial-gradient(circle at top left, #ffffff 0%, #f3f7fc 26%, #eef3f8 56%, #e8eef5 100%);
+      color: var(--text);
+      line-height: 1.6;
       min-height: 100vh;
-      padding: 2rem;
+      overflow-x: hidden;
     }
+
+    /* === AMBIENT ORBS === */
+    .ambient {
+      position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; opacity: 0.35;
+      animation: floatOrb 25s ease-in-out infinite alternate;
+    }
+    .ambient-1 { width: 600px; height: 600px; background: #e0e7ff; top: -100px; left: -100px; }
+    .ambient-2 { width: 500px; height: 500px; background: #dcfce7; bottom: -50px; right: -50px; animation-delay: -5s; }
+
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.1); }
+    }
+
+    /* === HEADER === */
     header {
-      text-align: center;
-      margin-bottom: 2rem;
+      position: relative; z-index: 20; padding: 5rem 2rem 4rem; text-align: center; max-width: 1400px; margin: 20px auto;
+      background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--border-bright);
+      box-shadow: var(--shadow-md); border-radius: var(--radius);
     }
+
+    .header-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.15em;
+      text-transform: uppercase; color: #6366f1; background: #eef2ff; padding: 0.35rem 1rem; border-radius: 999px; margin-bottom: 1.5rem;
+    }
+
     header h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #0f172a;
-      margin-bottom: 0.25rem;
+      font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 900; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-bottom: 1.25rem;
     }
-    header p {
-      font-size: 0.9rem;
-      color: #64748b;
+
+    header p { color: var(--muted); font-size: 1.1rem; max-width: 700px; margin: 0 auto; font-weight: 500; line-height: 1.6; }
+
+    /* === NAV === */
+    nav {
+      position: sticky; top: 14px; z-index: 100; max-width: min(1000px, calc(100vw - 32px)); margin: 14px auto;
+      background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(18px); border: 1px solid var(--border-bright);
+      border-radius: 100px; padding: 6px; display: flex; justify-content: center; box-shadow: var(--shadow-sm);
     }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      justify-content: center;
-      margin-bottom: 2rem;
+    nav a {
+      color: var(--muted); text-decoration: none; font-size: 0.82rem; font-weight: 700; padding: 0.7rem 1.3rem;
+      border-radius: 100px; transition: all 0.2s;
     }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-size: 0.78rem;
-      font-weight: 500;
-      padding: 0.25rem 0.6rem;
-      border-radius: 999px;
-      border: 1px solid;
+    nav a:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+
+    /* === MAIN === */
+    main { position: relative; z-index: 10; max-width: 1700px; margin: 0 auto; padding: 2rem 2rem 8rem; display: flex; flex-direction: column; gap: 7rem; }
+
+    /* === SECTION === */
+    .section-header { margin-bottom: 2.5rem; }
+    .section-badge {
+      font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #6366f1;
+      background: #eef2ff; padding: 0.3rem 0.7rem; border-radius: 6px; margin-bottom: 0.8rem; display: inline-block;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50%; }
-    .l-amber  { background: #fef3c7; border-color: #d97706; color: #78350f; }
-    .l-blue   { background: #dbeafe; border-color: #2563eb; color: #172554; }
-    .l-indigo { background: #e0e7ff; border-color: #4f46e5; color: #312e81; }
-    .l-teal   { background: #ccfbf1; border-color: #0f766e; color: #134e4a; }
-    .l-neutral{ background: #f8fafc; border-color: #334155; color: #0f172a; }
-    .l-mint   { background: #dcfce7; border-color: #16a34a; color: #14532d; }
-    .l-rose   { background: #ffe4e6; border-color: #e11d48; color: #881337; }
-    .l-orange { background: #ffedd5; border-color: #ea580c; color: #7c2d12; }
-    .dot-amber  { background: #d97706; }
-    .dot-blue   { background: #2563eb; }
-    .dot-indigo { background: #4f46e5; }
-    .dot-teal   { background: #0f766e; }
-    .dot-neutral{ background: #334155; }
-    .dot-mint   { background: #16a34a; }
-    .dot-rose   { background: #e11d48; }
-    .dot-orange { background: #ea580c; }
-    .diagram-wrap {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-      padding: 2rem;
-      overflow: auto;
+    .section-title { font-size: 2rem; font-weight: 900; letter-spacing: -0.04em; color: var(--text); }
+
+    /* === DIAGRAM CARD === */
+    .diagram-card {
+      background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); overflow: hidden; transition: transform 0.3s ease;
     }
-    .mermaid {
-      display: flex;
-      justify-content: center;
+    .diagram-card:hover { transform: translateY(-3px); }
+    .diagram-card-body { padding: 3rem 2rem; overflow-x: auto; background: radial-gradient(circle at top right, #f8fafc, transparent); }
+
+    .mermaid { display: flex; justify-content: center; min-width: min-content; }
+    .mermaid svg { min-width: 1500px; height: auto !important; overflow: visible; }
+
+    /* === LEGEND === */
+    .legend-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 2rem; padding: 1.5rem;
+      background: var(--surface); border: 1px solid var(--border-bright); border-radius: var(--radius-sm);
     }
-    footer {
-      text-align: center;
-      margin-top: 1.5rem;
-      font-size: 0.75rem;
-      color: #94a3b8;
+    .legend-item { display: flex; align-items: center; gap: 0.75rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.1); }
+
+    /* === CONNECTORS === */
+    .connection-panel {
+      margin-top: 2rem; padding: 2rem; background: #fafafa; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      display: flex; flex-direction: column; gap: 1.25rem;
     }
+    .conn-row { display: flex; align-items: center; gap: 1rem; font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; flex-wrap: wrap; }
+    .pill { padding: 0.3rem 0.8rem; border-radius: 6px; border: 1px solid; }
+    .pill-fe { background: #fff7e9; border-color: #f4c97b; color: #8a4b07; }
+    .pill-be { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+    .conn-arrow { color: #cbd5e1; font-weight: 400; }
+
+    footer { text-align: center; padding: 6rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+
+    @media (max-width: 1000px) { main { padding: 1.5rem; } header { padding: 3rem 1.5rem; } }
   </style>
 </head>
+
 <body>
 
-<header>
-  <h1>MCP_ECOM — Architettura del Progetto</h1>
-  <p>Clicca su un nodo per aprire il file sorgente su GitHub</p>
-</header>
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
 
-<div class="legend">
-  <span class="legend-item l-amber"><span class="dot dot-amber"></span>Frontend</span>
-  <span class="legend-item l-blue"><span class="dot dot-blue"></span>API Layer</span>
-  <span class="legend-item l-indigo"><span class="dot dot-indigo"></span>Agent Layer</span>
-  <span class="legend-item l-teal"><span class="dot dot-teal"></span>MCP Layer</span>
-  <span class="legend-item l-neutral"><span class="dot dot-neutral"></span>Services</span>
-  <span class="legend-item l-mint"><span class="dot dot-mint"></span>RAG Stack</span>
-  <span class="legend-item l-rose"><span class="dot dot-rose"></span>Data Layer</span>
-  <span class="legend-item l-orange"><span class="dot dot-orange"></span>External APIs</span>
-</div>
+  <header>
+    <div class="header-eyebrow">Enterprise Grade Architecture</div>
+    <h1>System Blueprint</h1>
+    <p>The complete master reference of the MCP_ECOM ecosystem. A unified perspective on the Frontend-Backend synergy and the AI agent's reasoning infrastructure.</p>
+  </header>
 
-<div class="diagram-wrap">
-  <div class="mermaid">
-flowchart TD
+  <nav>
+    <a href="#overview">Bridge</a>
+    <a href="#frontend">Frontend Layer</a>
+    <a href="#backend">Backend Core</a>
+  </nav>
 
-subgraph group_frontend["Frontend (React / Vite)"]
-  node_app["App shell&lt;br/&gt;React root&lt;br/&gt;[App.tsx]"]
-  node_chat["Chat page&lt;br/&gt;Conversation UI&lt;br/&gt;[ChatPage.tsx]"]
-  node_agent_hook["Agent stream hook&lt;br/&gt;SSE client&lt;br/&gt;[useAgentStream.ts]"]
-  node_search_view["Search results&lt;br/&gt;[SearchResultList.tsx]"]
-  node_seller_view["Seller view&lt;br/&gt;[SellerTrustGauge.tsx]"]
-  node_auth_ui["Auth UI&lt;br/&gt;[AuthPanel.tsx]"]
-  node_api_client["API client&lt;br/&gt;HTTP client&lt;br/&gt;[apiClient.ts]"]
+  <main>
+
+    <!-- SECTION: BRIDGE -->
+    <section id="overview">
+      <div class="section-header">
+        <span class="section-badge">Connectivity</span>
+        <h2 class="section-title">Integration Bridge</h2>
+      </div>
+      
+      <div class="connection-panel">
+        <div class="conn-row">
+          <span class="pill pill-fe">stream.ts</span>
+          <span class="conn-arrow">── (SSE EventStream) ──▶</span>
+          <span class="pill pill-be">agent_stream.py</span>
+          <span style="color:var(--muted); font-weight: 500; font-family:var(--font)">Live AI thinking & tool feedback</span>
+        </div>
+        <div class="conn-row">
+          <span class="pill pill-fe">apiClient.ts</span>
+          <span class="conn-arrow">── (REST / JSON) ──▶</span>
+          <span class="pill pill-be">routes.py / auth / seller</span>
+          <span style="color:var(--muted); font-weight: 500; font-family:var(--font)">Auth, Wishlist & Static details</span>
+        </div>
+      </div>
+
+      <div class="legend-grid">
+        <div class="legend-item"><span class="legend-dot" style="background:#d97706"></span> Frontend UI</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#9333ea"></span> Agent Stream</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#2563eb"></span> API Gateway</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#4f46e5"></span> ReAct Logic</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#0f766e"></span> MCP Protocols</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#16a34a"></span> RAG / Qdrant</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#e11d48"></span> Persistence</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#ea580c"></span> External Services</div>
+      </div>
+    </section>
+
+    <!-- SECTION: FRONTEND -->
+    <section id="frontend">
+      <div class="section-header">
+        <span class="section-badge">UI / UX Shell</span>
+        <h2 class="section-title">Frontend Architecture</h2>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+flowchart LR
+
+subgraph group_entry["Entry"]
+  node_main_tsx["<b>main.tsx</b>"]
+  node_app_tsx["<b>App.tsx</b>"]
 end
 
-subgraph group_api["API Layer (FastAPI)"]
-  node_main["Entry point&lt;br/&gt;FastAPI bootstrap&lt;br/&gt;[main.py]"]
-  node_routes["Routes&lt;br/&gt;HTTP router&lt;br/&gt;[routes.py]"]
-  node_agent_stream["SSE endpoint&lt;br/&gt;streaming&lt;br/&gt;[agent_stream.py]"]
-  node_auth_router["Auth&lt;br/&gt;JWT + rate-limit&lt;br/&gt;[auth_router.py]"]
-  node_seller_route["Seller route&lt;br/&gt;[seller.py]"]
-  node_wishlist_route["Wishlist&lt;br/&gt;[wishlist.py]"]
+subgraph group_shell["App Shell"]
+  node_chat_page["<b>ChatPage.tsx</b>"]
+  node_chat_layout["<b>ChatLayout.tsx</b>"]
 end
 
-subgraph group_agent["Agent Layer"]
-  node_ebay_agent["ReAct Agent&lt;br/&gt;orchestrator&lt;br/&gt;[ebay_agent.py]"]
-  node_planner["Planner&lt;br/&gt;intent → tool&lt;br/&gt;[planner.py]"]
-  node_executor["Executor&lt;br/&gt;tool runner&lt;br/&gt;[executor.py]"]
-  node_memory["Memory&lt;br/&gt;context state&lt;br/&gt;[memory.py]"]
-  node_task_decomposer["Task decomposer&lt;br/&gt;[task_decomposer.py]"]
+subgraph group_fe_agent["Agent Streaming"]
+  node_use_chat_session["<b>useChatSession.ts</b>"]
+  node_use_agent_stream["<b>useAgentStream.ts</b>"]
+  node_sse_parser["<b>SSEParser.ts</b>"]
+  node_payload_mapper["<b>payloadMapper.ts</b>"]
+  node_stream_api["<b>stream.ts</b>"]
+end
+
+subgraph group_fe_search["Search Feature"]
+  node_search_block["<b>SearchBlockView.tsx</b>"]
+  node_search_list["<b>SearchResultList.tsx</b>"]
+  node_search_card["<b>SearchResultCard.tsx</b>"]
+  node_rich_cards["<b>Rich Components</b><br/>Item · Shipping · Trends"]
+end
+
+subgraph group_fe_auth["Auth & Stores"]
+  node_use_auth["<b>useAuth.ts</b>"]
+  node_chat_store["<b>chatStore.ts</b>"]
+  node_wishlist_store["<b>wishlistStore.ts</b>"]
+end
+
+node_be_boundary_sse[("⬡ Backend SSE")]
+
+node_main_tsx --> node_app_tsx
+node_app_tsx --> node_chat_page
+node_chat_page --> node_use_chat_session
+node_chat_page --> node_search_block
+node_use_chat_session --> node_use_agent_stream
+node_use_agent_stream --> node_stream_api
+node_use_agent_stream --> node_sse_parser
+node_sse_parser --> node_payload_mapper
+node_search_block --> node_search_list
+node_search_list --> node_search_card
+node_stream_api -.-> node_be_boundary_sse
+
+style group_entry fill:#f8fafc,stroke:#cbd5e1
+style group_shell fill:#fffbeb,stroke:#fde68a
+style group_fe_agent fill:#faf5ff,stroke:#e9d5ff
+style group_fe_search fill:#f0fdfa,stroke:#99f6e4
+style group_fe_auth fill:#f0fdf4,stroke:#bbf7d0
+          </pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: BACKEND -->
+    <section id="backend">
+      <div class="section-header">
+        <span class="section-badge">Core Engine</span>
+        <h2 class="section-title">Backend Architecture</h2>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+flowchart LR
+
+subgraph group_api["API Layer"]
+  node_main["<b>main.py</b>"]
+  node_agent_stream["<b>agent_stream.py</b>"]
+  node_routes["<b>routes.py</b>"]
+end
+
+subgraph group_agent["Agent Engine"]
+  node_ebay_agent["<b>ReAct Agent</b>"]
+  node_planner["<b>Planner</b>"]
+  node_executor["<b>Executor</b>"]
+  node_memory["<b>Memory (Redis)</b>"]
 end
 
 subgraph group_mcp["MCP Layer"]
-  node_mcp_client["MCP Client&lt;br/&gt;SSE caller&lt;br/&gt;[client.py]"]
-  node_mcp_server["MCP Server&lt;br/&gt;FastMCP&lt;br/&gt;[server.py]"]
-  subgraph group_standard_tools["/mcp/standard — Standard Tools"]
-    node_tools_standard["search · seller · item&lt;br/&gt;wishlist · deals · trends&lt;br/&gt;conversation · contact_seller"]
-  end
-  subgraph group_playwright_tools["/mcp/playwright — Browser Tools"]
-    node_tools_playwright["playwright_search&lt;br/&gt;playwright_contact"]
-  end
+  node_mcp_server["<b>FastMCP Server</b>"]
+  node_tools_std["Standard Tools"]
+  node_tools_pw["Playwright Tools"]
 end
 
-subgraph group_services["Services"]
-  node_search_pipeline["Search pipeline&lt;br/&gt;[search_pipeline.py]"]
-  node_seller_pipeline["Seller pipeline&lt;br/&gt;[seller_pipeline.py]"]
-  node_ebay_svc["eBay service&lt;br/&gt;[ebay.py]"]
-  node_feedback["Feedback&lt;br/&gt;Trading API XML&lt;br/&gt;[feedback.py]"]
-  node_trust["Trust score&lt;br/&gt;[trust.py]"]
-  node_sentiment["Sentiment NLP&lt;br/&gt;[nlp_sentiment.py]"]
-  node_parser["Query parser&lt;br/&gt;spaCy + LLM&lt;br/&gt;[parser.py]"]
-  node_llm["LLM client&lt;br/&gt;Ollama / Gemini&lt;br/&gt;[llm/client.py]"]
-  node_vision["Vision&lt;br/&gt;Qwen-VL&lt;br/&gt;[llm/vision.py]"]
-  node_user_profiling["User profiling&lt;br/&gt;[user_profiling.py]"]
-  node_price_tracker["Price tracker&lt;br/&gt;background loop&lt;br/&gt;[price_tracker.py]"]
+subgraph group_services["Services & RAG"]
+  node_search_pipe["<b>Search Pipeline</b>"]
+  node_reranker["<b>Hybrid Reranker</b>"]
+  node_qdrant["<b>Qdrant Store</b>"]
+  node_profiling["<b>User Profiling</b>"]
 end
 
-subgraph group_rag["RAG Stack"]
-  node_retriever["Retriever&lt;br/&gt;hybrid vector+BM25&lt;br/&gt;[retriever.py]"]
-  node_qdrant_store["Qdrant store&lt;br/&gt;[qdrant_store.py]"]
-  node_embedding["Embeddings&lt;br/&gt;MiniLM&lt;br/&gt;[embedding.py]"]
-  node_reranker["Reranker&lt;br/&gt;multi-factor&lt;br/&gt;[reranker.py]"]
-  node_ltr["LTR features&lt;br/&gt;30+ features&lt;br/&gt;[ltr_features.py]"]
+subgraph group_data["Persistence"]
+  db_pg[("PostgreSQL")]
+  db_rd[("Redis")]
+  db_qd[("Qdrant DB")]
 end
 
-subgraph group_data["Data Layer"]
-  node_postgres[("PostgreSQL&lt;br/&gt;users · listings&lt;br/&gt;wishlist")]
-  node_redis[("Redis&lt;br/&gt;cache + memory")]
-  node_qdrant_storage[("Qdrant&lt;br/&gt;vector storage")]
-end
+node_agent_stream --> node_ebay_agent
+node_ebay_agent --> node_planner
+node_ebay_agent --> node_executor
+node_ebay_agent --> node_memory
+node_executor --> node_mcp_server
+node_mcp_server --> node_tools_std
+node_mcp_server --> node_tools_pw
+node_tools_std --> node_search_pipe
+node_search_pipe --> node_reranker
+node_reranker --> node_qdrant
+node_memory --> db_rd
+node_qdrant --> db_qd
+node_search_pipe --> node_profiling
+node_profiling --> db_pg
 
-subgraph group_external["External APIs"]
-  node_ebay_api["eBay Browse API&lt;br/&gt;+ Trading API"]
-  node_ollama["Ollama Cloud&lt;br/&gt;gpt-oss:120b&lt;br/&gt;+ qwen3-vl vision"]
-end
+style group_api fill:#eff6ff,stroke:#bfdbfe
+style group_agent fill:#f5f3ff,stroke:#ddd6fe
+style group_mcp fill:#f0fdfa,stroke:#99f6e4
+style group_services fill:#f8fafc,stroke:#e2e8f0
+style group_data fill:#fff1f2,stroke:#fecdd3
+          </pre>
+        </div>
+      </div>
+    </section>
 
-node_agent_hook -->|"SSE stream"| node_agent_stream
-node_api_client -->|"HTTP"| node_routes
-node_api_client -->|"auth"| node_auth_router
-node_api_client -->|"wishlist"| node_wishlist_route
-node_api_client -->|"seller"| node_seller_route
-node_main -->|"mounts"| node_routes
-node_main -->|"mounts"| node_auth_router
-node_main -->|"mounts"| node_agent_stream
-node_main -->|"mounts"| node_seller_route
-node_main -->|"mounts"| node_wishlist_route
-node_agent_stream -->|"delegates"| node_ebay_agent
-node_seller_route -->|"calls"| node_seller_pipeline
-node_routes -->|"calls"| node_search_pipeline
-node_ebay_agent -->|"plans"| node_planner
-node_ebay_agent -->|"executes"| node_executor
-node_ebay_agent -->|"tracks"| node_memory
-node_ebay_agent -->|"decomposes"| node_task_decomposer
-node_ebay_agent -->|"vision preproc"| node_vision
-node_executor -->|"invokes"| node_mcp_client
-node_executor -->|"caches"| node_redis
-node_memory -->|"persists"| node_redis
-node_planner -->|"reasons"| node_llm
-node_mcp_client -->|"calls"| node_mcp_server
-node_mcp_server -->|"routes"| node_tools_standard
-node_mcp_server -->|"routes"| node_tools_playwright
-node_tools_standard -->|"search"| node_search_pipeline
-node_tools_standard -->|"seller"| node_seller_pipeline
-node_tools_standard -->|"convo"| node_llm
-node_search_pipeline -->|"parses"| node_parser
-node_search_pipeline -->|"queries"| node_ebay_svc
-node_search_pipeline -->|"feedback"| node_feedback
-node_search_pipeline -->|"trust"| node_trust
-node_search_pipeline -->|"sentiment"| node_sentiment
-node_search_pipeline -->|"profiles"| node_user_profiling
-node_search_pipeline -->|"retrieves"| node_retriever
-node_seller_pipeline -->|"feedback"| node_feedback
-node_seller_pipeline -->|"trust"| node_trust
-node_seller_pipeline -->|"sentiment"| node_sentiment
-node_seller_pipeline -->|"summarizes"| node_llm
-node_retriever -->|"vector+BM25"| node_qdrant_store
-node_retriever -->|"reranks"| node_reranker
-node_reranker -->|"LTR"| node_ltr
-node_qdrant_store -->|"embeds"| node_embedding
-node_qdrant_store -->|"persists"| node_qdrant_storage
-node_parser -->|"LLM parse"| node_llm
-node_llm -->|"Ollama Cloud"| node_ollama
-node_vision -->|"Qwen-VL"| node_ollama
-node_ebay_svc -->|"Browse API"| node_ebay_api
-node_feedback -->|"Trading API"| node_ebay_api
-node_auth_router -->|"users"| node_postgres
-node_wishlist_route -->|"wishlist"| node_postgres
-node_price_tracker -->|"watchlist"| node_redis
+  </main>
 
-click node_app "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/App.tsx"
-click node_chat "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/chat/ChatPage.tsx"
-click node_agent_hook "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/agent/hooks/useAgentStream.ts"
-click node_search_view "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/search/components/SearchResultList.tsx"
-click node_seller_view "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/features/seller/component/SellerTrustGauge.tsx"
-click node_auth_ui "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/auth/ui/AuthPanel.tsx"
-click node_api_client "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/ebay-ui/src/api/apiClient.ts"
-click node_main "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/main.py"
-click node_routes "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/routes.py"
-click node_agent_stream "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/agent_stream.py"
-click node_auth_router "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/auth/auth_router.py"
-click node_seller_route "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/seller.py"
-click node_wishlist_route "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/api/wishlist.py"
-click node_ebay_agent "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/ebay_agent.py"
-click node_planner "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/planner.py"
-click node_executor "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/executor.py"
-click node_memory "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/memory.py"
-click node_task_decomposer "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/agent/task_decomposer.py"
-click node_mcp_client "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/mcp/client.py"
-click node_mcp_server "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/mcp/server.py"
-click node_tools_standard "https://github.com/paolopangallo/mcp_e-commerce/tree/Paolo_minimax2.7/app/mcp/tools"
-click node_tools_playwright "https://github.com/paolopangallo/mcp_e-commerce/tree/Paolo_minimax2.7/app/mcp/tools"
-click node_search_pipeline "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/search_pipeline.py"
-click node_seller_pipeline "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/seller_pipeline.py"
-click node_ebay_svc "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/ebay.py"
-click node_feedback "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/feedback.py"
-click node_trust "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/trust.py"
-click node_sentiment "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/nlp_sentiment.py"
-click node_parser "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/parser.py"
-click node_llm "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/llm/client.py"
-click node_vision "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/llm/vision.py"
-click node_user_profiling "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/user_profiling.py"
-click node_price_tracker "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/price_tracker.py"
-click node_retriever "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/retriever.py"
-click node_qdrant_store "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/qdrant_store.py"
-click node_embedding "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/embedding.py"
-click node_reranker "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/reranker.py"
-click node_ltr "https://github.com/paolopangallo/mcp_e-commerce/blob/Paolo_minimax2.7/app/services/rag/ltr_features.py"
-click node_qdrant_storage "https://github.com/paolopangallo/mcp_e-commerce/tree/Paolo_minimax2.7/qdrant_storage"
+  <footer>
+    MCP_ECOM · Master Documentation · Visual Consistency System
+  </footer>
 
-classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
-classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
-classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
-classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
-classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
-classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
-classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
-classDef toneOrange fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12
-
-class node_app,node_chat,node_agent_hook,node_search_view,node_seller_view,node_auth_ui,node_api_client toneAmber
-class node_main,node_routes,node_agent_stream,node_auth_router,node_seller_route,node_wishlist_route toneBlue
-class node_ebay_agent,node_planner,node_executor,node_memory,node_task_decomposer toneIndigo
-class node_mcp_client,node_mcp_server,node_tools_standard,node_tools_playwright toneTeal
-class node_search_pipeline,node_seller_pipeline,node_ebay_svc,node_feedback,node_trust,node_sentiment,node_parser,node_llm,node_vision,node_user_profiling,node_price_tracker toneNeutral
-class node_retriever,node_qdrant_store,node_embedding,node_reranker,node_ltr toneMint
-class node_postgres,node_redis,node_qdrant_storage toneRose
-class node_ebay_api,node_ollama toneOrange
-  </div>
-</div>
-
-<footer>MCP_ECOM · branch Paolo_minimax2.7 · clicca su un nodo per aprire il file su GitHub</footer>
-
-<script>
-  mermaid.initialize({
-    startOnLoad: true,
-    theme: 'base',
-    themeVariables: {
-      fontFamily: 'Inter, -apple-system, sans-serif',
-      fontSize: '13px',
-      primaryColor: '#dbeafe',
-      primaryTextColor: '#0f172a',
-      primaryBorderColor: '#2563eb',
-      lineColor: '#94a3b8',
-      secondaryColor: '#f1f5f9',
-      tertiaryColor: '#f8fafc'
-    },
-    flowchart: {
-      curve: 'basis',
-      padding: 20,
-      nodeSpacing: 40,
-      rankSpacing: 60
-    },
-    securityLevel: 'loose'
-  });
-</script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '14px',
+        primaryColor: '#ffffff',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#cbd5e1',
+        lineColor: '#64748b',
+        secondaryColor: '#f8fafc',
+        tertiaryColor: '#f1f5f9',
+        mainBkg: '#ffffff',
+        nodeBorder: '#cbd5e1',
+        clusterBkg: '#f8fafc',
+        clusterBorder: '#e2e8f0',
+        textColor: '#1e293b'
+      },
+      flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis', padding: 32 }
+    });
+  </script>
 
 </body>
 </html>

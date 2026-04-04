@@ -1,711 +1,560 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP_ECOM — Activity Diagrams</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP_ECOM — Activity Flow Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
-    /* ===== BASE RESET ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #f8f7f4;
-      --surface: #ffffff;
-      --surface-2: #f3f2ef;
-      --border: #e8e6e1;
-      --text: #1a1a1a;
-      --text-2: #6b6b6b;
-      --text-3: #9b9b9b;
-      --accent: #10a37f;
-      --accent-2: #d2e8e3;
-      --accent-3: #e8f5f1;
-      --blue: #4787d7;
-      --blue-2: #e0ecfb;
-      --amber: #c97d27;
-      --amber-2: #fdf0de;
-      --purple: #9055cc;
-      --purple-2: #f0e8fa;
+      --bg: #eef3f8;
+      --bg-soft: #f8fbff;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-strong: #ffffff;
+      --border: #dbe4ee;
+      --border-bright: rgba(255, 255, 255, 0.65);
+      --text: #0f172a;
+      --muted: #5b6b80;
+      --font: 'Inter', system-ui, sans-serif;
+      --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
 
-      --title-size: clamp(1.5rem, 4vw, 2.75rem);
-      --h2-size: clamp(1.1rem, 2.5vw, 1.75rem);
-      --body-size: clamp(0.75rem, 1.3vw, 1rem);
-      --small-size: clamp(0.65rem, 1vw, 0.85rem);
-      --slide-padding: clamp(1.5rem, 5vw, 4rem);
-      --content-gap: clamp(0.75rem, 2vw, 1.5rem);
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.1);
+      
+      --radius: 20px;
+      --radius-sm: 12px;
     }
 
-    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; }
 
     body {
-      font-family: 'Inter', -apple-system, sans-serif;
-      background: var(--bg);
+      font-family: var(--font);
+      background: radial-gradient(circle at top right, #ffffff 0%, #f3f7fc 26%, #eef3f8 56%, #e8eef5 100%);
       color: var(--text);
-      height: 100%;
+      line-height: 1.6;
+      min-height: 100vh;
       overflow-x: hidden;
     }
 
-    /* ===== SLIDE LAYOUT ===== */
-    .slide {
-      width: 100vw;
-      height: 100vh;
-      height: 100dvh;
-      overflow: hidden;
-      scroll-snap-align: start;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }
-
-    .slide-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: var(--slide-padding);
-      max-height: 100%;
-      overflow: hidden;
-    }
-
-    .slide-inner {
-      max-width: 900px;
-      margin: 0 auto;
-      width: 100%;
-    }
-
-    /* ===== NAV ===== */
-    .nav {
+    /* === AMBIENT ORBS === */
+    .ambient {
       position: fixed;
-      bottom: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.3;
+      animation: floatOrb 30s ease-in-out infinite alternate;
+    }
+    .ambient-1 { width: 500px; height: 500px; background: #dbeafe; top: -150px; left: -150px; }
+    .ambient-2 { width: 450px; height: 450px; background: #ccfbf1; bottom: -100px; right: -100px; animation-delay: -6s; }
+
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 50px) scale(1.15); }
+    }
+
+    /* === HEADER === */
+    header {
+      position: relative;
+      z-index: 20;
+      padding: 4.5rem 2rem 3.5rem;
+      text-align: center;
+      max-width: 1200px;
+      margin: 20px auto;
+      background: var(--surface);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border-bright);
+      box-shadow: var(--shadow-md);
+      border-radius: var(--radius);
+    }
+
+    .header-eyebrow {
+      display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 9999px;
-      padding: 0.4rem 0.8rem;
-      z-index: 100;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0891b2;
+      background: #ecfeff;
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      margin-bottom: 1.5rem;
     }
 
-    .nav-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--border);
-      cursor: pointer;
+    header h1 {
+      font-size: clamp(2rem, 5.5vw, 3.2rem);
+      font-weight: 900;
+      letter-spacing: -0.05em;
+      line-height: 1;
+      color: var(--text);
+      margin-bottom: 1rem;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 600px;
+      margin: 0 auto;
+      font-weight: 500;
+    }
+
+    /* === NAV === */
+    nav {
+      position: sticky;
+      top: 14px;
+      z-index: 100;
+      max-width: min(1000px, calc(100vw - 32px));
+      margin: 14px auto;
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(18px);
+      border: 1px solid var(--border-bright);
+      border-radius: 100px;
+      padding: 4px;
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+      box-shadow: var(--shadow-sm);
+    }
+    nav::-webkit-scrollbar { display: none; }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.7rem 1.1rem;
+      white-space: nowrap;
+      border-radius: 100px;
       transition: all 0.2s;
     }
+    nav a:hover { color: var(--text); background: rgba(0,0,0,0.03); }
 
-    .nav-dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
-    .nav-dot:hover:not(.active) { background: var(--text-3); }
-
-    .slide-counter {
-      font-size: var(--small-size);
-      color: var(--text-3);
-      padding: 0 0.5rem;
-    }
-
-    /* ===== KEYBOARD HINT ===== */
-    .key-hint {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      font-size: var(--small-size);
-      color: var(--text-3);
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-
-    .key {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 0.1rem 0.4rem;
-      font-size: 0.7rem;
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* ===== PROGRESS BAR ===== */
-    .progress {
-      position: fixed;
-      top: 0; left: 0;
-      height: 2px;
-      background: var(--accent);
-      width: 0%;
-      z-index: 200;
-      transition: width 0.3s ease;
-    }
-
-    /* ===== TYPOGRAPHY ===== */
-    h1 { font-size: var(--title-size); font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
-    h2 { font-size: var(--h2-size); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
-    h3 { font-size: clamp(0.9rem, 1.5vw, 1.2rem); font-weight: 500; }
-    p, li { font-size: var(--body-size); line-height: 1.6; color: var(--text-2); }
-    code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; border: 1px solid var(--border); }
-    .mono { font-family: 'JetBrains Mono', monospace; }
-
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      padding: 0.2rem 0.65rem;
-      border-radius: 9999px;
-      font-size: var(--small-size);
-      font-weight: 500;
-    }
-    .tag-green { background: var(--accent-2); color: var(--accent); }
-    .tag-blue { background: var(--blue-2); color: var(--blue); }
-    .tag-amber { background: var(--amber-2); color: var(--amber); }
-    .tag-purple { background: var(--purple-2); color: var(--purple); }
-    .tag-gray { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
-
-    /* ===== TITLE SLIDE ===== */
-    .title-slide { background: var(--bg); }
-    .title-slide .slide-content { text-align: center; }
-    .title-slide h1 { color: var(--text); margin-bottom: 0.5rem; }
-    .title-slide .subtitle { color: var(--text-2); font-size: var(--h2-size); font-weight: 300; margin-bottom: 1.5rem; }
-    .title-slide .meta { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
-
-    /* ===== CONTENT SLIDE ===== */
-    .content-slide { background: var(--surface); }
-    .content-slide .slide-content { padding-top: 3rem; }
-    .slide-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: var(--content-gap); }
-    .slide-number {
-      font-size: var(--small-size);
-      font-weight: 600;
-      color: var(--text-3);
-      font-family: 'JetBrains Mono', monospace;
-      min-width: 2rem;
-    }
-
-    /* ===== FLOW DIAGRAM ===== */
-    .flow {
+    /* === MAIN === */
+    main {
+      position: relative;
+      z-index: 10;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 2rem 8rem;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
-      margin-top: 1rem;
+      gap: 6rem;
     }
 
-    .flow-row {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-size: var(--body-size);
+    /* === SECTION === */
+    .section-header {
+      margin-bottom: 2.5rem;
+      text-align: left;
     }
 
-    .flow-node {
-      padding: 0.45rem 0.9rem;
-      border-radius: 8px;
-      font-weight: 500;
-      font-size: var(--body-size);
-      white-space: nowrap;
-      border: 1px solid transparent;
-    }
-
-    .flow-start { background: var(--accent-3); color: var(--accent); border-color: var(--accent-2); }
-    .flow-end { background: var(--surface-2); color: var(--text-3); border-color: var(--border); }
-    .flow-action { background: var(--surface-2); color: var(--text); border-color: var(--border); }
-    .flow-decision { background: var(--amber-2); color: var(--amber); border-color: #f5e0c0; }
-    .flow-parallel { background: var(--blue-2); color: var(--blue); border-color: #c5d9f5; }
-    .flow-tool { background: var(--purple-2); color: var(--purple); border-color: #e0c8f5; }
-
-    .flow-arrow {
-      color: var(--text-3);
-      font-size: 0.8rem;
-      flex-shrink: 0;
-    }
-
-    .flow-label {
-      font-size: var(--small-size);
-      color: var(--text-3);
-      font-style: italic;
-    }
-
-    .flow-indent { padding-left: 1.5rem; }
-
-    .flow-branch {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-      padding-left: 1.2rem;
-      border-left: 2px solid var(--border);
-      margin: 0.25rem 0;
-    }
-
-    /* ===== GRID SLIDE ===== */
-    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; margin-top: 1rem; }
-    .card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-    }
-    .card h3 { margin-bottom: 0.5rem; }
-    .card p { font-size: var(--small-size); }
-
-    /* ===== FLOWCHART ===== */
-    .flowchart {
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-      align-items: flex-start;
-      margin-top: 0.75rem;
-    }
-
-    .fc-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: var(--body-size);
-    }
-
-    .fc-box {
-      padding: 0.35rem 0.75rem;
+    .section-badge {
+      font-size: 0.65rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #6366f1;
+      background: #eef2ff;
+      padding: 0.25rem 0.6rem;
       border-radius: 6px;
-      font-size: var(--small-size);
-      font-weight: 500;
-      border: 1px solid transparent;
+      margin-bottom: 0.8rem;
+      display: inline-block;
     }
 
-    .fc-start-end { background: var(--accent-3); color: var(--accent); border-color: var(--accent-2); }
-    .fc-process { background: var(--surface-2); color: var(--text); border-color: var(--border); }
-    .fc-decision { background: var(--amber-2); color: var(--amber); border-color: #f5e0c0; }
-    .fc-arrow { color: var(--text-3); font-size: 0.75rem; }
-    .fc-branch { padding-left: 1.5rem; border-left: 2px dashed var(--border); margin-left: 0.5rem; }
-    .fc-note { font-size: var(--small-size); color: var(--text-3); font-style: italic; margin-left: 0.5rem; }
-
-    /* ===== ANIMATIONS ===== */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
+    .section-title {
+      font-size: 1.85rem;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--text);
     }
 
-    .slide:not(.reduced-motion) .slide-content > * {
-      animation: fadeUp 0.5s ease both;
+    /* === DIAGRAM CARD === */
+    .diagram-card {
+      background: var(--surface-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      position: relative;
+      transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
     }
 
-    .slide:not(.reduced-motion) .slide-content > *:nth-child(1) { animation-delay: 0.05s; }
-    .slide:not(.reduced-motion) .slide-content > *:nth-child(2) { animation-delay: 0.12s; }
-    .slide:not(.reduced-motion) .slide-content > *:nth-child(3) { animation-delay: 0.2s; }
-    .slide:not(.reduced-motion) .slide-content > *:nth-child(4) { animation-delay: 0.28s; }
-    .slide:not(.reduced-motion) .slide-content > *:nth-child(5) { animation-delay: 0.35s; }
-
-    @media (prefers-reduced-motion: reduce) {
-      .slide:not(.reduced-motion) .slide-content > * { animation: none; }
-      html { scroll-behavior: auto; }
+    .diagram-card:hover {
+      transform: translateY(-4px);
     }
 
-    .reduced-motion .slide-content > * { animation: none !important; }
-
-    /* ===== RESPONSIVE ===== */
-    @media (max-height: 600px) {
-      :root { --slide-padding: 0.75rem 1.5rem; --content-gap: 0.5rem; }
-      .nav, .key-hint { display: none; }
+    .diagram-card-body {
+      padding: 3.5rem 2.5rem;
+      overflow-x: auto;
+      background: radial-gradient(circle at top right, rgba(241, 245, 249, 0.5), transparent);
     }
 
-    @media (max-width: 600px) {
-      .grid-2 { grid-template-columns: 1fr; }
+    .diagram-card-body .mermaid {
+      display: flex;
+      justify-content: center;
+      min-width: min-content;
+    }
+
+    /* === INFO GRID === */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-sm);
+      padding: 1.75rem;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .info-card h3 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .info-card h3::before {
+      content: '';
+      width: 4px; height: 16px; background: #6366f1; border-radius: 2px;
+    }
+
+    .info-card p {
+      font-size: 0.92rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    /* === FOOTER === */
+    footer { text-align: center; padding: 6rem 2rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
+
+    code { font-family: var(--font-mono); background: #f1f5f9; padding: 0.15rem 0.4rem; border-radius: 6px; font-size: 0.85em; color: #0891b2; font-weight: 600; }
+
+    @media (max-width: 768px) {
+      header { padding: 3rem 1.5rem; }
+      nav { top: 10px; }
+      main { padding: 1.5rem; gap: 4rem; }
+      .info-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
+
 <body>
 
-<div class="progress" id="progress"></div>
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
 
-<!-- ===== SLIDE 1: TITLE ===== -->
-<section class="slide title-slide" id="s1">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <p class="tag tag-green" style="margin-bottom:1rem">Backend Architecture</p>
-      <h1>MCP_ECOM</h1>
-      <p class="subtitle">Activity Diagrams</p>
-      <div class="meta">
-        <span class="tag tag-gray">Python</span>
-        <span class="tag tag-gray">FastAPI</span>
-        <span class="tag tag-gray">FastMCP</span>
-        <span class="tag tag-gray">Redis</span>
-        <span class="tag tag-gray">PostgreSQL</span>
-      </div>
-    </div>
-  </div>
-</section>
+  <header>
+    <div class="header-eyebrow">Interactive Process Maps</div>
+    <h1>Activity Flows</h1>
+    <p>Detailed visualization of the core application cycles: from Agent streaming loops to search pipeline and startup lifespan.</p>
+  </header>
 
-<!-- ===== SLIDE 2: AGENT STREAM ===== -->
-<section class="slide content-slide" id="s2">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">01</span>
-        <h2>Agent Stream — <code>/agent/stream</code></h2>
-        <span class="tag tag-blue">main flow</span>
-        <span class="tag tag-purple">async</span>
+  <nav>
+    <a href="#streaming">Agent Streaming</a>
+    <a href="#search">Search Pipeline</a>
+    <a href="#mcp">MCP Invocation</a>
+    <a href="#seller">Seller Analysis</a>
+    <a href="#memory">LTM Cycle</a>
+    <a href="#startup">Lifespan</a>
+  </nav>
+
+  <main>
+
+    <!-- SECTION: AGENT STREAMING -->
+    <section id="streaming">
+      <div class="section-header">
+        <span class="section-badge">Main Entry Point</span>
+        <h2 class="section-title">Agent Streaming Loop</h2>
       </div>
 
-      <div class="flowchart">
-        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">HTTP POST /agent/stream</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Acquire semaphore (concurrency limit)</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-decision">semaphore available?</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-box fc-start-end">no</span><span class="fc-arrow">→</span><span class="fc-note">Return 429</span></div>
-          <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">continue</span></div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">EbayReactAgent.run_stream() — background task</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">ReAct loop (max 6 steps)</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-note">Vision preproc → Memory hydration → Task decomposition</span></div>
-          <div class="fc-row"><span class="fc-note">ReactPlanner.decide() → LLM action selection</span></div>
-          <div class="fc-row"><span class="fc-box fc-decision">action = "stop"?</span></div>
-          <div class="fc-branch">
-            <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">LLM synthesis → SSE → client</span></div>
-            <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">ToolExecutor → MCPToolClient → Service → Redis</span></div>
-          </div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-start-end">End</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== SLIDE 3: SEARCH PIPELINE ===== -->
-<section class="slide content-slide" id="s3">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">02</span>
-        <h2>Search Pipeline</h2>
-        <span class="tag tag-green">search</span>
-        <span class="tag tag-blue">parallel</span>
-      </div>
-
-      <div class="flowchart">
-        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">POST /search — run_search_pipeline()</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">parse_query_service() — LLM semantic parsing</span></div>
-        <div class="fc-row"><span class="fc-box fc-decision">cache hit?</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">return cached</span></div>
-          <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">continue</span></div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">ebay.search_items() — Browse API</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Parallel RAG reranking (vector + BM25)</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Seller trust scoring + Normalize</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Cache result in Redis</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-start-end">Return SearchResponse</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== SLIDE 4: MCP TOOL CALL ===== -->
-<section class="slide content-slide" id="s4">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">03</span>
-        <h2>MCP Tool Call</h2>
-        <span class="tag tag-purple">MCP</span>
-        <span class="tag tag-amber">cache</span>
-      </div>
-
-      <div class="flowchart">
-        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">MCPToolClient.call_tool_async()</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-decision">Redis cache hit?</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-box fc-start-end">yes</span><span class="fc-arrow">→</span><span class="fc-note">return cached</span></div>
-          <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">continue</span></div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-decision">is_local_mode?</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-box fc-process">yes</span><span class="fc-arrow">→</span><span class="fc-note">FastMCP direct call</span></div>
-          <div class="fc-row"><span class="fc-box fc-process">HTTP</span><span class="fc-arrow">→</span><span class="fc-note">streamable_http_client → MCP Server</span></div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Service execution → Extract parts → Parse dict</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Cache in Redis (TTL from config)</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-start-end">Return ToolResult</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== SLIDE 5: SELLER ANALYSIS ===== -->
-<section class="slide content-slide" id="s5">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">04</span>
-        <h2>Seller Analysis Pipeline</h2>
-        <span class="tag tag-amber">seller</span>
-        <span class="tag tag-blue">parallel</span>
-      </div>
-
-      <div class="flowchart">
-        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">analyze_seller(seller_id)</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Parallel fetch (all at once)</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-note">ebay.get_seller_feedback()</span></div>
-          <div class="fc-row"><span class="fc-note">ebay.get_user_details()</span></div>
-          <div class="fc-row"><span class="fc-note">ebay.get_store_details()</span></div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">NLP Sentiment analysis on feedback text</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Trust score: feedback_ratio × recency × confidence</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Normalize scores</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-start-end">Return SellerAnalysis</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== SLIDE 6: DUAL MCP WORLD ===== -->
-<section class="slide content-slide" id="s6">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">05</span>
-        <h2>Dual MCP World Architecture</h2>
-        <span class="tag tag-purple">MCP</span>
-        <span class="tag tag-amber">routing</span>
-      </div>
-
-      <div class="flowchart">
-        <div class="fc-row"><span class="fc-box fc-start-end">Start</span><span class="fc-arrow">→</span><span class="fc-note">Frontend selects mcp_mode</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-decision">mcp_mode == "standard"?</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-box fc-process">yes</span><span class="fc-arrow">→</span><span class="fc-note">Route to /mcp/standard → FastMCP (mcp) → All tools</span></div>
-          <div class="fc-row"><span class="fc-box fc-process">playwright</span><span class="fc-arrow">→</span><span class="fc-note">Route to /mcp/playwright → FastMCP (mcp_playwright)</span></div>
-        </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Playwright world: search_products (visible browser)</span></div>
-        <div class="fc-row"><span class="fc-note" style="margin-left:1.5rem">contact_seller_playwright + other tools synced from standard</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">MCPToolClient.call_tool_async()</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-start-end">End</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== SLIDE 7: MEMORY SYSTEM ===== -->
-<section class="slide content-slide" id="s7">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">06</span>
-        <h2>Memory & User Profiling</h2>
-        <span class="tag tag-green">memory</span>
-      </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <h3>Session Memory</h3>
-          <p>Redis: <code>session_memory:{user_key}</code></p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">TTL: 1 giorno</p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size)">recent_queries, recent_sellers, recent_products, conversation_history, vision_description</p>
-        </div>
-        <div class="card">
-          <h3>Long-Term Memory</h3>
-          <p>Redis: <code>long_term_memory:{user_key}</code></p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">TTL: 30 giorni</p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size)">favorite_sellers, validated_brands, category_history, user_behaviour</p>
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+stateDiagram-v2
+    [*] --> Semaphore: Acquire Lock
+    Semaphore --> CheckAvailability: Max 3 Concurrent
+    CheckAvailability --> Overload429: No
+    CheckAvailability --> ReActLoop: Yes
+    
+    state ReActLoop {
+      [*] --> PreProcess: Vision + Memory
+      PreProcess --> LLMCall: Reasoning Step
+      LLMCall --> ActionDecision: Stop vs Tool
+      ActionDecision --> ToolExecution: Tool Call
+      ToolExecution --> Observation: Record Result
+      Observation --> PreProcess
+      ActionDecision --> Finalize: STOP
+    }
+    
+    Finalize --> SSESynthesis: SSE Protocol
+    SSESynthesis --> [*]
+    Overload429 --> [*]
+          </pre>
         </div>
       </div>
 
-      <div class="flowchart" style="margin-top:1rem">
-        <div class="fc-row"><span class="fc-box fc-process">User query arrives → update session_memory in Redis</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-decision">preference signal detected?</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-box fc-process">yes</span><span class="fc-arrow">→</span><span class="fc-note">auto-learn: category_affinities, budget, condition → long_term_memory</span></div>
-          <div class="fc-row"><span class="fc-box fc-process">no</span><span class="fc-arrow">→</span><span class="fc-note">skip</span></div>
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Concurrency Control</h3>
+          <p>Managed via an async semaphore at <code>/agent/stream</code>. Limits concurrent heavy LLM workloads to prevent memory exhaustion and Redis timeouts.</p>
         </div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Return enriched context to agent</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== SLIDE 8: STARTUP ===== -->
-<section class="slide content-slide" id="s8">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">07</span>
-        <h2>Startup — Application Lifespan</h2>
-        <span class="tag tag-purple">init</span>
-      </div>
-
-      <div class="flowchart">
-        <div class="fc-row"><span class="fc-box fc-start-end">uvicorn starts app</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Preload SentenceTransformer model</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Create DB tables (SQLAlchemy)</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Check Redis connection</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Init eBay HTTP client</span></div>
-        <div class="fc-row"><span class="fc-arrow" style="margin-left:1.5rem">↓</span></div>
-        <div class="fc-row"><span class="fc-box fc-process">Start price tracking background loop</span></div>
-        <div class="fc-branch">
-          <div class="fc-row"><span class="fc-note">FastAPI listening on port 8050</span></div>
+        <div class="info-card">
+          <h3>ReAct Reasoning Step</h3>
+          <p>Recursive loop with a depth of 6. Each turn extracts vision signals (if images are present) and hydrates state from the Redis LTM.</p>
         </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- ===== SLIDE 9: ARCH OVERVIEW ===== -->
-<section class="slide content-slide" id="s9">
-  <div class="slide-content">
-    <div class="slide-inner">
-      <div class="slide-header">
-        <span class="slide-number">08</span>
-        <h2>Architecture Overview</h2>
+    <!-- SECTION: SEARCH PIPELINE -->
+    <section id="search">
+      <div class="section-header">
+        <span class="section-badge">Data Retrieval</span>
+        <h2 class="section-title">Search & Reranking Workflow</h2>
       </div>
 
-      <div class="grid-2">
-        <div class="card">
-          <h3>Frontend</h3>
-          <p>React + TypeScript + Zustand + MUI</p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Port 5173</p>
-        </div>
-        <div class="card">
-          <h3>Backend</h3>
-          <p>FastAPI + FastMCP</p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Port 8050</p>
-        </div>
-        <div class="card">
-          <h3>Data</h3>
-          <p>PostgreSQL + Redis</p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Memory & persistence</p>
-        </div>
-        <div class="card">
-          <h3>LLM</h3>
-          <p>Ollama Cloud + Qwen-VL</p>
-          <p style="margin-top:0.5rem; font-size:var(--small-size); color:var(--text-3)">Streaming + Vision</p>
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+flowchart TD
+    Q["<b>Query Arrival</b><br/>NLP Input"]
+    PAR["<b>Parsing Service</b><br/>Intent Extraction"]
+    CCH{"<b>Redis Cache</b><br/>Product Hits?"}
+    API["<b>eBay Browse</b><br/>REST Retrieval"]
+    RER["<b>Hybrid Reranker</b><br/>Vector + RAG"]
+    RES["<b>Response</b><br/>Ranked List"]
+
+    Q --> PAR
+    PAR --> CCH
+    CCH -- No --> API
+    API --> RER
+    RER --> RES
+    CCH -- Yes --> RES
+
+    subgraph RK["Reranking Logic"]
+      direction LR
+      S1["Cosine"] --> F["Final Score"]
+      S2["Seller"] --> F
+      S3["RAG"] --> F
+    end
+    RER --- RK
+          </pre>
         </div>
       </div>
 
-      <div style="margin-top:1rem; padding:1rem; background:var(--surface-2); border:1px solid var(--border); border-radius:12px;">
-        <p style="font-size:var(--small-size); color:var(--text-2)">
-          <strong>Agent loop:</strong> Vision → Memory → Task decomposition → ReactPlanner (LLM) →
-          ToolExecutor (MCP) → Service → Redis cache → Synthesis → SSE
-        </p>
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Intelligent Caching</h3>
+          <p>Semantic hash-based caching in Redis. If a similar query exists within the TTL, the system returns a pre-ranked response, bypassing external API latency.</p>
+        </div>
+        <div class="info-card">
+          <h3>Reranking Signals</h3>
+          <p>Combines semantic cosine similarity with eBay metadata (Seller Trust, Shipping) and RAG "Product Expert" insights for the final hybrid score.</p>
+        </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- ===== NAV ===== -->
-<nav class="nav" id="nav">
-  <div class="nav-dot active" data-slide="1"></div>
-  <div class="nav-dot" data-slide="2"></div>
-  <div class="nav-dot" data-slide="3"></div>
-  <div class="nav-dot" data-slide="4"></div>
-  <div class="nav-dot" data-slide="5"></div>
-  <div class="nav-dot" data-slide="6"></div>
-  <div class="nav-dot" data-slide="7"></div>
-  <div class="nav-dot" data-slide="8"></div>
-  <div class="nav-dot" data-slide="9"></div>
-  <span class="slide-counter" id="counter">1 / 9</span>
-</nav>
+    <!-- SECTION: MCP TOOL CALL -->
+    <section id="mcp">
+      <div class="section-header">
+        <span class="section-badge">Tool Integration</span>
+        <h2 class="section-title">MCP Invocation Gateway</h2>
+      </div>
 
-<div class="key-hint">
-  <span class="key">↑</span><span class="key">↓</span> navigate
-</div>
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+sequenceDiagram
+    participant A as Agent (Planner)
+    participant C as MCPToolClient
+    participant L as FastMCP (Local)
+    participant R as MCP Proxy (HTTP)
+    
+    A->>C: call_tool("analyze_seller")
+    C->>C: Generate Security Context
+    
+    alt Local server_url detection
+        C->>L: Internal Function Call
+        L-->>C: Result Object
+    else Protocol negotiation
+        C->>R: HTTP POST /standard/call
+        R-->>C: JSON Response
+    end
+    
+    C->>C: Normalize contents
+    C-->>A: Observation dict
+          </pre>
+        </div>
+      </div>
 
-<script>
-  const slides = document.querySelectorAll('.slide');
-  const dots = document.querySelectorAll('.nav-dot');
-  const counter = document.getElementById('counter');
-  const progress = document.getElementById('progress');
-  const total = slides.length;
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Zero-latency Routing</h3>
+          <p>The client detects if the target MCP server is running in the same process (Local Mode) and executes it directly, avoiding the network stack entirely.</p>
+        </div>
+        <div class="info-card">
+          <h3>Content Normalization</h3>
+          <p>Transforms raw <code>CallToolResult</code> (Text/JSON/Images) into a sanitized Python dictionary that is compatible with the Agent's <code>Observation</code> structure.</p>
+        </div>
+      </div>
+    </section>
 
-  function updateUI(idx) {
-    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-    counter.textContent = `${idx + 1} / ${total}`;
-    progress.style.width = `${((idx + 1) / total) * 100}%`;
-  }
+    <!-- SECTION: SELLER ANALYSIS -->
+    <section id="seller">
+      <div class="section-header">
+        <span class="section-badge">Trust & Safety</span>
+        <h2 class="section-title">Seller Analysis Pipeline</h2>
+      </div>
 
-  // Scroll snap listener
-  let current = 0;
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const idx = Array.from(slides).indexOf(entry.target);
-        current = idx;
-        updateUI(idx);
-      }
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+graph LR
+    S["analyze_seller"] --> P["<b>Parallel Fetch</b>"]
+    
+    P --> F1["Feedback Text (NLP)"]
+    P --> F2["Global Trust Stats"]
+    P --> F3["Store Specialization"]
+    
+    F1 --> SYN["<b>Synthesis Engine</b>"]
+    F2 --> SYN
+    F3 --> SYN
+    
+    SYN --> R["Unified Trust Score"]
+          </pre>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Sentiment Analysis</h3>
+          <p>Performs RAG-enhanced sentiment analysis on the last 50 text reviews of a seller to identify hidden risks (e.g., "slow shipping" vs "damaged goods").</p>
+        </div>
+        <div class="info-card">
+          <h3>Trust Logic</h3>
+          <p>Combines feedback percentage, registration date, and recent sales volume with NLP sentiments to calculate a 0-100 Trust Score.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: MEMORY CYCLE -->
+    <section id="memory">
+      <div class="section-header">
+        <span class="section-badge">Continuity</span>
+        <h2 class="section-title">LTM & Profiling Cycle</h2>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+flowchart TD
+    EV["Interaction Detected"]
+    RDS["<b>Short-term</b><br/>Redis Cache"]
+    SVC["<b>Auto-Learn Svc</b><br/>Sentiment + Affinity"]
+    PG["<b>Long-term</b><br/>PostgreSQL Store"]
+    
+    EV --> RDS
+    RDS --> SVC
+    SVC -->|EMA Decay| PG
+    PG -.->|Load context| RDS
+          </pre>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Exponential Moving Average</h3>
+          <p>Uses an EMA decay algorithm (α=0.20) to track user budget preferences and category affinities, prioritizing recent searches over historical data.</p>
+        </div>
+        <div class="info-card">
+          <h3>Shadow Profiling</h3>
+          <p>Asynchronous profiling runs after every successful search, updating the user's permanent model without blocking the response flow.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: STARTUP -->
+    <section id="startup">
+      <div class="section-header">
+        <span class="section-badge">Environment Boot</span>
+        <h2 class="section-title">Application Lifespan</h2>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-body">
+          <pre class="mermaid">
+stateDiagram-v2
+    [*] --> DBInit: SessionLocal Connect
+    DBInit --> QdrantSync: Collection Verify
+    QdrantSync --> MCPConfig: configure_mcp()
+    MCPConfig --> SyncWorlds: sync_standard_tools()
+    SyncWorlds --> RedisEmpty: Clear Heartbeats
+    RedisEmpty --> AcceptTraffic
+    AcceptTraffic --> [*]
+          </pre>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Atomic Bootstrapping</h3>
+          <p>Ensures database migrations and Qdrant collections are healthy before the first API request is served by theuvicorn worker.</p>
+        </div>
+        <div class="info-card">
+          <h3>Tool Mirroring</h3>
+          <p>The Standard MCP tools are dynamically mirrored into the Playwright world to allow browser-based agents access to backend API logic.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    MCP_ECOM · Activity Documentation · Architecture Workflow
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '13px',
+        primaryColor: '#ffffff',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#cbd5e1',
+        lineColor: '#64748b',
+        secondaryColor: '#f8fafc',
+        tertiaryColor: '#f1f5f9',
+        mainBkg: '#ffffff',
+        nodeBorder: '#cbd5e1',
+        clusterBkg: '#f8fafc',
+        clusterBorder: '#e2e8f0',
+        textColor: '#1e293b'
+      },
+      flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis', padding: 30 },
+      sequence: { useMaxWidth: false, wrap: true, diagramMarginX: 25, diagramMarginY: 20 },
+      state: { useMaxWidth: false }
     });
-  }, { threshold: 0.5 });
-
-  slides.forEach(s => observer.observe(s));
-
-  // Dot navigation
-  dots.forEach(dot => {
-    dot.addEventListener('click', () => {
-      const n = parseInt(dot.dataset.slide) - 1;
-      slides[n].scrollIntoView({ behavior: 'smooth' });
-    });
-  });
-
-  // Keyboard navigation
-  document.addEventListener('keydown', e => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
-      e.preventDefault();
-      if (current < total - 1) slides[current + 1].scrollIntoView({ behavior: 'smooth' });
-    }
-    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-      e.preventDefault();
-      if (current > 0) slides[current - 1].scrollIntoView({ behavior: 'smooth' });
-    }
-  });
-
-  // Touch/swipe support
-  let touchStartY = 0;
-  document.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; });
-  document.addEventListener('touchend', e => {
-    const delta = touchStartY - e.changedTouches[0].clientY;
-    if (Math.abs(delta) > 40) {
-      if (delta > 0 && current < total - 1) slides[current + 1].scrollIntoView({ behavior: 'smooth' });
-      if (delta < 0 && current > 0) slides[current - 1].scrollIntoView({ behavior: 'smooth' });
-    }
-  });
-
-  // prefers-reduced-motion
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    document.querySelectorAll('.slide').forEach(s => s.classList.add('reduced-motion'));
-  }
-</script>
+  </script>
 
 </body>
 </html>

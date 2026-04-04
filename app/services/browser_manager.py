@@ -92,7 +92,16 @@ class BrowserManager:
         if visible is not None:
             self._visible = visible
 
-        if self.browser is None:
+        # Auto-recovery if user manually closes the Chromium window
+        needs_launch = False
+        if self.browser is None or self.page is None:
+            needs_launch = True
+        elif not self.browser.is_connected() or self.page.is_closed():
+            logger.info("Browser disconnected or page closed manually. Forcing relaunch.")
+            await self._close_browser()
+            needs_launch = True
+
+        if needs_launch:
             logger.info("Launching browser (visible=%s)...", self._visible)
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
@@ -110,7 +119,75 @@ class BrowserManager:
             self.page = await self.context.new_page()
             logger.info("Browser launched and page created")
         
+        await self._inject_visual_tools()
         self._reset_timer()
+
+    async def _inject_visual_tools(self):
+        """Inietta lo script per il cursore virtuale e l'evidenziazione."""
+        if not self.page: return
+        js_script = """
+        (function() {
+            if (document.getElementById('pw-visual-tools')) return;
+            const style = document.createElement('style');
+            style.id = 'pw-visual-tools';
+            style.innerHTML = `
+                #pw-cursor {
+                    position: fixed; top: 0; left: 0; width: 14px; height: 14px;
+                    background: rgba(255, 0, 0, 0.8); border: 2px solid white;
+                    border-radius: 50%; pointer-events: none; z-index: 1000000;
+                    transition: transform 0.15s ease-out; box-shadow: 0 0 5px rgba(0,0,0,0.5);
+                }
+                .pw-highlight {
+                    outline: 4px dashed #ff0000 !important;
+                    outline-offset: 2px !important;
+                    transition: outline 0.2s ease-in-out !important;
+                }
+            `;
+            document.head.appendChild(style);
+            const cursor = document.createElement('div');
+            cursor.id = 'pw-cursor';
+            document.body.appendChild(cursor);
+            window.addEventListener('mousemove', e => {
+                cursor.style.transform = `translate(${e.clientX - 7}px, ${e.clientY - 7}px)`;
+            });
+        })();
+        """
+        try:
+            await self.page.add_init_script(js_script)
+            # Esegui anche subito se la pagina è già carica
+            await self.page.evaluate(js_script)
+        except Exception: pass
+
+    async def _move_mouse_human(self, selector: str):
+        """Muove il mouse in modo fluido verso un elemento."""
+        try:
+            element = await self.page.wait_for_selector(selector, state="visible", timeout=5000)
+            if not element: return
+            box = await element.bounding_box()
+            if not box: return
+            
+            target_x = box["x"] + box["width"] / 2
+            target_y = box["y"] + box["height"] / 2
+            
+            # Movimento fluido in 15-20 step
+            await self.page.mouse.move(target_x, target_y, steps=15)
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.warning("Failed human mouse move to %s: %s", selector, e)
+
+    async def _highlight_element(self, selector: str, duration: float = 0.5):
+        """Evidenzia temporaneamente un elemento."""
+        try:
+            await self.page.evaluate(f"""
+                (sel) => {{
+                    const el = document.querySelector(sel);
+                    if (el) {{
+                        el.classList.add('pw-highlight');
+                        setTimeout(() => el.classList.remove('pw-highlight'), {int(duration*1000)});
+                    }}
+                }}
+            """, selector)
+        except Exception: pass
 
     def _reset_timer(self):
         """Resetta il timer di inattività."""
@@ -166,8 +243,20 @@ class BrowserManager:
             logger.warning("Could not take screenshot: %s", e)
 
         title = ""
+        page_text = ""
         try:
             title = await self.page.title()
+            js_extractor = '''() => {
+                let el = document.getElementById('mainContent') || document.getElementById('srp-river-results') || document.querySelector('main');
+                if (el) {
+                    return el.innerText.substring(0, 2000);
+                }
+                return document.body.innerText.substring(0, 1500);
+            }'''
+            page_text = await self.page.evaluate(js_extractor)
+            # Pulizia sommaria per rimuovere eccessivi a capo e spazi bianchi
+            import re
+            page_text = re.sub(r'\n+', '\n', page_text).strip()
         except Exception:
             pass
 
@@ -175,6 +264,7 @@ class BrowserManager:
             "status": "open",
             "url": self.page.url,
             "title": title,
+            "page_text": page_text,
             "screenshot": screenshot_b64,
         }
 
@@ -196,6 +286,8 @@ class BrowserManager:
     def click(self, selector: str) -> Dict[str, Any]:
         async def _click():
             await self._ensure_browser()
+            await self._move_mouse_human(selector)
+            await self._highlight_element(selector)
             await self.page.click(selector, timeout=15000)
             return await self._get_state()
         return self.run_coroutine(_click())
@@ -203,9 +295,23 @@ class BrowserManager:
     def type(self, selector: str, text: str, press_enter: bool = False) -> Dict[str, Any]:
         async def _type():
             await self._ensure_browser()
-            await self.page.fill(selector, text, timeout=10000)
+            await self._move_mouse_human(selector)
+            await self._highlight_element(selector)
+            await self.page.click(selector) # Focus
+            # Inserimento testo con leggero delay
+            for char in text:
+                await self.page.keyboard.type(char)
+                await asyncio.sleep(0.05)
+            
             if press_enter:
-                await self.page.press(selector, "Enter")
+                await asyncio.sleep(0.1)
+                await self.page.keyboard.press("Enter")
+            
+            if press_enter:
+                # eBay è un sito pesante: attendiamo 4 secondi per permettere 
+                # la transizione di pagina o l'aggiornamento AJAX dei risultati
+                await asyncio.sleep(4)
+            
             return await self._get_state()
         return self.run_coroutine(_type())
 

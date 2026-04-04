@@ -1,13 +1,13 @@
 import { useState, useRef } from "react"
-import { 
-  Box, 
-  IconButton, 
-  InputBase, 
-  Typography, 
-  CircularProgress, 
-  Menu, 
-  MenuItem, 
-  ListItemIcon, 
+import {
+  Box,
+  IconButton,
+  InputBase,
+  Typography,
+  CircularProgress,
+  Menu,
+  MenuItem,
+  ListItemIcon,
   ListItemText,
   Dialog,
   DialogTitle,
@@ -18,6 +18,7 @@ import {
   Button
 } from "@mui/material"
 import { EBAY_CATEGORIES } from "../search/constants"
+import { useSettingsStore } from "./store/settingsStore"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate"
 import AddIcon from "@mui/icons-material/Add"
@@ -25,6 +26,7 @@ import SellIcon from "@mui/icons-material/Sell"
 import CloseIcon from "@mui/icons-material/Close"
 import StarsIcon from "@mui/icons-material/Stars"
 import TravelExploreIcon from "@mui/icons-material/TravelExplore"
+import MailOutlineIcon from "@mui/icons-material/MailOutline"
 
 
 interface Props {
@@ -42,7 +44,8 @@ export default function ChatInput({
   const [image, setImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
+  const updateLocalSettings = useSettingsStore((s) => s.updateLocalSettings)
+
   // Menu State
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const openMenu = Boolean(anchorEl)
@@ -53,6 +56,10 @@ export default function ChatInput({
   // Playwright Modal State
   const [isPlaywrightModalOpen, setIsPlaywrightModalOpen] = useState(false)
   const [playwrightQuery, setPlaywrightQuery] = useState("")
+
+  // Contact Seller Modal State
+  const [isContactSellerModalOpen, setIsContactSellerModalOpen] = useState(false)
+  const [contactSellerName, setContactSellerName] = useState("")
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -117,13 +124,31 @@ export default function ChatInput({
   const handlePlaywrightConfirm = () => {
     const query = playwrightQuery.trim()
     if (!query) return
-    
+
     setIsPlaywrightModalOpen(false)
     onSend(`Cerca su eBay con Playwright (MODALITÀ VISIBILE): ${query} 🌐`, undefined)
     setPlaywrightQuery("")
     if (value.trim() === query) setValue("")
   }
 
+  const handleContactSellerClick = () => {
+    handleMenuClose()
+    setContactSellerName(value.trim())
+    setIsContactSellerModalOpen(true)
+  }
+
+  const handleContactSellerConfirm = () => {
+    const seller = contactSellerName.trim()
+    if (!seller) return
+    setIsContactSellerModalOpen(false)
+    // Switch to playwright mode so the agent uses contact_seller_playwright.
+    // useAgentStream reads mcpMode via getState() at call time, so this update
+    // is picked up synchronously before the stream request is sent.
+    updateLocalSettings({ mcpMode: 'playwright_browser' })
+    onSend(`Contattami il seller ${seller} e chiedi informazioni`, undefined)
+    setContactSellerName("")
+    if (value.trim() === seller) setValue("")
+  }
 
   const canSend = (!!value.trim() || !!image) && !disabled && !isProcessing
 
@@ -179,17 +204,32 @@ mt: -1,
           />
         </MenuItem>
 
-        <MenuItem 
-          onClick={handlePlaywrightClick} 
+        <MenuItem
+          onClick={handlePlaywrightClick}
           sx={{ py: 1.5, px: 2 }}
         >
           <ListItemIcon sx={{ color: '#3b82f6' }}>
             <TravelExploreIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText 
-            primary="Cerca con Playwright" 
+          <ListItemText
+            primary="Cerca con Playwright"
             secondary="Mostra il browser (Debug)"
-            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#3b82f6' }} 
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#3b82f6' }}
+            secondaryTypographyProps={{ fontSize: 10, color: 'var(--text-secondary)' }}
+          />
+        </MenuItem>
+
+        <MenuItem
+          onClick={handleContactSellerClick}
+          sx={{ py: 1.5, px: 2 }}
+        >
+          <ListItemIcon sx={{ color: '#10b981' }}>
+            <MailOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Contatta venditore"
+            secondary="Apre Chrome e invia il messaggio"
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}
             secondaryTypographyProps={{ fontSize: 10, color: 'var(--text-secondary)' }}
           />
         </MenuItem>
@@ -468,20 +508,20 @@ mt: -1,
         </DialogContent>
 
         <DialogActions sx={{ p: 3, pt: 1 }}>
-          <Button 
+          <Button
             onClick={() => setIsPlaywrightModalOpen(false)}
             sx={{ color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'none' }}
           >
             Annulla
           </Button>
-          <Button 
+          <Button
             onClick={handlePlaywrightConfirm}
             variant="contained"
             disableElevation
             disabled={!playwrightQuery.trim()}
-            sx={{ 
-              borderRadius: '10px', 
-              bgcolor: '#3b82f6', 
+            sx={{
+              borderRadius: '10px',
+              bgcolor: '#3b82f6',
               textTransform: 'none',
               fontWeight: 700,
               px: 3,
@@ -489,6 +529,94 @@ mt: -1,
             }}
           >
             Avvia Ricerca
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Contact Seller Modal */}
+      <Dialog
+        open={isContactSellerModalOpen}
+        onClose={() => setIsContactSellerModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "20px",
+            bgcolor: "var(--bg-primary)",
+            backgroundImage: "none",
+            boxShadow: "0 24px 48px -12px rgba(0,0,0,0.15)",
+            border: "1px solid var(--border-color)",
+            p: 1
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          pt: 3,
+          pb: 1,
+          px: 3,
+          color: "var(--text-primary)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 1
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <MailOutlineIcon sx={{ color: '#10b981', fontSize: 28 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>Contatta Venditore</Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: "var(--text-secondary)", fontWeight: 500, opacity: 0.8 }}>
+            Inserisci il nome utente del venditore eBay da contattare
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, pb: 1, pt: 2 }}>
+          <TextField
+            fullWidth
+            autoFocus
+            placeholder="Es: jjtech2020"
+            variant="outlined"
+            value={contactSellerName}
+            onChange={(e) => setContactSellerName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleContactSellerConfirm()
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '12px',
+                bgcolor: 'var(--bg-secondary)',
+                '& fieldset': { borderColor: 'var(--border-color)' },
+                '&:hover fieldset': { borderColor: 'var(--text-secondary)' },
+                '&.Mui-focused fieldset': { borderColor: '#10b981' },
+              },
+              '& .MuiInputBase-input': {
+                color: 'var(--text-primary)',
+                fontSize: '15px'
+              }
+            }}
+          />
+        </DialogContent>
+
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button
+            onClick={() => setIsContactSellerModalOpen(false)}
+            sx={{ color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'none' }}
+          >
+            Annulla
+          </Button>
+          <Button
+            onClick={handleContactSellerConfirm}
+            variant="contained"
+            disableElevation
+            disabled={!contactSellerName.trim()}
+            sx={{
+              borderRadius: '10px',
+              bgcolor: '#10b981',
+              textTransform: 'none',
+              fontWeight: 700,
+              px: 3,
+              '&:hover': { bgcolor: '#059669' }
+            }}
+          >
+            Invia Messaggio
           </Button>
         </DialogActions>
       </Dialog>

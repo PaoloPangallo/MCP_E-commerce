@@ -59,15 +59,21 @@ class ToolExecutor:
             )
 
         cache_key = self._make_cache_key(tool_call.tool, tool_call.input, self.mcp_mode)
-        cached = self._get_cached_result(cache_key)
-        if cached is not None:
-            logger.info("ToolExecutor cache hit | tool=%s", tool_call.tool)
-            return self._build_observation(
-                tool_call=tool_call,
-                result=dict(cached),
-                execution_ms=0.0,
-                cache_hit=True,
-            )
+        
+        # In modalità Playwright l'ambiente è stateful, le azioni non devono essere mai cachate
+        # altrimenti se l'LLM ripete un'azione (es. browser_type) ottiene il finto "ok" senza interagire col browser
+        can_cache = self.mcp_mode != "playwright_browser"
+        
+        if can_cache:
+            cached = self._get_cached_result(cache_key)
+            if cached is not None:
+                logger.info("ToolExecutor cache hit | tool=%s", tool_call.tool)
+                return self._build_observation(
+                    tool_call=tool_call,
+                    result=dict(cached),
+                    execution_ms=0.0,
+                    cache_hit=True,
+                )
 
         start = time.perf_counter()
         try:
@@ -87,8 +93,8 @@ class ToolExecutor:
             result.setdefault("_backend", "mcp")
 
             execution_ms = round((time.perf_counter() - start) * 1000.0, 2)
-            # Non cachare risultati di errore — potrebbero essere transitori
-            if result.get("status") != "error":
+            # Non cachare risultati di errore - potrebbero essere transitori
+            if can_cache and result.get("status") != "error":
                 self._set_cached_result(cache_key, result)
 
             logger.info(
@@ -177,18 +183,34 @@ class ToolExecutor:
         cache_hit: bool,
     ) -> Observation:
         
-        status = result.get("status", "ok")
+        raw_status = result.get("status", "ok")
+        # Map raw statuses from tools (like 'open', 'closed') to allowed Pydantic literals
+        status = raw_status if raw_status in {"ok", "no_data", "error"} else ("error" if raw_status == "error" else "ok")
+        
         # "no_data" = tool ran OK but found nothing → empty quality so agent can consider retrying
         quality = "good" if status == "ok" else "empty"
-        # I tool playwright che aprono il browser sono terminali anche in caso di errore parziale:
-        # il browser si è già aperto, non ha senso riprovare
+        # il browser si è già aperto, non ha senso riprovare.
+        # IMPORTANTE: In un flusso multi-step, lo status "ok" NON deve mai essere terminale!
         playwright_terminal_statuses = {
             "contact_button_not_found", "login_required",
             "message_form_not_found", "submit_button_not_found", "message_sent",
         }
         contact_status = result.get("contact_status", "")
-        terminal = status in {"ok", "no_data"} or contact_status in playwright_terminal_statuses
+        terminal = contact_status in playwright_terminal_statuses
         summary = result.get("summary", f"Tool {tool_call.tool} completato con status {status}.")
+
+        # For browser tools, enrich the summary with actual page content so the LLM
+        # can "see" what is on the page (page_text is extracted from the DOM by BrowserManager).
+        _browser_view_tools = {"browser_navigate", "browser_type", "browser_get_view", "browser_click"}
+        if tool_call.tool in _browser_view_tools and status == "ok" and not result.get("summary"):
+            title = result.get("title", "")
+            url = result.get("url", "")
+            page_text = result.get("page_text", "")
+            if page_text:
+                snippet = page_text[:700]
+                summary = f"Browser: '{title}' | {url}\n---\n{snippet}"
+            elif url:
+                summary = f"Browser: '{title}' | {url} (nessun testo estratto)"
 
         if cache_hit:
             summary = f"[cache] {summary}"

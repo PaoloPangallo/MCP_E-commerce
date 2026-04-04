@@ -18,15 +18,8 @@ async def run():
         await asyncio.sleep(5)
         
         js_extractor = '''() => {
-            // Find all anchor tags that might be product links
-            let links = [...document.querySelectorAll('a')];
-            let texts = [];
-            for (let i = 0; i < links.length; i++) {
-                if (links[i].innerText && links[i].innerText.toLowerCase().includes('baggio')) {
-                    texts.push(links[i].className + " -> " + links[i].innerText.replace(/\\n/g, ' '));
-                }
-            }
-            return texts.join('\\n').substring(0, 2000);
+            let el = document.getElementById('mainContent') || document.getElementById('srp-river-results') || document.querySelector('main');
+            return el ? el.innerText.substring(0, 1500) : document.body.innerText.substring(0, 1500);
         }'''
         
         text = await page.evaluate(js_extractor)

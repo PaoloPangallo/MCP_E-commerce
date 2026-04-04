@@ -20,6 +20,10 @@ async def run_visual_test():
     # Wait for user to see
     await asyncio.sleep(2)
     
+    print("\n[Step 1.5] Accept Cookies if present...")
+    await browser_click(selector="#gdpr-banner-accept")
+
+    
     # 2. Type search query
     print("\n[Step 2] Typing 'macbook'...")
     # Using #gh-ac for input
@@ -32,9 +36,7 @@ async def run_visual_test():
     print("\n[Step 3] Clicking search button...")
     # On eBay.it the button is often <input type="submit" id="gh-btn">
     # The subagent suggested #gh-search-btn, let's try to find it first.
-    
-    # I'll use browser_click for #gh-btn which is the standard one on .it
-    res = await browser_click(selector="#gh-btn")
+    res = await browser_click(selector="#gh-search-btn")
     
     print(f"Click Result URL: {res.get('url')}")
     

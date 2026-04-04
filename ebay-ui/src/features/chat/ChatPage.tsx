@@ -85,28 +85,23 @@ export default function ChatPage() {
   const typedSteps = (steps ?? []) as AgentStep[]
   const typedPlannedTasks = (plannedTasks ?? []) as PlannedTask[]
 
-  // EFFETTO: Apertura automatica del link contact_seller
+  // EFFETTO: Apertura automatica del link contact_seller (solo vecchio tool non-playwright)
+  // Note: contact_seller_playwright invia il messaggio autonomamente e mostra
+  // il risultato in-chat via ContactSellerCard — non occorre aprire il browser.
   useEffect(() => {
-    if (!running) {
-      // Quando il processo finisce, resettiamo i link aperti per la prossima query
-      return
-    }
-
+    if (!running) return
     const timers: ReturnType<typeof setTimeout>[] = []
 
-    // Cerchiamo passi di tipo contact_seller che hanno un link
-    // e che non abbiamo ancora "aperto" in questa esecuzione.
+    // Solo per il vecchio contact_seller (non playwright) che restituisce contact_url
     typedSteps.forEach((step: AgentStep) => {
-      const toolName = step.tool?.toLowerCase() || ""
-      const isContact = toolName.includes("contact_seller")
+      const toolName = step.action?.toLowerCase() || ""
+      const isLegacyContact = toolName === "contact_seller"
       const obsData = step.observation_data as any
       const resultData = obsData?.data || obsData
       const contactUrl = resultData?.contact_url
 
-      if (isContact && contactUrl && !openedLinksRef.current.has(step.step.toString())) {
+      if (isLegacyContact && contactUrl && !openedLinksRef.current.has(step.step.toString())) {
         openedLinksRef.current.add(step.step.toString())
-        
-        // Piccola pausa per lasciare che l'utente veda il pill del tool prima del popup
         const t = setTimeout(() => {
           window.open(contactUrl, "_blank")
         }, 300)
@@ -205,8 +200,9 @@ export default function ChatPage() {
                         market_trends: finalPayload.marketTrends,
                         vision_analysis: finalPayload.visionAnalysis,
                         errors: finalPayload.errors,
+                        contact_seller_playwright: (finalPayload as any).contactSeller,
                         mode: "hybrid"
-                      }} 
+                      } as any} 
                     />
                   </Box>
                 )}

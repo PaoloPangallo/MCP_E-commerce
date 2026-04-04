@@ -65,7 +65,7 @@ async def browser_click(
 async def browser_type(
     selector: Annotated[str, Field(description="Selettore CSS/XPath dell'input field")],
     text: Annotated[str, Field(description="Testo da scrivere")],
-    press_enter: Annotated[bool, Field(description="Se true, preme Invio dopo aver scritto")] = False,
+    press_enter: Annotated[bool, Field(description="Se true, preme Invio dopo aver scritto (default true per avviare la ricerca automaticamente)")] = True,
 ) -> Dict[str, Any]:
     try:
         logger.info("MCP: browser_type -> %s | text=%s", selector, text)

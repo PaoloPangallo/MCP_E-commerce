@@ -142,6 +142,27 @@ class ReactPlanner:
         message = await self._call_llm(prompt)
         return message.strip() if message else _fallback
 
+    async def _extract_seller_name_from_query(self, memory: AgentMemory) -> Optional[str]:
+        """Use LLM to extract an eBay seller username when regex extraction fails."""
+        user_query = (memory.user_query or "").strip()
+        if not user_query:
+            return None
+        prompt = (
+            f'Estrai il nome utente del venditore eBay dalla seguente richiesta: "{user_query}"\n\n'
+            "Rispondi SOLO con il nome utente del venditore (es. 'jjtech2020'). "
+            "Se non c'è nessun nome venditore esplicito nella richiesta, rispondi con NESSUNO."
+        )
+        try:
+            result = await self._call_llm(prompt)
+            extracted = (result or "").strip()
+            if not extracted or extracted.upper() == "NESSUNO":
+                return None
+            if len(extracted) >= 3 and re.match(r"^[A-Za-z0-9][A-Za-z0-9._\-]{2,}$", extracted):
+                return extracted
+        except Exception:
+            pass
+        return None
+
     def can_stop_early(self, memory: AgentMemory) -> bool:
         if memory.has_pending_tasks():
             return False
@@ -402,6 +423,8 @@ class ReactPlanner:
             from app.agent.tool_registry import extract_explicit_seller
             seller = extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
             if not seller:
+                seller = await self._extract_seller_name_from_query(memory)
+            if not seller:
                 return None  # seller_name è obbligatorio per entrambi i tool
             action_input["seller_name"] = seller
 
@@ -493,17 +516,21 @@ class ReactPlanner:
             }
 
         elif action == "contact_seller_playwright":
-            if not action_input.get("product_url"):
-                from app.agent.tool_registry import extract_explicit_seller
-                seller = extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
+            from app.agent.tool_registry import extract_explicit_seller
+            seller = action_input.get("seller_name") or extract_explicit_seller(text) or getattr(memory, "last_seller_name", None)
+            
+            if not seller:
+                seller = await self._extract_seller_name_from_query(memory)
 
-                if seller:
-                    action_input["product_url"] = (
-                        f"https://www.ebay.it/cnt/IntermediatedFAQ?seller_name={seller}"
-                    )
-                    logger.info("contact_seller_playwright: using IntermediatedFAQ URL for seller=%s", seller)
-                else:
-                    # In playwright mode: read the current browser page URL from tool_states
+            if seller:
+                action_input["seller_name"] = seller
+                if not action_input.get("product_url"):
+                    # Fallback URL se la navigazione naturale non dovesse funzionare, 
+                    # ma il tool ora preferisce usare seller_name per cercare un item.
+                    action_input["product_url"] = f"https://www.ebay.it/contact/sendmsg?recipient={seller}&message_type_id=14"
+                logger.info("contact_seller_playwright: providing seller_name=%s for natural navigation", seller)
+            else:
+                # In playwright mode: read the current browser page URL from tool_states
                     # (BrowserManager stores last navigation result there)
                     browser_url = None
                     from urllib.parse import urlparse as _urlparse
@@ -593,8 +620,13 @@ class ReactPlanner:
         if intent == "wishlist":
             return [search_tool, "manage_wishlist"] if not explicit_id else ["manage_wishlist"]
         if intent == "contact_seller":
-            mcp_mode = getattr(memory, "mcp_mode", "standard") if memory else "standard"
-            if mcp_mode == "playwright_browser" or (memory and "playwright" in (memory.user_query or "").lower()):
+            # Use playwright version whenever it's available in the active MCP catalog
+            # (contact_seller_playwright opens real Chrome and sends the message autonomously)
+            playwright_in_catalog = (
+                self._cached_mcp_catalog is not None and
+                "contact_seller_playwright" in self._cached_mcp_catalog
+            )
+            if playwright_in_catalog:
                 return ["contact_seller_playwright", "contact_seller"]
             return ["contact_seller"]
         return []

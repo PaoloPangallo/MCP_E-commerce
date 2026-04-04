@@ -18,17 +18,17 @@ async def run():
         except Exception:
             pass
             
-        print("Typing maglia roberto baggio...")
-        await page.fill("#gh-ac", "maglia roberto baggio")
+        print("Typing iphone 9 batteria...")
+        await page.fill("#gh-ac", "iphone 9 batteria")
         await page.press("#gh-ac", "Enter")
         
         print("Waiting 5s for results...")
         await asyncio.sleep(5)
         
         js_extractor = '''() => {
-            let items = [...document.querySelectorAll('h1, .s-item__title, .s-item__price')];
-            if (items.length > 0) {
-                return items.map(el => el.innerText).join('\\n').substring(0, 2000);
+            let el = document.getElementById('mainContent') || document.getElementById('srp-river-results') || document.querySelector('main');
+            if (el) {
+                return el.innerText.substring(0, 2000);
             }
             return document.body.innerText.substring(0, 1500);
         }'''

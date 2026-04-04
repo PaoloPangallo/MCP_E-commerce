@@ -16,6 +16,7 @@ interface ToolDataPatch {
   marketTrends?: any
   metadata?: any
   deals?: any
+  contactSeller?: any
   visionAnalysis?: { description: string; tags: string[]; brand?: string | null; condition_clues?: string | null; confidence: number }
 }
 
@@ -45,6 +46,9 @@ export function mapToolData(toolName: string, data: any): ToolDataPatch {
       return { marketTrends: data }
     case "get_marketplace_metadata":
       return { metadata: data }
+    case "contact_seller":
+    case "contact_seller_playwright":
+      return { contactSeller: data }
     default:
       return {}
   }
@@ -81,6 +85,7 @@ export function buildFinalPayload(
     metadata: finalData.metadata || null,
     marketTrends: finalData.market_trends || finalData.marketTrends || null,
     deals: finalData.deals || null,
+    contactSeller: finalData.contact_seller_playwright || finalData.contact_seller || null,
     trace: finalTrace,
     errors: Array.isArray(finalData.errors) ? finalData.errors : [],
     plannedTasks,

@@ -78,7 +78,6 @@ REGOLE DI PIANIFICAZIONE:
 6. **Pensiero in Italiano**: Tutti i tuoi ragionamenti nel campo `thought` devono essere in ITALIANO.
 7. **JSON Rigido**: Rispondi SOLO con un JSON valido che segua lo schema richiesto.
 8. **Confronto Efficiente (CRITICO)**: Se l'utente chiede un confronto tra prodotti che sono GIÀ stati cercati o sono presenti nei `top_results` del scratchpad, NON chiamare `search_products`. Usa direttamente `comparison` passando i nomi dei modelli specifici. Evita di ripetere ricerche se hai già i dati.
-9. **Analisi Vision (CRITICO)**: Se vedi una `vision_description` nel contesto, usala come fonte primaria per i dettagli dell'oggetto. Se la query utente è generica ma hai una descrizione dettagliata dall'immagine, dai priorità ai dettagli dell'immagine per la ricerca.
 10. **Analisi di Mercato (CRITICO)**: Se l'utente chiede trend, prezzi medi sul web, popolarità o interesse nel tempo, DEVI usare `market_trends`. Non confonderlo con la semplice ricerca eBay.
 11. **Contatto Venditore (CRITICO)**: Se l'utente vuole scrivere al venditore, chiedere informazioni, trattare il prezzo o contattare chi vende un oggetto, DEVI usare `contact_seller` passando `seller_name` e, se disponibile, `item_id`.
 12. **Analisi Venditore Target**: Se l'utente menziona un venditore specifico (es: "venduto da pegaso_italia", "di monclick"), DEVI pianificare `analyze_seller` per quel venditore per darne un profilo di affidabilità completo.
@@ -87,7 +86,7 @@ POLICY STRUMENTI:
 - `search_products`: Discovery, shopping, prezzi.
 - `analyze_seller`: Affidabilità, reputazione, trust.
 - `get_item_details`: Specifiche tecniche profonde di un `item_id` già trovato.
-- `get_shipping_costs`: Costi di spedizione esatti (serve CAP).
+- `get_shipping_costs`: Costi di spedizione esatti.
 - `market_trends`: Prezzi medi sul web e trend di interesse (usa Google Shopping e Trends tramite SerpApi).
 - `get_ebay_deals`: Recupera le migliori offerte, sconti e promozioni a tempo limitato da eBay. Usalo quando l'utente cerca risparmio o occasioni. Se il messaggio dell'utente contiene un ID categoria esplicito (es: "(ID: 9355)"), DEVI passarlo come parametro `category_id` al tool.
 - `ebay_scrape`: Ricerca avanzata tramite browser (Playwright). Usalo **MANDATORIAMENTE** se l'utente menziona "Playwright", "mostra browser", "browser reale" o "visibile". Se l'utente scrive "MODALITÀ VISIBILE", imposta il parametro `visible=true`.
@@ -120,25 +119,34 @@ REGOLE:
 """.strip()
 
 
-PLAYWRIGHT_WORLD_SYSTEM_PROMPT = """
-### [MODALITÀ BROWSER PLAYWRIGHT ATTIVA]
-Sei in modalità Browser Playwright. Hai accesso a un browser Chromium REALE e VISIBILE sullo schermo.
+PLAYWRIGHT_PLANNER_SYSTEM_PROMPT = """
+Sei ebayGPT in modalità [BROWSER REALE PLAYWRIGHT]. Hai accesso a un browser Chromium REALE, VISIBILE e PERSISTENTE (non si chiude ad ogni comando).
+Il tuo compito è decidere la PROSSIMA AZIONE MIGLIORE navigando in tempo reale.
 
-TOOL DISPONIBILI IN QUESTA MODALITÀ:
-- `search_products`: Cerca prodotti su eBay con scraping visivo tramite browser reale. Il browser si apre sullo schermo.
-- `contact_seller_playwright`: Contatta direttamente un venditore eBay inviando un messaggio dalla pagina del prodotto.
+REGOLE DI PIANIFICAZIONE INTERATTIVA:
+1. **Navigazione Step-by-Step (CRITICO)**: Non esistono macro-ricerche (NO search_products). Devi navigare manualmente. Usa SEMPRE COME PRIMA AZIONE `browser_navigate` passando 'https://www.ebay.it'.
+2. **Attenzione ai Cookie Banner (CRITICO)**: Spesso troverai il popup della privacy. È OBBLIGATORIO fare un `browser_click` su `"#gdpr-banner-accept"` per chiuderlo o il sito si bloccherà.
+3. **Ricerca Prodotti (CRITICO)**: Per cercare, usa `browser_type` passando il selettore `"#gh-ac"`, la tua parola chiave, e impostando `press_enter=true` per avviare la ricerca automaticamente.
+4. **Analisi Visiva Costante**: Ogni step restituisce l'URL attuale, il titolo e un estratto di testo dalla pagina. Leggi queste `observations` per capire dove sei! NON CHIAMARE `browser_navigate` SE SEI GIÀ ARRIVATO.
+5. **JSON Rigido**: Rispondi SOLO con un JSON valido.
+6. **Chiusura e Fallimento (CRITICO)**: Se testando i risultati verifichi che l'oggetto cercato palesemente non c'è, restituisce "0 risultati" o prodotti completamente diversi (es. cerchi un iPhone 9 che non esiste), NON riprovare all'infinito. Rassegnati. Termina con `"action": "finish"` e spiega l'assenza dei risultati in `"final_answer"`.
+7. **Chiusura con Successo**: Se hai visualizzato a schermo i risultati pertinenti, termina restituendo `"action": "finish"` ed un resoconto in `"final_answer"`.
 
-FLUSSO STANDARD:
-1. Usa `search_products` per cercare i prodotti (il browser si aprirà visibile).
-2. L'utente sceglie il prodotto di interesse.
-3. Usa `contact_seller_playwright` con `product_url` (URL del prodotto scelto dai top_results) e `message` (testo del messaggio).
+POLICY STRUMENTI (Modalità Browser):
+- `browser_navigate(url)`: Va sulla URL. Primo step obbligatorio: URL 'https://www.ebay.it'.
+- `browser_click(selector)`: Clicca un selettore CSS, essenziale per i cookie (`#gdpr-banner-accept`).
+- `browser_type(selector, text, press_enter)`: Inserisce testo. Metti `press_enter=true` per cercare. Il search input di ebay è `#gh-ac`.
+- `browser_get_view()`: Ritorna lo stato visivo se ti sei perso.
+- `conversation`: SOLO se l'utente vuol solo chiacchierare. Non usarlo durante i task browser.
 
-REGOLE CRITICHE:
-- Per `contact_seller_playwright` estrai `product_url` dal campo `url` dei `top_results` nel scratchpad.
-- Se l'utente specifica già un messaggio, usalo verbatim nel parametro `message`.
-- Se `contact_seller_playwright` ritorna `contact_status=login_required`, informa l'utente che deve effettuare il login su eBay nel browser aperto.
-- NON usare `analyze_seller`, `get_ebay_deals` o altri tool non presenti in questa modalità.
-### [FINE MODALITÀ PLAYWRIGHT]
+SCHEMA DI USCITA (RISPONDI SOLO IN JSON!):
+{
+  "thought": "Spiega brevemente la tua strategia passo-passo",
+  "intent": "playwright_search|conversation",
+  "action": "tool_name|finish",
+  "action_input": {},
+  "final_answer": null
+}
 """.strip()
 
 
@@ -305,9 +313,9 @@ def build_planner_prompt(
 
     system_prompt = PLANNER_SYSTEM_PROMPT
 
-    # Playwright world: inject specialized prompt at the top
+    # Playwright world: override completely to avoid "search_products" paradox
     if mcp_mode == "playwright_browser":
-        system_prompt = PLAYWRIGHT_WORLD_SYSTEM_PROMPT + "\n\n" + system_prompt
+        system_prompt = PLAYWRIGHT_PLANNER_SYSTEM_PROMPT
 
     if custom_instructions:
         # INIEZIONE AD ALTA PRIORITÀ: Sopra le regole standard del planner

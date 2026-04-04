@@ -45,15 +45,17 @@ async def contact_seller(
                 final_item_id = item_clean
 
         # Build the eBay contact URL
+        # NOTE: IntermediatedFAQ senza item_id non apre il form di diretto contatto.
+        # sendmsg funziona sempre, con o senza item_id, e apre direttamente la textarea.
         if final_item_id:
             contact_url = (
-                f"https://www.ebay.it/cnt/IntermediatedFAQ"
-                f"?seller_name={seller_clean}&item_id={final_item_id}"
+                f"https://www.ebay.it/contact/sendmsg"
+                f"?recipient={seller_clean}&item_id={final_item_id}&message_type_id=1"
             )
         else:
             contact_url = (
-                f"https://www.ebay.it/cnt/IntermediatedFAQ"
-                f"?seller_name={seller_clean}"
+                f"https://www.ebay.it/contact/sendmsg"
+                f"?recipient={seller_clean}&message_type_id=14"
             )
 
         logger.info("Contact seller URL generated | seller=%s | item=%s", seller_clean, final_item_id)

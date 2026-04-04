@@ -70,6 +70,15 @@ export interface AgentEvent {
   steps_used?: number
 }
 
+export interface ContactSellerResult {
+  status: "ok" | "error"
+  success: boolean
+  contact_status: string
+  detail: string
+  message_sent?: string | null
+  product_url?: string
+}
+
 export type FinalPayload = {
   finalAnswer: string | null
   results: import("../search/types").SearchItem[]
@@ -82,6 +91,7 @@ export type FinalPayload = {
   shippingCosts?: import("../search/types").ShippingCostsData | null
   metadata?: any | null
   deals?: import("../search/types").DealsData | null
+  contactSeller?: ContactSellerResult | null
   trace: AgentStep[]
   errors?: string[]
 
