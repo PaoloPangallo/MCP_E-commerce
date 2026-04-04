@@ -19,7 +19,9 @@ def run_migration():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS contextual_budgets VARCHAR(2000);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS category_affinities VARCHAR(2000);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS condition_preference VARCHAR(255);",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS interaction_depth VARCHAR(50);"
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS interaction_depth VARCHAR(50);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(20) DEFAULT 'light' NOT NULL;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS conversation_tone VARCHAR(50) DEFAULT 'neutral' NOT NULL;"
     ]
     
     with engine.connect() as conn:

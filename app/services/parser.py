@@ -95,6 +95,7 @@ DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     "compatibilities": {},
     "constraints": [],
     "preferences": [],
+    "exclusions": [],
     "target_seller": None,
     "_meta": {
         "llm_enabled": False,
@@ -333,6 +334,10 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
                 norm_prefs.append(np_)
         result["preferences"] = dedupe_keep_order(norm_prefs)
 
+    exclusions = data.get("exclusions", [])
+    if isinstance(exclusions, list):
+        result["exclusions"] = dedupe_keep_order([str(e).strip().lower() for e in exclusions if str(e).strip()])
+
     compatibilities = data.get("compatibilities", {})
     if isinstance(compatibilities, dict):
         result["compatibilities"] = {
@@ -385,6 +390,7 @@ Schema:
   "compatibilities": {{}},
   "constraints": [],
   "preferences": [],
+  "exclusions": [],
   "target_seller": null
 }}
 
@@ -408,7 +414,8 @@ Rules:
 - Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
 - 'product_type': If the user wants the device itself (phone, laptop, console), use "Main". If they want a case, cover, charger, use "Accessory". If they want a screen replacement, battery, scocca, use "Part".
 - Do NOT invent brands or products.
-- IMPORTANT: Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
+- Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
+- IMPORTANT: If the user says "without", "no", "senza", "non", "nò" followed by a feature (e.g., "senza zip", "no wireless", "non usato"), extract those features into the "exclusions" array.
 - If the user says "cercalo", "trovali", "show me more", etc., the 'product' and 'brands' fields must be populated based on the previous topic found in the context.
 - Target Seller: Extract the seller name if the user mentions one (e.g., "venduto da pegaso_italia", "di apple_store", "da monclick").
 - Output JSON only.

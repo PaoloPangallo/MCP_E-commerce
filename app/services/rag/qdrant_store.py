@@ -10,6 +10,7 @@ from fastembed import SparseTextEmbedding
 from app.services.rag.embedding import embed_batch, embed
 from app.services.rag.schemas import make_doc_id
 
+from app.utils.scalars import sanitize_scalars
 import threading
 
 QDRANT_PATH = "qdrant_storage"
@@ -212,6 +213,8 @@ def index_search_items(items: List[Dict[str, Any]]):
         metas.append(meta)
 
     if texts:
+        # Sanitize metadata to avoid Pydantic serialization errors with NumPy arrays
+        metas = sanitize_scalars(metas)
         add_documents(texts, metas)
         import logging as _log
         _log.getLogger(__name__).info("Indexed %d items into Global Memory", len(texts))

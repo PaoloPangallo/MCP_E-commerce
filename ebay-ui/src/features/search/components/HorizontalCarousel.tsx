@@ -47,36 +47,36 @@ export default function HorizontalCarousel({ children, title}: CarouselProps) {
   }
 
   return (
-    <Box sx={{ position: "relative", width: "100%", my: 3 }}>
+    <Box sx={{ position: "relative", width: "100%", my: 3, px: { xs: 2.5, md: 12 } }}>
       {(title) && (
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2, px: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2, px: 2 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             {title}
           </Typography>
         </Box>
       )}
 
-      <Box sx={{ position: "relative" }}>
-        {showLeft && (
-          <IconButton
-            onClick={() => scroll("left")}
-            sx={{
-              position: "absolute",
-              left: -20,
-              top: "50%",
-              transform: "translateY(-50%)",
-              zIndex: 10,
-              bgcolor: "var(--bg-primary)",
-              border: "1px solid var(--border-color)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              color: "var(--brand-primary)",
-              "&:hover": { bgcolor: "var(--bg-secondary)" }
-            }}
-          >
-            <ChevronLeftIcon />
-          </IconButton>
-        )}
+      {showLeft && (
+        <IconButton
+          onClick={() => scroll("left")}
+          sx={{
+            position: "absolute",
+            left: 20,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+            bgcolor: "var(--bg-primary)",
+            border: "1px solid var(--border-color)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            color: "var(--brand-primary)",
+            "&:hover": { bgcolor: "var(--bg-secondary)" }
+          }}
+        >
+          <ChevronLeftIcon />
+        </IconButton>
+      )}
 
+      <Box sx={{ position: "relative" }}>
         <Box
           ref={scrollRef}
           sx={{
@@ -85,34 +85,34 @@ export default function HorizontalCarousel({ children, title}: CarouselProps) {
             overflowX: "auto",
             scrollbarWidth: "none",
             "&::-webkit-scrollbar": { display: "none" },
-            px: 1,
+            px: 2,
             py: 1,
             scrollSnapType: "x proximity"
           }}
         >
           {children}
         </Box>
-
-        {showRight && (
-          <IconButton
-            onClick={() => scroll("right")}
-            sx={{
-              position: "absolute",
-              right: -20,
-              top: "50%",
-              transform: "translateY(-50%)",
-              zIndex: 10,
-              bgcolor: "var(--bg-primary)",
-              border: "1px solid var(--border-color)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              color: "var(--brand-primary)",
-              "&:hover": { bgcolor: "var(--bg-secondary)" }
-            }}
-          >
-            <ChevronRightIcon />
-          </IconButton>
-        )}
       </Box>
+
+      {showRight && (
+        <IconButton
+          onClick={() => scroll("right")}
+          sx={{
+            position: "absolute",
+            right: 20,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+            bgcolor: "var(--bg-primary)",
+            border: "1px solid var(--border-color)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            color: "var(--brand-primary)",
+            "&:hover": { bgcolor: "var(--bg-secondary)" }
+          }}
+        >
+          <ChevronRightIcon />
+        </IconButton>
+      )}
     </Box>
   )
 }

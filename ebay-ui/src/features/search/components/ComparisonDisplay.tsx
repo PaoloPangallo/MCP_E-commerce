@@ -10,7 +10,6 @@ import {
   Typography,
   Button,
   IconButton,
-  Avatar,
   Tooltip,
 } from "@mui/material"
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"
@@ -118,7 +117,7 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            p: 3,
+            p: 0,
             position: "relative",
             border: "1px solid var(--border-color)",
           }}
@@ -131,8 +130,9 @@ const WinnerHero = React.memo(({ winner, winner_reason, minPrice }: WinnerHeroPr
               sx={{ 
                 width: "100%", 
                 height: "100%", 
-                objectFit: "contain",
-                filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.05))"
+                objectFit: "contain", 
+                borderRadius: "16px",
+                filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.08))"
               }}
             />
           ) : (
@@ -221,18 +221,33 @@ const ComparisonTable = React.memo(({ matrix, winner }: ComparisonTableProps) =>
             {matrix.slice(0, 4).map((item, i) => (
               <TableCell key={i} align="center" sx={{ position: "relative", py: 2 }}>
                 <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 100 }}>
-                   <Avatar 
-                    src={item.image_url} 
-                    variant="rounded" 
+                   <Box 
                     sx={{ 
-                        width: 44, 
-                        height: 44, 
-                        bgcolor: "var(--bg-primary)", 
+                        width: 52, 
+                        height: 52, 
+                        borderRadius: "16px",
+                        overflow: "hidden",
                         border: item.title === winner.title ? "2px solid var(--brand-primary)" : "1px solid var(--border-color)",
-                        p: 0.5,
-                        "& img": { objectFit: "contain" }
-                    }} 
-                   />
+                        bgcolor: "var(--bg-secondary)",
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        p: 0,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+                    }}
+                   >
+                    <Box 
+                        component="img"
+                        src={item.image_url} 
+                        alt={item.title}
+                        sx={{ 
+                            width: "100%", 
+                            height: "100%", 
+                            objectFit: "contain",
+                            borderRadius: "12px"
+                        }} 
+                    />
+                   </Box>
                    <Typography sx={{ 
                         fontSize: 9, 
                         fontWeight: 800, 
@@ -259,7 +274,7 @@ const ComparisonTable = React.memo(({ matrix, winner }: ComparisonTableProps) =>
             ))}
           </TableRow>
           
-          <TableRow sx={{ bgcolor: "var(--bg-secondary)", opacity: 0.7 }}>
+          <TableRow sx={{ bgcolor: "var(--bg-secondary)", opacity: 0.9 }}>
             <TableCell sx={{ fontSize: 10, fontWeight: 800, color: "var(--text-secondary)", pl: 3 }}>RAPPORTO QUALITÀ</TableCell>
             {matrix.slice(0, 4).map((item, i) => {
               const itemScores = (item as any).scores || (item as any)._scores || {}
@@ -291,7 +306,7 @@ const ComparisonTable = React.memo(({ matrix, winner }: ComparisonTableProps) =>
             ))}
           </TableRow>
 
-          <TableRow sx={{ bgcolor: "var(--bg-secondary)", opacity: 0.7 }}>
+          <TableRow sx={{ bgcolor: "var(--bg-secondary)", opacity: 0.9 }}>
             <TableCell sx={{ fontSize: 10, fontWeight: 800, color: "var(--text-secondary)", pl: 3 }}>TRUST VENDITORE</TableCell>
             {matrix.slice(0, 4).map((item, i) => (
               <TableCell key={i} align="center">
@@ -400,14 +415,15 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
             onClick={() => handleScroll("left")}
             sx={{
               position: "absolute",
-              left: -12,
+              left: -24,
               top: "50%",
               zIndex: 10,
               bgcolor: "var(--bg-primary)",
               border: "1px solid var(--border-color)",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
               color: "var(--brand-primary)",
-              "&:hover": { bgcolor: "var(--bg-secondary)" }
+              "&:hover": { bgcolor: "var(--bg-secondary)", transform: "scale(1.1)" },
+              transition: "all 0.2s ease"
             }}
           >
             <ChevronLeftIcon fontSize="small" />
@@ -453,14 +469,15 @@ export default function ComparisonDisplay({ data }: ComparisonDisplayProps) {
             onClick={() => handleScroll("right")}
             sx={{
               position: "absolute",
-              right: -12,
+              right: -24,
               top: "50%",
               zIndex: 10,
               bgcolor: "var(--bg-primary)",
               border: "1px solid var(--border-color)",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
               color: "var(--brand-primary)",
-              "&:hover": { bgcolor: "var(--bg-secondary)" }
+              "&:hover": { bgcolor: "var(--bg-secondary)", transform: "scale(1.1)" },
+              transition: "all 0.2s ease"
             }}
           >
             <ChevronRightIcon fontSize="small" />

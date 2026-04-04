@@ -7,6 +7,7 @@ from app.services.rag.cross_encoder import cross_rerank
 from app.services.rag.embedding import embed
 from app.services.rag.retriever import retrieve_context
 from app.services.rag.ltr_features import extract_ltr_features, get_feature_names
+from app.utils.scalars import sanitize_scalars
 
 import os
 import json
@@ -79,42 +80,7 @@ def lexical_score(query: str, title: str) -> float:
 # ACCESSORY DETECTION
 # ============================================================
 
-ACCESSORY_WORDS = [
-    "case", "cover", "charger", "caricatore", "cavo", "cable", "vetro", "pellicola",
-    "screen protector", "glass", "custodia", "adattatore", "adapter", "scocca",
-    "ricambio", "parte", "batteria", "battery", "display", "schermo", "vetrino",
-    "bumper", "stand", "holder", "supporto", "alimentatore", "power", "jack",
-    "keyboard", "tastiera", "mouse", "cuffie", "headphones", "earbuds", "auricolari",
-    "box", "scatola", "confezione", "manuale", "manual", "dummy", "finto", "mostra",
-    "pezzi", "spare", "repair"
-]
-
-# Non usiamo più POSITIVE_HINTS/NEGATIVE_HINTS ma le label LLM-based ("POSITIVE", "NEGATIVE", "NEUTRAL")
-
-
-def accessory_penalty(query: str, title: str, product_type: str = "Unknown") -> float:
-    q = (query or "").lower()
-    t = (title or "").lower()
-
-    # Se l'utente ha espresso esplicitamente l'intento per un accessorio, non penalizziamo
-    if product_type in ["Accessory", "Part"]:
-        return 0.0
-
-    # Penalizza se l'utente cerca un "Main device" (o Unknown che assume Main) e il titolo contiene parole da accessorio
-    is_main_intent = product_type in ["Main", "Unknown"]
-    
-    # Check if title has accessory words but query doesn't (important to avoid false positives if user searches "iphone cover")
-    t_words = set(re.findall(r"\w+", t))
-    q_words = set(re.findall(r"\w+", q))
-    
-    acc_in_title = any(w in t_words for w in ACCESSORY_WORDS)
-    acc_in_query = any(w in q_words for w in ACCESSORY_WORDS)
-
-    if is_main_intent and acc_in_title and not acc_in_query:
-        # Se è un telefono/laptop main e il titolo parla di "case" o "batteria" senza che l'utente l'abbia chiesto
-        return 1.0
-
-    return 0.0
+# La rilevanza semantica e il filtraggio accessori sono ora delegati interamente all'LLM Judge in ltr.py
 
 
 # ============================================================
@@ -352,7 +318,7 @@ def rerank_products(
         
         try:
             t_vec = item["_embedding"]
-            similarity = cosine_similarity(q_vec, t_vec)
+            similarity = sanitize_scalars(cosine_similarity(q_vec, t_vec))
             item["_semantic_sim"] = similarity
         except Exception:
             similarity = 0.0
@@ -362,7 +328,7 @@ def rerank_products(
         # LEXICAL MATCH
         # ----------------------------------------
 
-        lex_score = lexical_score(query, title)
+        lex_score = sanitize_scalars(lexical_score(query, title))
 
         # ----------------------------------------
         # TRUST SIGNALS
@@ -389,13 +355,9 @@ def rerank_products(
             price_penalty = 0.15  # Small penalty for overly expensive items
 
         # ----------------------------------------
-        # ACCESSORY PENALTY
+        # ACCESSORY PENALTY (Offloaded to LLM Judge)
         # ----------------------------------------
-        
-        # We try to get product_type from constraints or item metadata if available
-        product_type = item.get("intent_product_type", "Unknown")
-        acc_penalty = accessory_penalty(query, title, product_type=product_type)
-        item["_accessory_penalty"] = acc_penalty
+        item["_accessory_penalty"] = 0.0
 
         # ----------------------------------------
         # TITLE QUALITY
@@ -450,10 +412,10 @@ def rerank_products(
         # Apply personalization (not part of base features)
         score += personalization
 
-        item["_rerank_score"] = round(float(score), 4)
-        item["_rag_product_boost"] = round(float(product_rag_boost), 4)
-        item["_rag_seller_boost"] = round(float(seller_rag_boost), 4)
-        item["_rag_sentiment_signal"] = round(float(seller_sentiment_signal), 4)
+        item["_rerank_score"] = round(float(sanitize_scalars(score)), 4)
+        item["_rag_product_boost"] = round(float(sanitize_scalars(product_rag_boost)), 4)
+        item["_rag_seller_boost"] = round(float(sanitize_scalars(seller_rag_boost)), 4)
+        item["_rag_sentiment_signal"] = round(float(sanitize_scalars(seller_sentiment_signal)), 4)
 
         # feedback/evidence utili per explainability
         rag_feedback = []
@@ -493,8 +455,7 @@ def rerank_products(
         elif trust > WEIGHTS.GOOD_TRUST:
             explanations.append("seller shows generally positive feedback")
 
-        if acc_penalty > 0:
-            explanations.append("listing may be an accessory rather than the main device")
+        # Eliminato acc_penalty (ora gestito da LLM Judge)
 
         explanations.extend(product_rag_reasons)
         explanations.extend(seller_rag_reasons)
