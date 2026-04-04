@@ -294,6 +294,21 @@ class ReactPlanner:
         if intent not in VALID_INTENTS:
             intent = self._infer_intent(memory)
 
+        # ── Playwright mode: force contact_seller → contact_seller_playwright ──────
+        # The LLM often picks the generic tool name. Silently upgrade when the
+        # playwright variant is available and we are in playwright_browser mode.
+        mcp_mode = getattr(memory, "mcp_mode", "standard")
+        if (
+            action == "contact_seller"
+            and mcp_mode == "playwright_browser"
+            and self._cached_mcp_catalog
+            and "contact_seller_playwright" in self._cached_mcp_catalog
+        ):
+            logger.info(
+                "Planner: upgrading contact_seller → contact_seller_playwright (playwright_browser mode)"
+            )
+            action = "contact_seller_playwright"
+
         if action in {"finish", "stop"}:
             if memory.has_pending_tasks():
                 return await self._safe_fallback_decide(memory, forced_intent=intent)
@@ -323,6 +338,7 @@ class ReactPlanner:
             action=ToolCall(tool=action, input=normalized_input),
             intent=intent,
         )
+
 
     async def _safe_fallback_decide(
             self,
@@ -522,13 +538,25 @@ class ReactPlanner:
             if not seller:
                 seller = await self._extract_seller_name_from_query(memory)
 
-            if seller:
+            existing_url = action_input.get("product_url")
+            is_direct = existing_url and "sendmsg" in existing_url.lower()
+
+            if seller and not is_direct:
                 action_input["seller_name"] = seller
-                if not action_input.get("product_url"):
-                    # Fallback URL se la navigazione naturale non dovesse funzionare, 
-                    # ma il tool ora preferisce usare seller_name per cercare un item.
+                if not existing_url:
                     action_input["product_url"] = f"https://www.ebay.it/contact/sendmsg?recipient={seller}&message_type_id=14"
                 logger.info("contact_seller_playwright: providing seller_name=%s for natural navigation", seller)
+            elif is_direct:
+                action_input["product_url"] = existing_url
+                # Remove seller_name if present to force the tool to use the direct URL
+                # and bypass the "Natural Navigation" via SRP which is currently buggy/stale
+                action_input.pop("seller_name", None)
+                logger.info("contact_seller_playwright: forcing direct URL usage (skipping seller SRP)")
+            elif seller:
+                # fallback generic
+                action_input["seller_name"] = seller
+                action_input["product_url"] = f"https://www.ebay.it/contact/sendmsg?recipient={seller}&message_type_id=14"
+
             else:
                 # In playwright mode: read the current browser page URL from tool_states
                     # (BrowserManager stores last navigation result there)

@@ -168,12 +168,17 @@ async def _async_contact_seller(
     ]
 
     submit_selectors = [
-        "#imageupload__send--button",
-        "[data-testid='message-send-button']",
         "button[aria-label='Invia il messaggio']",
-        "button[title='Invia il messaggio']",
-        "button:has-text('Invia il messaggio')",
-        "button.imageupload__sendbutton",
+        "button[aria-label='Invia']",
+        "[data-testid*='send-button']",
+        "[data-testid*='sendbutton']",
+        "[data-testid='imageupload__send-btn']",
+        ".imageupload__send-btn-wrapper button",
+        ".imageupload__send-btn-wrapper div[role='button']",
+        ".imageupload__sendbutton",
+        "button[aria-label*='Invia']",
+        "#imageupload__send--button",
+        "svg[viewBox*='0 0 24 24']",
     ]
 
     contact_page_selectors = [
@@ -226,18 +231,68 @@ async def _async_contact_seller(
         page = await context.new_page()
 
         # ── Step 1: Risoluzione URL (Natural Navigation) ──────────────────
-        # Se abbiamo il nome del venditore, preferiamo partire dalla sua pagina prodotto
-        # per stabilire un contesto di sessione valido ed evitare errori 500.
+        # STRATEGIA:
+        # 1. Se product_url è già un link diretto a sendmsg → USALO SUBITO.
+        #    Evitiamo di cercare articoli a caso se abbiamo già la rotta corretta.
+        # 2. Se abbiamo seller_name ma non un URL diretto → naviga SRP venditore
+        #    e trova il primo articolo reale.
+        # 3. Se abbiamo un URL sendmsg senza item_id → arricchiamo.
+        
         final_url = product_url
         item_data = None
+        
+        # Debugging the mystery of the direct contact check
+        is_direct_contact = product_url is not None and "sendmsg" in str(product_url).lower()
+        logger.info("PW contact_seller Step 1 DEBUG: product_url=%r, is_direct=%s, seller=%s", 
+                    product_url, is_direct_contact, seller_name)
 
-        if seller_name:
-            logger.info("PW contact_seller: resolving natural navigation for seller=%s", seller_name)
-            item_data = await _fetch_seller_item_data(seller_name)
-            if item_data and item_data.get("item_url"):
-                final_url = item_data["item_url"]
-                logger.info("PW contact_seller: starting from item page: %s", final_url)
+        if seller_name and not is_direct_contact:
+            seller_srp_url = f"https://www.ebay.it/sch/i.html?_ssn={seller_name}&_sop=10"
+            logger.info(
+                "PW contact_seller: resolving seller SRP for seller=%s | srp=%s",
+                seller_name, seller_srp_url
+            )
+            try:
+                srp_page = await context.new_page()
+                await srp_page.goto(seller_srp_url, wait_until="domcontentloaded", timeout=15_000)
+                await asyncio.sleep(1.5)
+
+                # Estrai il primo link di un articolo (/itm/) dalla SRP del venditore
+                # Escludiamo link che sembrano ID numerici brevi o fake (es. /12345)
+                first_item_url = await srp_page.evaluate("""() => {
+                    const links = Array.from(document.querySelectorAll('a[href*="/itm/"]'));
+                    const filtered = links.filter(l => {
+                        const href = l.href || "";
+                        if (l.offsetWidth === 0) return false;
+                        if (!href.includes('/itm/')) return false;
+                        // Avoid placeholders like 123456
+                        const matches = href.match(/\\/itm\\/(\\d+)/);
+                        if (matches && matches[1].length < 10) return false;
+                        // Prefer .it domain if available
+                        return true;
+                    });
+                    // Prioritize ebay.it links
+                    filtered.sort((a, b) => (b.href.includes('ebay.it') ? 1 : 0) - (a.href.includes('ebay.it') ? 1 : 0));
+                    return filtered.length > 0 ? filtered[0].href.split('?')[0] : null;
+                }""")
+                await srp_page.close()
+
+                if first_item_url:
+                    final_url = first_item_url
+                    logger.info("PW contact_seller: found item from seller SRP: %s", final_url)
+                else:
+                    logger.warning("PW contact_seller: no items found on seller SRP, using product_url")
+            except Exception as exc:
+                logger.warning("PW contact_seller: SRP navigation failed (%s), using product_url", exc)
+                try:
+                    await srp_page.close()
+                except Exception:
+                    pass
+        elif is_direct_contact:
+            logger.info("PW contact_seller: using direct contact URL: %s", final_url)
+        
         elif "sendmsg" in product_url and "item_id" not in product_url:
+
             import re as _re
             seller_match = _re.search(r"recipient=([^&]+)", product_url)
             if seller_match:
@@ -249,6 +304,8 @@ async def _async_contact_seller(
                         f"?recipient={seller_slug}&item_id={item_data['item_id']}&message_type_id=1"
                     )
                     logger.info("PW contact_seller: enriched URL with item_id=%s => %s", item_data['item_id'], final_url)
+
+
 
         # ── Step 2: naviga ───────────────────────────────────────────────────
         try:
@@ -430,25 +487,43 @@ async def _async_contact_seller(
         logger.info("PW contact_seller: filling message | url=%s", page.url)
         logger.info("PW contact_seller: Testo che sto per inviare: \n%s", message)
         
+        current_url_for_fill = page.url
+        is_sendmsg_page = "sendmsg" in current_url_for_fill or "messages" in current_url_for_fill
+        
         target_context = page
-        try:
-            iframe_el = await page.query_selector(".m2m-dialog__ifr")
-            if iframe_el:
-                target_context = await iframe_el.content_frame() or page
-                logger.info("PW contact_seller: Using iframe context for message drafting")
-        except Exception:
-            pass
+        if not is_sendmsg_page:
+            # L'iframe .m2m-dialog__ifr esiste solo nell'overlay della pagina prodotto,
+            # NON nella pagina messaggi sendmsg.
+            try:
+                iframe_el = await page.query_selector(".m2m-dialog__ifr")
+                if iframe_el:
+                    target_context = await iframe_el.content_frame() or page
+                    logger.info("PW contact_seller: Using iframe context for message drafting")
+            except Exception:
+                pass
 
-        # Aspettiamo che React renderizzi la pagina della chat
-        # Attendiamo esplicitamente la textarea prima di procedere
-        try:
-            await target_context.wait_for_selector(
-                "#imageupload__sendmessage--textbox",
-                state="visible",
-                timeout=10_000,
-            )
-        except Exception:
-            await asyncio.sleep(2.5)  # fallback generico
+        # Aspettiamo che React renderizzi il campo composizione
+        if is_sendmsg_page:
+            # Pagina messaggi di eBay: attendi input / contenteditable nella area compose
+            logger.info("PW contact_seller: on sendmsg page — using direct compose selectors")
+            try:
+                await page.wait_for_selector(
+                    "input[placeholder*='messaggio'], div[contenteditable='true'], textarea",
+                    state="visible",
+                    timeout=8_000,
+                )
+            except Exception:
+                await asyncio.sleep(2.0)
+        else:
+            # Overlay su pagina prodotto: attendi textarea specifica eBay
+            try:
+                await target_context.wait_for_selector(
+                    "#imageupload__sendmessage--textbox",
+                    state="visible",
+                    timeout=10_000,
+                )
+            except Exception:
+                await asyncio.sleep(2.5)  # fallback generico
 
         # Selettori specifici per il form di messaggistica AJAX o Overlay di eBay
         extended_message_selectors = [
@@ -459,12 +534,89 @@ async def _async_contact_seller(
             "input[placeholder*='messaggio']",
             "div[placeholder*='messaggio']",
             "[aria-label*='messaggio']",
+            "div[contenteditable='true']",  # pagina messaggi eBay send
             ".composer-input",
         ]
 
         filled = False
-        # Logica ultra-robusta per l'overlay di chat
-        try:
+        # ── Caso 1: pagina messaggi sendmsg (no iframe, input diretto) ─────────
+        if is_sendmsg_page:
+            try:
+                comp_filled = await page.evaluate("""(msg) => {
+                    // Cerca prima l'ID verificato dallo screenshot
+                    let el = document.getElementById('imageupload__sendmessage--textbox') || 
+                             document.querySelector('[data-testid="message-input-textarea"]');
+                    
+                    if (!el) {
+                        // Fallback selettori generici
+                        const selectors = [
+                            'input[placeholder*="messaggio"]',
+                            'div[contenteditable="true"]',
+                            'textarea',
+                        ];
+                        for (const sel of selectors) {
+                            const els = Array.from(document.querySelectorAll(sel));
+                            el = els.find(e => e.offsetWidth > 0 && e.offsetHeight > 0
+                                && e.tagName !== 'BUTTON' && e.getAttribute('type') !== 'submit');
+                            if (el) break;
+                        }
+                    }
+
+                    if (el) {
+                        el.click();
+                        el.focus();
+                        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value') ||
+                                Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+                            if (nativeInputValueSetter) nativeInputValueSetter.set.call(el, msg);
+                        } else if (el.isContentEditable) {
+                            el.innerText = msg;
+                        }
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        return {
+                            id: el.id, 
+                            class: el.className,
+                            selector: el.tagName + '#' + el.id,
+                            initialValue: el.value || el.innerText
+                        };
+                    }
+                    return null;
+                }""", message)
+                
+                if comp_filled:
+                    logger.info("PW contact_seller: sendmsg page compose found: %s", comp_filled)
+                    # Svuota e digita con delay per triggerare React state
+                    await page.keyboard.press("Control+A")
+                    await page.keyboard.press("Backspace")
+                    await page.keyboard.type(message, delay=50)
+                    await asyncio.sleep(0.5)
+                    
+                    # Verifica che sia stato scritto (logica di sicurezza)
+                    typed_val = await page.evaluate("""() => {
+                        const el = document.getElementById('imageupload__sendmessage--textbox') || 
+                                 document.querySelector('[data-testid="message-input-textarea"]');
+                        return el ? (el.value || el.innerText) : '';
+                    }""")
+                    if len(typed_val) > 0:
+                        logger.info("PW contact_seller: confirmed message is typed (%d chars)", len(typed_val))
+                        filled = True
+                    else:
+                        logger.warning("PW contact_seller: message box appears empty after typing!")
+                        # Fallback: prova a forzare ancora una volta via JS
+                        await page.evaluate("""(m) => {
+                            const el = document.getElementById('imageupload__sendmessage--textbox') || 
+                                     document.querySelector('[data-testid="message-input-textarea"]');
+                            if (el) { el.value = m; el.dispatchEvent(new Event('input', {bubbles:true})); }
+                        }""", message)
+                        filled = True
+                else:
+                    logger.warning("PW contact_seller: sendmsg compose field not found via JS")
+            except Exception as e:
+                logger.warning("PW error filling sendmsg compose: %s", e)
+
+        # ── Caso 2: overlay item-page (iframe o no) ───────────────────────────
+        if not filled:
             # Cerchiamo di identificare l'elemento che funge da 'composer' (div, textarea o input)
             # che contiene o ha come placeholder 'Invia il messaggio'
             composer_found = await target_context.evaluate("""() => {
@@ -521,24 +673,8 @@ async def _async_contact_seller(
                         console.log("PW contact_seller: dispatched input/change events to enable button");
                     }
                 }""");
-                
                 await asyncio.sleep(1.0)
                 filled = True
-            else:
-                # Fallback ai selettori standard se JS non trova nulla
-                for sel in extended_message_selectors:
-                    el = await target_context.query_selector(sel)
-                    if el:
-                        await el.click(force=True, timeout=2000)
-                        await page.keyboard.press("Control+A")
-                        await page.keyboard.press("Backspace")
-                        await page.keyboard.type(message, delay=50)
-                        await asyncio.sleep(0.5)
-                        filled = True
-                        logger.info("PW contact_seller: message typed into selector=%s", sel)
-                        break
-        except Exception as e:
-            logger.debug("PW error during composer detection/fill: %s", e)
 
         if filled:
             await page.screenshot(path="tmp/debug_nat_03_filled.png")
@@ -571,17 +707,79 @@ async def _async_contact_seller(
                     # Fallback JavaScript potente: cerca qualsiasi cosa contenga 'Invia'
                     # e clicca il primo risultato visibile che sembra un bottone
                     el = await target_context.evaluate_handle("""() => {
-                        const candidates = Array.from(document.querySelectorAll('button, [role="button"], .btn, .button, .imageupload__sendbutton, span, div'))
-                            .filter(el => {
-                                const text = el.innerText || "";
-                                // Exclude composers explicitly
+                        // 1. Cerca il wrapper specifico visto nello screenshot
+                        const wrapper = document.querySelector('.imageupload__send-btn-wrapper');
+                        if (wrapper) {
+                            const btn = wrapper.querySelector('button, [role="button"], svg');
+                            if (btn) return btn;
+                        }
+
+                        // 2. Cerca bottoni con Paper Plane o icone simili (Send)
+                        const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a'))
+                            .filter(b => b.offsetWidth > 0 && b.offsetHeight > 0);
+                        
+                        // Cerca per SVG path (paper plane)
+                        const sendByIcon = allButtons.find(b => {
+                            const svg = b.querySelector('svg');
+                            if (!svg) return false;
+                            const html = svg.innerHTML.toLowerCase();
+                            // Paper plane paths often contain these coordinate patterns
+                            return html.includes('m2.01 21') || html.includes('m1.01 3') || 
+                                   html.includes('l23 12') || b.classList.contains('send');
+                        });
+                        if (sendByIcon) return sendByIcon;
+
+                        // 2. Cerca per ARIA label o testo
+                        const candidates = allButtons.filter(el => {
                                 if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.getAttribute('role') === 'textbox') return false;
-                                
-                                return text.includes('Invia') || text.includes('Send');
+                                // Escludi righe inbox con checkbox (non sono bottoni di invio)
+                                if (el.querySelector('input[type="checkbox"]')) return false;
+                                const ariaRaw = (el.getAttribute('aria-label') || '').toLowerCase();
+                                if (ariaRaw.startsWith('seleziona')) return false;
+
+                                const label = ariaRaw;
+                                const title = (el.getAttribute('title') || "").toLowerCase();
+                                const text = (el.innerText || "").toLowerCase();
+
+                                return label.includes('invia') || label.includes('send') ||
+                                       title.includes('invia') || title.includes('send') ||
+                                       text === 'invia' || text === 'send';
                             });
                         
-                        // Ritorna l'elemento foglia o quasi (per non cliccare grossi wrapper)
-                        return candidates.reverse().find(c => c.offsetWidth > 0 && c.offsetHeight > 0 && c.childElementCount <= 2) || candidates.find(c => c.offsetWidth > 0 && c.offsetHeight > 0) || null;
+                        // 3. Fallback: il bottone a DESTRA del campo messaggi
+                        if (candidates.length === 0) {
+                            const composer = document.querySelector(
+                                '#imageupload__sendmessage--textbox, ' +
+                                'textarea[placeholder*="messaggio"], ' +
+                                'textarea[data-testid="message-input-textarea"], ' +
+                                'input[placeholder*="messaggio"], ' +
+                                'div[contenteditable="true"]'
+                            );
+                            if (composer) {
+                                const rect = composer.getBoundingClientRect();
+                                const rightOf = allButtons.find(b => {
+                                    const bRect = b.getBoundingClientRect();
+                                    return bRect.left > rect.right - 50 && 
+                                           bRect.top > rect.top - 20 && 
+                                           bRect.top < rect.bottom + 20 &&
+                                           bRect.width < 100;
+                                });
+                                if (rightOf) return rightOf;
+                            }
+                        }
+
+                        candidates.sort((a, b) => {
+                            const score = el => {
+                                const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                                if (label.startsWith('seleziona')) return 0;
+                                if (label.includes('invia') || label.includes('send')) return 3;
+                                if (label.includes('messaggio') || label.includes('message')) return 2;
+                                return 1;
+                            };
+                            return score(b) - score(a);
+                        });
+
+                        return candidates[0] || null;
                     }""")
                     if el:
                         # Converti JSHandle a ElementHandle se possibile (o usa evaluate)
@@ -590,12 +788,45 @@ async def _async_contact_seller(
                 
                 if el:
                     logger.info("PW contact_seller: Attempting click on submit element...")
-                    await target_context.evaluate("(element) => { if(element) element.click(); }", el)
-                    await asyncio.sleep(3)
-                    await page.wait_for_load_state("networkidle", timeout=10_000)
-                    submitted = True
-                    logger.info("PW contact_seller: message submitted | now at %s", page.url)
-                    break
+                    # Cerchiamo di cliccare il BOTTONE genitore se abbiamo trovato uno span/svg
+                    await target_context.evaluate("""(element) => { 
+                        if(!element) return;
+                        let target = element;
+                        // Se abbiamo trovato un'icona o uno span dentro il bottone, sali fino al bottone
+                        if (target.tagName !== 'BUTTON' && target.getAttribute('role') !== 'button') {
+                            const parentBtn = target.closest('button') || target.closest('[role="button"]');
+                            if (parentBtn) target = parentBtn;
+                        }
+                        target.scrollIntoView({block: 'center'});
+                        target.click();
+                        console.log("PW contact_seller: clicked target", target);
+                    }""", el)
+                    
+                    await asyncio.sleep(2.5)
+                    
+                    # VERIFICA: se il testo è ancora nel textarea, il click non ha funzionato
+                    still_has_text = await page.evaluate("""() => {
+                        const el = document.getElementById('imageupload__sendmessage--textbox') || 
+                                 document.querySelector('[data-testid="message-input-textarea"]');
+                        return el && (el.value || el.innerText).length > 2; // threshold for safety
+                    }""")
+                    
+                    if still_has_text:
+                        logger.warning("PW contact_seller: Textarea still contains message after click. Trying Enter fallback.")
+                        await page.keyboard.press("Enter")
+                        await asyncio.sleep(2.0)
+                        still_has_text = await page.evaluate("""() => {
+                            const el = document.getElementById('imageupload__sendmessage--textbox') || 
+                                     document.querySelector('[data-testid="message-input-textarea"]');
+                            return el && (el.value || el.innerText).length > 2;
+                        }""")
+                    
+                    if not still_has_text:
+                        submitted = True
+                        logger.info("PW contact_seller: message submitted (textarea is clear) | now at %s", page.url)
+                        break
+                    else:
+                        logger.warning("PW contact_seller: Send failed to clear textarea. Will try next selector.")
             except Exception as e:
                 logger.debug("PW error clicking submit: %s", str(e)[:100])
                 continue
@@ -611,6 +842,23 @@ async def _async_contact_seller(
                 message_sent=message,
             )
         else:
+            # Fallback finale per sendmsg page: premi Enter (il campo è già compilato)
+            if is_sendmsg_page and filled:
+                logger.info("PW contact_seller: sendmsg fallback — pressing Enter to submit")
+                try:
+                    await page.keyboard.press("Return")
+                    await asyncio.sleep(2)
+                    success = True
+                    return _build_contact_result(
+                        product_url=product_url,
+                        success=True,
+                        status="message_sent",
+                        detail="Messaggio inviato con successo al venditore (via Enter).",
+                        message_sent=message,
+                    )
+                except Exception as e:
+                    logger.warning("PW contact_seller: Enter fallback failed: %s", e)
+
             return _build_contact_result(
                 product_url=product_url,
                 success=False,
