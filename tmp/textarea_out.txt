@@ -1,0 +1,19 @@
+--- TEXTAREAS ---
+
+--- ALL INPUTS OR DIVS WITH TEXTBOX ROLE ---
+input: {'data-marko': '{"oninput":"handleTextUpdate s0-1-4-10-4 false","onfocusin":"handleMarkTimer s0-1-4-10-4 false","onkeydown":"handleMarkTimer s0-1-4-10-4 false"}', 'data-marko-key': '@input s0-1-4-10-4', 'id': 'gh-ac', 'class': ['gh-search-input', 'gh-tb', 'ui-autocomplete-input'], 'title': 'Cerca', 'type': 'text', 'placeholder': 'Cerca su eBay', 'aria-autocomplete': 'list', 'aria-expanded': 'false', 'size': '50', 'maxlength': '300', 'aria-label': 'Cerca su eBay', 'name': '_nkw', 'autocapitalize': 'off', 'autocorrect': 'off', 'spellcheck': 'false', 'autocomplete': 'off', 'aria-haspopup': 'true', 'role': 'combobox', 'tabindex': '4', 'aria-controls': 'ebay-autocomplete', 'style': ''}
+input: {'type': 'hidden', 'value': 'R40', 'name': '_from', 'style': ''}
+input: {'type': 'hidden', 'name': '_trksid', 'value': 'm570.l1313', 'style': ''}
+input: {'id': 'qtyTextBox', 'class': ['textbox__control'], 'type': 'text', 'value': '1', 'name': 'quantity', 'size': '4', 'aria-describedby': 'qtyErrMsg qtyAvailability', 'autocomplete': 'off', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b00000050e96feb5d0afcd18b8c86d93257e454c9d0158dea88064ae814e8b900344efeb8086cc35e969203d9d4c630a0bbaa7ccf2996aff653df28f4d940cec4b13b18044fe02fab574be9a3c67ee5f9298ab31b', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b000000507801534a625d4e11fa7db2ca778d73ea4cabac9d4d95befdc562a976c0873ba94a394a44cbcbb8206786caec1d9d854ecf7fe532e9f20eb45967aa59825b4f1767ffa2233dd26edd8026a196eaf0fbab', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b00000050e4f43bf2d31c2ca0af47b64db2be90fd1febfe424f001145de7a63d27af1fc61e81c9eed15550806dfdf4ae75b0ff91063bda4a1f91c7a1dc585f13d24d3f428b204a7fa44d4c7e710e57d6050601c13', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b000000500376f33a5b1e516aa11700e01fb62ba10bcfd655bce7ccd9c4f519526e1faa1bb3bec0796db77f115720d525780ec6055c9af0a54b65fc3962afd33ec62a92ed587810717ea56fe556fb71af870924b5', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b0000005093134dd48523f5b5c868d43540a8640d034da562db85427e26a93308c46816acb4cc7cfe51b49e1e0a37995966381a55ec671ec7fc24129f1010a452cb190b9acf1151616d297acea2584e69f877f548', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b000000507d6bd1fde6869de0eb0ebdf0895bba5e526180b7327935528bd75090e7177800003bcf050e8a55fc86aa42fb5416a918cceba9a51bdb180b6c4d47376e7f8d6792ed577eff669ccdbb6a692cc2b067d0', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b000000509335399d3d641072bc0e06a2f492e94839b010ec332d2963ed5404489d3459bdb75070566c2c1857d15f40c9eae4d3917c598735a241b74f176fb9bd50f6a8d7672cca9765919d1408dd7f42a143ec2b', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b00000050b7a2789fcac34b267dd5a53ab270fd39591f51c4b0a5295a3e88de4da5c5839866b7b642195b11c4899b4a6ba3b918809f38023839dc119cae6509df7cea87eec1f06d3b0221d752f557e3659c052698', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b00000050306c82937e638a49bac313c37a2a6ed45213f4b42cdaf27fd7c9f1b9c5912eccf12d271cb0cc87d08552190950c8f9f74bba6d091450d9671423ef4bc4b00ada6c67c00357702bb6272cd79bab8fd2d9', 'style': ''}
+input: {'type': 'hidden', 'name': 'srt', 'value': '01000b00000050f53e71b1f3c20625c60a98fa148a3948fc3a42a70e57f8bd78ca2875c1ba7767c2421f8618f1e4b660bfcacadc85710b3f3784e1e7bc2ca5f19e0bca0383fd9e3715b3a74074411ce018787c6aa49a1f', 'style': ''}
+input: {'type': 'hidden', 'id': 'cguid', 'value': '1775296800760', 'style': ''}
+input: {'type': 'hidden', 'id': 'crid', 'value': '44872491004', 'style': ''}
