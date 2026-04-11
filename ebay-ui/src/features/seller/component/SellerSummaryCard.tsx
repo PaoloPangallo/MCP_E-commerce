@@ -366,9 +366,9 @@ export default function SellerSummaryCard(props: Props) {
                     </Typography>
                     <Box sx={{ display: "flex", gap: 1.5, mb: flaggedFeedbacks.length > 0 ? 1.5 : 0 }}>
                         {[
-                            { label: positive.length, desc: 'Positivi', color: "#10b981", bg: '#ecfdf5' },
-                            { label: neutral,         desc: 'Neutri',   color: "#f59e0b", bg: '#fffbeb' },
-                            { label: negative.length, desc: 'Negativi', color: "#ef4444", bg: '#fef2f2' }
+                            { label: positive.length, desc: 'Positivi', color: "#10b981", bg: 'rgba(16, 185, 129, 0.1)' },
+                            { label: neutral,         desc: 'Neutri',   color: "#f59e0b", bg: 'rgba(245, 158, 11, 0.1)' },
+                            { label: negative.length, desc: 'Negativi', color: "#ef4444", bg: 'rgba(239, 68, 68, 0.1)' }
                         ].map((item) => (
                             <Box
                                 key={item.desc}
@@ -389,7 +389,7 @@ export default function SellerSummaryCard(props: Props) {
                         ))}
                     </Box>
                     {flaggedFeedbacks.length > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, bgcolor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, bgcolor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #fca5a5', borderRadius: '10px' }}>
                             <WarningAmberIcon sx={{ fontSize: 18, color: '#dc2626' }} />
                             <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#991b1b', lineHeight: 1.4 }}>
                                 L'Intelligenza Artificiale ha rilevato <strong>{flaggedFeedbacks.length}</strong> recensioni potenzialmente fuorvianti, il cui testo analizzato è in forte disaccordo con il rating a stelle rilasciato.
@@ -406,7 +406,7 @@ export default function SellerSummaryCard(props: Props) {
           <Box sx={{ p: 3, pt: 2, bgcolor: "var(--bg-secondary)" }}>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3, mb: 3 }}>
               {positive.length > 0 && (
-                <Box>
+                <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: 12, fontWeight: 800, color: "#10b981", textTransform: "uppercase", letterSpacing: "0.05em", mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#10b981', boxShadow: "0 0 8px #10b981" }} />
                       Cosa apprezzano
@@ -415,7 +415,7 @@ export default function SellerSummaryCard(props: Props) {
                 </Box>
               )}
               {negative.length > 0 && (
-                <Box>
+                <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: "0.05em", mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ef4444', boxShadow: "0 0 8px #ef4444" }} />
                       Possibili problemi

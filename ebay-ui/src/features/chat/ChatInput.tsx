@@ -298,7 +298,11 @@ mt: -1,
             mb: 0.25,
             color: "var(--text-secondary)",
             bgcolor: openMenu ? "var(--bg-secondary)" : "transparent",
-            "&:hover": { color: "var(--text-primary)", bgcolor: "var(--bg-secondary)" }
+            "&:hover": { color: "var(--text-primary)", bgcolor: "var(--bg-secondary)" },
+            "&.Mui-disabled": {
+              color: "var(--text-secondary)",
+              opacity: 0.5
+            }
           }}
         >
           {isProcessing ? <CircularProgress size={16} color="inherit" /> : <AddIcon sx={{ fontSize: 24 }} />}
@@ -321,6 +325,7 @@ mt: -1,
             lineHeight: 1.65,
             color: "var(--text-primary)",
             "& textarea": { resize: "none" },
+            "& textarea:disabled": { WebkitTextFillColor: "var(--text-secondary)", color: "var(--text-secondary)" },
             "& textarea::placeholder": { color: "var(--text-secondary)", opacity: 0.5 }
           }}
         />

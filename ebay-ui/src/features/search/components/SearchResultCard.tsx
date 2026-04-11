@@ -132,7 +132,7 @@ export default function SearchResultCard({
               src={item.image_url}
               alt={item.title || ""}
               onError={() => setImageError(true)}
-              sx={{ width: "100%", height: "100%", objectFit: "contain", p: 2, mixBlendMode: 'multiply' }}
+              sx={{ width: "100%", height: "100%", objectFit: "contain", p: 2, bgcolor: "#fff", borderRadius: "12px" }}
             />
           ) : (
               <Typography variant="caption" color="text.disabled">No Image</Typography>
@@ -187,10 +187,10 @@ export default function SearchResultCard({
               position: "absolute",
               top: 8,
               right: 8,
-              bgcolor: "rgba(255, 255, 255, 0.9)",
+              bgcolor: "var(--bg-primary)",
               color: "var(--text-primary)",
               boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              "&:hover": { bgcolor: "#fff", transform: "scale(1.05)" }
+              "&:hover": { bgcolor: "var(--bg-secondary)", transform: "scale(1.05)" }
             }}
           >
             <MoreVertIcon sx={{ fontSize: 18 }} />
@@ -209,7 +209,9 @@ export default function SearchResultCard({
                 boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15)",
                 border: "1px solid var(--border-color)",
                 borderRadius: "12px",
-                minWidth: 200
+                minWidth: 200,
+                bgcolor: "var(--bg-primary)",
+                color: "var(--text-primary)"
               }
             }}
           >
@@ -331,9 +333,9 @@ export default function SearchResultCard({
               fontSize: 12,
               fontWeight: 800,
               bgcolor: "var(--brand-primary)",
-              color: "#fff",
+              color: "var(--bg-primary)",
               py: 1,
-              "& .MuiButton-root": { color: "#fff" },
+              "& .MuiButton-root": { color: "var(--bg-primary)" },
               "&:hover": { bgcolor: "var(--brand-primary)", opacity: 0.9 }
             }}
           >
@@ -447,7 +449,7 @@ export default function SearchResultCard({
             alt={item.title || ""}
             loading="lazy"
             onError={() => setImageError(true)}
-            sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }}
+            sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5, bgcolor: "#fff" }}
           />
         ) : (
           <Box sx={{ width: 32, height: 32, bgcolor: "var(--bg-secondary)", borderRadius: "8px", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -605,7 +607,7 @@ export default function SearchResultCard({
               fontSize: 12,
               fontWeight: 600,
               bgcolor: "var(--brand-primary)",
-              color: "#fff",
+              color: "var(--bg-primary)",
               px: 2,
               "&:hover": { bgcolor: "var(--brand-primary)", opacity: 0.9 }
             }}

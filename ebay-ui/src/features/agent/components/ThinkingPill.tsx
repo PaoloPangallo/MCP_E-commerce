@@ -2,7 +2,8 @@ import { useEffect, useState } from "react"
 import {Box, Collapse, Paper, Typography} from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 
-import { AIThinkingPipeline, humanizeToolName } from "./AIThinkingPipeline"
+import { AIThinkingPipeline } from "./AIThinkingPipeline"
+import { humanizeToolName } from "../utils"
 import type { AgentStep, PlannedTask } from "../types"
 
 interface ThinkingPillProps {
@@ -34,8 +35,8 @@ export function ThinkingPill({
   
   const label = loading
     ? activeStep 
-      ? `${humanizeToolName(activeStep.action, activeStep.action_input)}…`
-      : "L'agente sta ragionando…"
+      ? `Esecuzione: ${humanizeToolName(activeStep.action, activeStep.action_input).slice(0, 50)}...`
+      : "L'agente sta ragionando..."
     : `Analisi completata${steps.length > 0 ? ` · ${steps.length} passi` : ""}`
 
   if (hideTrace || (!loading && steps.length === 0 && (!plannedTasks || plannedTasks.length === 0))) {
