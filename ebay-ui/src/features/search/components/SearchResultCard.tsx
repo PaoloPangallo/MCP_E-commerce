@@ -13,7 +13,6 @@ import { Menu, MenuItem, ListItemIcon, ListItemText, IconButton } from "@mui/mat
 import ContactMailIcon from "@mui/icons-material/ContactMail"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
-import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
 
 import SellerTrustGauge from "../../seller/component/SellerTrustGauge.tsx"
 import SellerFeedbackPanel from "../../seller/component/SellerFeedbackPanel.tsx"

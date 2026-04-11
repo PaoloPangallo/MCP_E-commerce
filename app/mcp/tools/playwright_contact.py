@@ -19,8 +19,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import socket
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any, Annotated, Dict, Optional
 
 from pydantic import Field
@@ -69,6 +72,37 @@ def _chrome_cdp_available(port: int = _CDP_PORT) -> bool:
             return True
     except OSError:
         return False
+
+
+def _prepare_playwright_profile() -> str:
+    """
+    Copy the minimum Chrome profile files needed for eBay session auth
+    into a non-default temp directory.
+
+    Chrome's remote-debugging mode (--remote-debugging-pipe, injected by
+    Playwright) refuses to start when user-data-dir is Chrome's DEFAULT
+    profile path. Copying the relevant files to a separate directory
+    bypasses this restriction while preserving the authenticated session.
+
+    Returns the path to the prepared profile directory.
+    """
+    src = Path(_CHROME_USER_DATA)
+    dst = Path(tempfile.gettempdir()) / "playwright-chrome-profile"
+    dst_default = dst / "Default"
+    dst_default.mkdir(parents=True, exist_ok=True)
+
+    # Local State holds the DPAPI-wrapped encryption key used to decrypt cookies
+    local_state = src / "Local State"
+    if local_state.exists():
+        shutil.copy2(local_state, dst / "Local State")
+
+    # Cookies contains the eBay session cookies (DPAPI-encrypted, readable on same user account)
+    cookies = src / "Default" / "Cookies"
+    if cookies.exists():
+        shutil.copy2(cookies, dst_default / "Cookies")
+
+    logger.info("PW profile prepared at %s", dst)
+    return str(dst)
 
 
 
@@ -218,10 +252,13 @@ async def _async_contact_seller(
             using_cdp = True
             logger.info("PW contact_seller: CDP connected | contexts=%d", len(browser_cdp.contexts))
         else:
-            # Chrome non ha CDP aperta → launch con profilo reale
-            logger.info("PW contact_seller: launching Chrome with real profile at %s", _CHROME_USER_DATA)
+            # Chrome non ha CDP aperta → launch con copia profilo reale.
+            # Chrome rifiuta --remote-debugging-pipe sul profilo DEFAULT;
+            # copiamo i file minimi (Local State + Cookies) in una dir separata.
+            profile_dir = _prepare_playwright_profile()
+            logger.info("PW contact_seller: launching Chrome with copied profile at %s", profile_dir)
             context = await pw.chromium.launch_persistent_context(
-                _CHROME_USER_DATA,
+                profile_dir,
                 channel="chrome",
                 headless=False,
                 args=_launch_args,

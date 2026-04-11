@@ -580,7 +580,7 @@ async def run_search_pipeline(
     # ============================================================
     # 2) PARALLEL: EBAY SEARCH + RAG RETRIEVAL (including expansion)
     # ============================================================
-    logger.info("PIPELINE: Parallel Search & RAG")
+    logger.info("PIPELINE STEP 2: Parallel Search & RAG")
     t = time.time()
 
     async def _do_rag():
@@ -608,7 +608,6 @@ async def run_search_pipeline(
     delta_io = time.time() - t
     timings["parallel_io_s"] = int(float(delta_io) * 1000) / 1000.0
 
-    # 1.5) MERGE WITH GLOBAL MEMORY
     try:
         memory_items = await memory_items_task
         if memory_items:
@@ -648,6 +647,8 @@ async def run_search_pipeline(
     # ============================================================
     # 2.5 PROACTIVE METADATA ENRICHMENT
     # ============================================================
+    logger.info("PIPELINE STEP 2.5: METADATA ENRICHMENT")
+
     dominant_category = None
     if items:
         # Trova la categoria più frequente tra i risultati
@@ -669,6 +670,8 @@ async def run_search_pipeline(
     # 3) USER PROFILE AUTO-UPDATE (coexists with manual MCP overrides)
     # ============================================================
     # --- Dominant Category Extraction (Common Context) ---
+    logger.info("PIPELINE STEP 3: USER PROFILE UPDATE")
+
     _dominant_cat_name: Optional[str] = None
     if items:
         cat_names = [it.get("category_name") for it in items if it.get("category_name")]
@@ -693,7 +696,7 @@ async def run_search_pipeline(
     # ============================================================
     # 4) SELLER TRUST  (deve venire PRIMA del rerank per alimentarlo)
     # ============================================================
-    logger.info("PIPELINE STEP 5: seller_trust")
+    logger.info("PIPELINE STEP 4: seller_trust")
     t = time.time()
     seller_trust_map = await _prefetch_top_sellers_feedback([items[i] for i in range(len(items)) if i < MAX_SELLERS_FOR_TRUST * 2])
     delta_trust_time = time.time() - t
@@ -710,7 +713,7 @@ async def run_search_pipeline(
     # ============================================================
     # 5.5) TOTAL ENRICHMENT (getItem API for all unique IDs)
     # ============================================================
-    logger.info("PIPELINE STEP 5.5: total_enrichment")
+    logger.info("PIPELINE STEP 5: total_enrichment")
     t_enrich = time.time()
     if items:
         # Recuperiamo gli ID unici da Live e RAG per l'arricchimento totale
