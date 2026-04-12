@@ -21,7 +21,7 @@ export function useChatSession() {
   // Action selectors — functions are stable references, batch into one selector
   const {
     resetConversation, setLoadingQuery, appendMessage,
-    appendAssistantMessage, appendSearchBlock, switchSession, saveAgentResponse
+    appendAssistantMessage, appendSearchBlock, switchSession, saveAgentResponse, setSessionTitle
   } = useChatStore(
     useShallow((state) => ({
       resetConversation: state.resetConversation,
@@ -30,7 +30,8 @@ export function useChatSession() {
       appendAssistantMessage: state.appendAssistantMessage,
       appendSearchBlock: state.appendSearchBlock,
       switchSession: state.switchSession,
-      saveAgentResponse: state.saveAgentResponse
+      saveAgentResponse: state.saveAgentResponse,
+      setSessionTitle: state.setSessionTitle
     }))
   )
 
@@ -41,7 +42,7 @@ export function useChatSession() {
 
   const chat = activeSession?.chat || []
 
-  const { steps, running, finalPayload, plannedTasks, run, reset } = useAgentStream({
+  const { steps, running, finalPayload, plannedTasks, ebayQuery, run, reset } = useAgentStream({
     sessionId: activeSessionId
   })
 
@@ -50,6 +51,13 @@ export function useChatSession() {
   // Watch for payload completion
   useEffect(() => {
     if (!finalPayload || running || !loadingQuery) return
+    
+    // setSessionTitle MUST run before saveAgentResponse:
+    // saveAgentResponse adds the search block (hasSearch → true), after which
+    // setSessionTitle's guard would reject the update. Order matters here.
+    if (ebayQuery) {
+      setSessionTitle(ebayQuery)
+    }
     saveAgentResponse(loadingQuery, finalPayload)
     
     // Auto-refresh settings if the agent potentially updated them
@@ -59,7 +67,7 @@ export function useChatSession() {
     if (hasProfileUpdate) {
       refreshSettings()
     }
-  }, [finalPayload, running, loadingQuery, saveAgentResponse, steps, refreshSettings])
+  }, [finalPayload, running, loadingQuery, saveAgentResponse, setSessionTitle, ebayQuery, steps, refreshSettings])
 
   // Ensure an active session is set on mount if missing
   useEffect(() => {

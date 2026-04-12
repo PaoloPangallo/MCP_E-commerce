@@ -164,6 +164,17 @@ export function useAgentStream(options?: {
 
   return {
     ...state,
+    // Best title candidate for the session: prefer the agent's tool input query
+    // (action_input.query on search_products step) over ebay_query_used, because
+    // the search pipeline can compress the query too aggressively (e.g. "iPad Air 2022 blu" → "Apple").
+    // stateRef is used instead of state to bypass React batching timing issues.
+    ebayQuery: (() => {
+      const searchStep = stateRef.current.steps.find(
+        s => s.action === "search_products" && (s.action_input as any)?.query
+      )
+      if (searchStep) return (searchStep.action_input as any).query as string
+      return stateRef.current.steps.find(s => !!s.ebay_query)?.ebay_query ?? null
+    })(),
     run,
     reset
   }

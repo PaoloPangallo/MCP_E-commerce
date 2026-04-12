@@ -15,6 +15,7 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined"
 import ImageIcon from "@mui/icons-material/Image"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
+import AnalyticsIcon from "@mui/icons-material/Analytics"
 import DOMPurify from "dompurify"
 import type { ItemDetailsData } from "../search/types"
 import { WishlistToggleButton } from "./WishlistPanel"
@@ -152,6 +153,37 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                         Vedi e Acquista su eBay
                     </Button>
                 )}
+
+                {/* Market Analysis Button */}
+                <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<AnalyticsIcon />}
+                    onClick={() =>
+                        window.dispatchEvent(
+                            new CustomEvent("send-chat", {
+                                detail: `Analisi di mercato e storico prezzi per ${title}`
+                            })
+                        )
+                    }
+                    sx={{
+                        py: 1.2,
+                        mt: item_url ? 1 : 0,
+                        borderRadius: 3,
+                        fontWeight: 700,
+                        textTransform: "none",
+                        boxShadow: "none",
+                        borderColor: "var(--border-color)",
+                        color: "var(--text-primary)",
+                        "&:hover": {
+                            borderColor: "var(--text-secondary)",
+                            bgcolor: "var(--bg-secondary)",
+                            boxShadow: "none"
+                        }
+                    }}
+                >
+                    Analisi di Mercato
+                </Button>
 
                 <Divider sx={{ my: 3, borderColor: "var(--border-color) !important" }} />
 

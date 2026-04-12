@@ -76,6 +76,13 @@ export default function ChatPage() {
   useEffect(() => {
     const handleSendChat = (e: CustomEvent<string>) => {
       handleSend(e.detail)
+      // Scroll to bottom immediately so the user's attention moves to
+      // the thinking pill / incoming results area, regardless of where
+      // in the UI the action button was (carousel, detail panel, etc.)
+      const container = scrollContainerRef.current
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+      }
     }
     window.addEventListener("send-chat", handleSendChat as EventListener)
     return () => window.removeEventListener("send-chat", handleSendChat as EventListener)

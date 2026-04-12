@@ -47,6 +47,7 @@ type ChatStore = {
   clearMemory: () => Promise<void> // Clears MCP redis memory and resets current session
 
   setLoadingQuery: (query: string | null) => void
+  setSessionTitle: (title: string) => void
   appendMessage: (msg: AgentMessage) => void
   appendAssistantMessage: (content: string) => void
   appendSearchBlock: (search: SearchBlock) => void
@@ -130,6 +131,23 @@ export const useChatStore = create<ChatStore>()(
       },
 
       setLoadingQuery: (query) => set({ loadingQuery: query }),
+
+      // Update the active session title only if it hasn't been set by a real search yet.
+      // This is called separately from saveAgentResponse to keep cache keys intact.
+      setSessionTitle: (title) => set((state) => {
+        const sid = state.activeSessionId || (state.sessions[0]?.id)
+        if (!sid) return state
+        return {
+          sessions: state.sessions.map(s => {
+            if (s.id !== sid) return s
+            // Only update if no search block exists yet (first search of this session)
+            const hasSearch = s.chat.some(e => e.type === "search")
+            if (hasSearch) return s
+            const trimmed = title.length > 35 ? title.slice(0, 35) + "\u2026" : title
+            return { ...s, title: trimmed }
+          })
+        }
+      }),
 
       appendMessage: (msg) => set((state) => {
         const sid = state.activeSessionId || (state.sessions[0]?.id)

@@ -185,7 +185,24 @@ export function parseSSEEvent(
       const mappedAgentTrace = (event.agent_trace || []).map((s: any) =>
         (s.status === "thinking" || s.status === "running") ? { ...s, status: "ok" as const } : s
       )
-      const finalTrace = normalizeFinalTrace(mappedAgentTrace, fallbackTrace)
+      let finalTrace = normalizeFinalTrace(mappedAgentTrace, fallbackTrace)
+
+      // Preserve ebay_query from live steps: the backend's agent_trace doesn't include it,
+      // but it was captured during tool_result events and is needed for session title.
+      if (finalTrace !== fallbackTrace && currentState.steps.length > 0) {
+        const liveEbayQueries = new Map(
+          currentState.steps
+            .filter(s => !!s.ebay_query)
+            .map(s => [s.step, s.ebay_query])
+        )
+        if (liveEbayQueries.size > 0) {
+          finalTrace = finalTrace.map(s => {
+            const eq = liveEbayQueries.get(s.step)
+            return eq ? { ...s, ebay_query: eq } : s
+          })
+        }
+      }
+
       const payload = buildFinalPayload(event, streamingAnswer, finalTrace, currentState.plannedTasks)
       
       // Smart merge
