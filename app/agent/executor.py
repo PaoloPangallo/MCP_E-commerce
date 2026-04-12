@@ -79,11 +79,15 @@ class ToolExecutor:
         try:
             logger.info("ToolExecutor using MCP | tool=%s", tool_call.tool)
             
-            # Inject session_id se presente nel context (utile per logging o persistenza lato tool)
-            if self.context and getattr(self.context, "user", None):
-                user_id = getattr(self.context.user, "id", None)
-                if user_id:
-                    tool_call.input["session_id"] = str(user_id)
+            # Inject session_id and user_query from context
+            if self.context:
+                if getattr(self.context, "user", None):
+                    user_id = getattr(self.context.user, "id", None)
+                    if user_id:
+                        tool_call.input["session_id"] = str(user_id)
+                if getattr(self.context, "user_query", None) and tool_call.tool == "get_item_details":
+                    tool_call.input["user_query"] = self.context.user_query
+
 
             if not self.mcp_client:
                 raise RuntimeError("MCP client is not initialized")

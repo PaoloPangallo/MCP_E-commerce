@@ -10,6 +10,7 @@ import PublicIcon from "@mui/icons-material/Public"
 import HistoryIcon from "@mui/icons-material/History"
 import InsightsIcon from "@mui/icons-material/Insights"
 import { useEffect, useMemo, useState } from "react"
+import { useAuth } from "../../auth/useAuth"
 import { apiFetch } from "../../api/apiClient"
 import { useChatStore } from "./store/chatStore"
 import type { SearchBlock } from "../search/types"
@@ -42,16 +43,18 @@ function formatYear(isoDate?: string): string | null {
 }
 
 export default function ProfileBadge() {
+  const { loggedIn } = useAuth()
   const { settings } = useSettingsStore()
   const sessions = useChatStore((s) => s.sessions)
   const activeSessionId = useChatStore((s) => s.activeSessionId)
   const [ebayInfo, setEbayInfo] = useState<EbayInfo | null>(null)
 
   useEffect(() => {
+    if (!loggedIn) return
     apiFetch<EbayInfo>("/auth/ebay/me")
       .then(data => { if (data) setEbayInfo(data) })
       .catch(() => {})
-  }, [])
+  }, [loggedIn])
 
   const brandsList = useMemo(() => {
     if (!settings.favoriteBrands) return []
@@ -136,6 +139,8 @@ export default function ProfileBadge() {
     }
     return labels[settings.interactionDepth || "browser"] || labels.browser
   }, [settings.interactionDepth])
+
+  if (!loggedIn) return null
 
   if (isEmpty && !ebayInfo) {
     return (

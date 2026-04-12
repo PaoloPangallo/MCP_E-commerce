@@ -1,13 +1,13 @@
-- Il profilo shopping rimane caricato nonostante l'accesso a ebayGPT non sia stato eseguito
-- Nomi delle chat, forse dovremmo chiedere all'llm di sceglierne uno quando manca, oppure potremmo banalmente usare la query che llm usa per la ricerca
-- Brand preferiti: come vengono scelti? I brand dovrebbero essere estratti dai click utente o da query specifiche, quando ce ne sono
-- quando si preme "dettagli prodotto", "analisi del venditore/di mercato" nel carousel, o quando si invia un messaggio, si deve centrare verticalmente la schermata, in modo da spostare l'attenzione dell'utente
-- pulsante analisi di mercato nel detail panel dedicato agli articoli (stessi e identici input di quello nel carousel)
-- i prodotti simili consigliati nel detail panel, sono filtrati da llm as a judge prima di venire mostrati, tenendo conto delle richieste utente? inoltre, nel caso in cui non ci fossero simili, è gestita la corretta assenza della relativa sezione (o un "Non sono stati trovati altri prodotti simili, dati i vincoli di ricerca inseriti" o qualcosa del genere)?
+[X] - Il profilo shopping rimane caricato nonostante l'accesso a ebayGPT non sia stato eseguito
+[X] - Nomi delle chat, forse dovremmo chiedere all'llm di sceglierne uno quando manca, oppure potremmo banalmente usare la query che llm usa per la ricerca
+[X] - Brand preferiti: come vengono scelti? I brand dovrebbero essere estratti dai click utente o da query specifiche, quando ce ne sono
+[X] - quando si preme "dettagli prodotto", "analisi del venditore/di mercato" nel carousel, o quando si invia un messaggio, si deve centrare verticalmente la schermata, in modo da spostare l'attenzione dell'utente
+[X] - pulsante analisi di mercato nel detail panel dedicato agli articoli (stessi e identici input di quello nel carousel)
+[X] - i prodotti simili consigliati nel detail panel, sono filtrati da llm as a judge prima di venire mostrati, tenendo conto delle richieste utente? inoltre, nel caso in cui non ci fossero simili, è gestita la corretta assenza della relativa sezione (o un "Non sono stati trovati altri prodotti simili, dati i vincoli di ricerca inseriti" o qualcosa del genere)?
 [X] - colori dark mode: opzioni carousel, icona di profilo utente, immagini nel carousel, pulsanti nel carousel, opzioni del detail panel
 [X] - animazione durante il thinking: forse è meglio che vari l'intesità luminosa delle scritte senza che si muovano tutte
 [X] - dedicare uno spazio massimo che divida a metà le recensioni nel pannello di analisi del venditore: attualmente le recensioni negative sforano lo spazio di disponibile
 [X] - "Chiedi qualcosa..." diventa nero (in modalità scura) quando non si può usare la barra di testo per scrivere (perchè la query è già stata mandata)
-- possibilità di incollare immagini direttamente con ctrl+v nella barra di testo, o di trascinarle da un'altra finestra
-- mostrare i token consumati prima di inviare un messaggio (con o senza immagine)
-- forzare la chiamata al vision tool in caso di presenza dell'immagine e mancato utilizzo del tool
+[X] - possibilità di incollare immagini direttamente con ctrl+v nella barra di testo, o di trascinarle da un'altra finestra
+[X] - mostrare i token consumati prima di inviare un messaggio (con o senza immagine)
+[X] - forzare la chiamata al vision tool in caso di presenza dell'immagine e mancato utilizzo del tool

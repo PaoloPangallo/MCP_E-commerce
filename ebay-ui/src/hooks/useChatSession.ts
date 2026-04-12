@@ -52,13 +52,8 @@ export function useChatSession() {
   useEffect(() => {
     if (!finalPayload || running || !loadingQuery) return
     
-    // setSessionTitle MUST run before saveAgentResponse:
-    // saveAgentResponse adds the search block (hasSearch → true), after which
-    // setSessionTitle's guard would reject the update. Order matters here.
-    if (ebayQuery) {
-      setSessionTitle(ebayQuery)
-    }
-    saveAgentResponse(loadingQuery, finalPayload)
+    // saveAgentResponse handles the atomic title update to prevent race conditions
+    saveAgentResponse(loadingQuery, finalPayload, ebayQuery || undefined)
     
     // Auto-refresh settings if the agent potentially updated them
     const hasProfileUpdate = steps.some((s: any) => 

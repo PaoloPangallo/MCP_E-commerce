@@ -199,6 +199,7 @@ class EbayReactAgent:
                 "db": self.db,
                 "user": self.user,
                 "llm_engine": request.llm_engine,
+                "user_query": memory.user_query,
             })(),
             mcp_client=self.mcp_client,
             prefer_mcp=self.prefer_mcp,

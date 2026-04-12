@@ -22,13 +22,14 @@ logger = logging.getLogger(__name__)
 )
 async def get_item_details(
     item_id: Annotated[str, Field(description="ID univoco dell'oggetto eBay (es. '112345678901')")],
+    user_query: Annotated[str, Field(description="Query originale dell'utente, usata per filtrare i prodotti simili")] = "",
     session_id: Annotated[str, Field(description="ID di sessione utente")] = ""
 ) -> Dict[str, Any]:
     try:
         with _db_context() as db:
             context = _build_context(db=db, session_id=session_id)
             logger.info("MCP TOOL get_item_details START | item_id=%s", item_id)
-            result_data = await _svc_get_item_details(item_id)
+            result_data = await _svc_get_item_details(item_id, user_query=user_query)
             result = {
                 "item_id": item_id,
                 "status": "ok" if result_data else "not_found",

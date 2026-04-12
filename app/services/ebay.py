@@ -534,9 +534,14 @@ async def search_items(
 # ITEM DETAILS API
 # ============================================================
 
-async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
+async def get_item_details(item_id: str, user_query: str = "") -> Optional[Dict[str, Any]]:
     """
     Fetches full details of a specific item from eBay using the getItem endpoint.
+
+    Args:
+        item_id:    eBay item ID (numeric or REST format).
+        user_query: Original user search query, used to filter similar items
+                    via LLM-as-a-Judge so only relevant products are shown.
     """
     logger.info("EBAY GET ITEM START | item_id=%s", item_id)
     
@@ -604,11 +609,20 @@ async def get_item_details(item_id: str) -> Optional[Dict[str, Any]]:
             "category_name": data.get("categoryPath", "")
         }
         
-        # Enrich with similar items
+        # Enrich with similar items, then filter via LLM judge
         try:
-            item_details["similar_items"] = await get_similar_items(item_id, item_details.get("title"))
+            raw_similar = await get_similar_items(item_id, item_details.get("title"))
+            if raw_similar and user_query:
+                from app.llm.judge import filter_similar_items_with_llm
+                item_details["similar_items"] = await filter_similar_items_with_llm(
+                    items=raw_similar,
+                    user_query=user_query,
+                    main_item_title=item_details.get("title", ""),
+                )
+            else:
+                item_details["similar_items"] = raw_similar
         except Exception as e:
-            logger.warning("Failed to fetch similar items for %s: %s", item_id, e)
+            logger.warning("Failed to fetch/filter similar items for %s: %s", item_id, e)
             item_details["similar_items"] = []
             
         return item_details
