@@ -169,65 +169,74 @@ Il modulo \texttt{app/services/nlp\_sentiment.py} implementa un sistema
 di analisi del sentiment a più livelli, con degradazione graceful
 in caso di indisponibilità delle risorse computazionali.
 
-\subsection{Approccio Principale: Embedding Semantici con Anchor Vectors}
-\label{subsec:sentiment-embedding}
+\subsection{Approccio Principale: Classificazione Multilingue con BERT for Sentiment}
+\label{subsec:sentiment-bert}
 
 La strategia principale utilizza il modello
-\textbf{all-MiniLM-L6-v2} (SentenceTransformers) per calcolare
-embedding densi a 384 dimensioni per ogni testo di feedback. Il modello
-è condiviso nell'applicazione tramite un singleton thread-safe
+\textbf{nlptown/bert-base-multilingual-uncased-sentiment}, un classificatore
+basato su BERT caricato tramite la libreria \texttt{transformers} (Hugging Face).
+Il modello è specializzato nel predire un rating (da 1 a 5 stelle) a partire da
+un testo in ingresso.
+Il modello è condiviso nell'applicazione tramite un singleton thread-safe
 (\texttt{app/services/model\_singleton.py}), caricato una sola volta
 alla prima invocazione e riutilizzato da tutti i componenti.
 
-Il punteggio di sentiment non è calcolato con un classificatore
-addestrato, ma tramite il confronto geometrico nello spazio degli
-embedding con due insiemi di \textbf{anchor vector}:
+A differenza del precedente approccio basato su anchor vector e similarità
+cosinica, il modello corrente esegue una classificazione diretta in 5 classi.
+Il label predetto (\texttt{"1 star"}, \dots, \texttt{"5 stars"}) viene poi
+mappato in un punteggio numerico nell'intervallo $[0, 1]$ secondo la seguente
+tabella:
 
-\begin{itemize}
-    \item \textbf{Anchor positivi} — frasi prototipiche di feedback
-        eccellente, in inglese e italiano (es.\ \textit{"excellent seller
-        fast shipping"}, \textit{"ottimo venditore spedizione veloce"}).
-    \item \textbf{Anchor negativi} — frasi prototipiche di feedback
-        critico (es.\ \textit{"terrible seller never again"},
-        \textit{"truffa non comprate"}).
-\end{itemize}
+\begin{table}[htbp]
+\centering
+\caption{Mapping predizione BERT → Sentiment Score ($s_{nlp}$)}
+\label{tab:bert-score-map}
+\begin{tabular}{cc}
+\hline
+\textbf{BERT Label} & \textbf{Score ($s_{nlp}$)} \\
+\hline
+5 stars & 0.95 \\
+4 stars & 0.75 \\
+3 stars & 0.50 \\
+2 stars & 0.25 \\
+1 star  & 0.05 \\
+\hline
+\end{tabular}
+\end{table}
 
-Gli anchor vector sono calcolati una sola volta e memorizzati con
-\texttt{@lru\_cache(maxsize=1)}, eliminando il costo di ricalcolo
-a ogni invocazione della pipeline.
+\subsection{Blended Sentiment: Connessione tra Testo e Rating}
+\label{subsec:sentiment-blending}
 
-Per ogni testo di feedback, il punteggio grezzo è:
+Per massimizzare la precisione e la robustezza del segnale, il sistema non si
+affida esclusivamente all'analisi NLP del testo, ma integra il \textbf{rating
+esplicito} (\texttt{Positive}, \texttt{Neutral}, \texttt{Negative}) lasciato
+dall'acquirente su eBay per quel singolo feedback.
+
+Il punteggio di sentiment finale per un singolo feedback ($s_i$) è calcolato
+come una media pesata tra il valore esplicito normalizzato ($v_{exp}$) e
+il punteggio NLP ($s_{nlp}$):
 
 \[
-    \text{raw}_i = \max_j(\text{emb}_i \cdot \text{pos}_j)
-                 - \max_k(\text{emb}_i \cdot \text{neg}_k)
+    s_i = 0.6 \cdot v_{exp} + 0.4 \cdot s_{nlp}
 \]
 
-dove \(\text{emb}_i\) è l'embedding normalizzato del testo $i$,
-\(\text{pos}_j\) e \(\text{neg}_k\) sono rispettivamente gli anchor
-positivi e negativi normalizzati. Il prodotto scalare tra vettori
-normalizzati equivale alla cosine similarity.
+dove $v_{exp}$ vale 0.90 per feedback positivi, 0.50 per quelli neutri e 0.10
+per quelli negativi. Questa tecnica di \textbf{blending} assicura che il
+giudizio testuale agisca come modulatore fine del voto principale, evitando
+che ambiguità nel linguaggio (es. sarcasmo non rilevato) portino a stime
+eccessivamente errate.
 
-Il punteggio grezzo viene poi compresso nell'intervallo $[0, 1]$
-tramite funzione sigmoide con guadagno 3, che amplifica la separazione
-attorno allo zero:
-
-\[
-    s_i = \frac{1}{1 + e^{-3 \cdot \text{raw}_i}}
-\]
-
-Il sentiment score complessivo del venditore è la media aritmetica
-degli $s_i$ calcolati sui feedback con testo valido.
+Il sentiment score complessivo del venditore $S$ (usato poi nel trust score)
+è la media aritmetica degli $s_i$ calcolati su tutti i feedback analizzati.
 
 \begin{figure}[htbp]
     \centering
     \fbox{\parbox{0.78\linewidth}{\centering\vspace{2cm}
-        \textit{[Diagramma: Testo feedback → all-MiniLM-L6-v2 →
-        Embedding [384d] → Cosine sim vs anchor+/anchor- →
-        raw score → Sigmoid(3x) → $s_i \in [0,1]$]}\\
+        \textit{[Diagramma: Testo feedback + Rating eBay → nlptown-BERT →
+        Predizione Stelle (1-5) → Mapping decimale →
+        Blended Score (60/40) → $s_i \in [0,1]$ Media]}\\
         \vspace{2cm}}}
-    \caption{Pipeline di calcolo del sentiment via anchor-based
-    cosine similarity.}
+    \caption{Pipeline di calcolo del sentiment via BERT classification e logic di blending.}
     \label{fig:sentiment-pipeline}
 \end{figure}
 
@@ -524,8 +533,8 @@ ciascuna indirizzata a un aspetto specifico del problema:
 \hline
 Fetch multi-pagina parallelo & Tutte le pagine eBay necessarie vengono richieste in simultanea con \texttt{asyncio.gather()}, riducendo la latenza di acquisizione. \\
 Fetch dati eterogenei in parallelo & Feedback, dati utente e dati store vengono acquisiti con tre chiamate API concorrenti. \\
-Embedding semantici bilingui & Il modello all-MiniLM-L6-v2 opera su testi italiani e inglesi tramite anchor vector in entrambe le lingue. \\
-Degradazione graceful & Fallback euristico a keyword in caso di indisponibilità del modello di embedding. \\
+Classificazione sentiment con BERT & Il modello \texttt{nlptown/bert-base-multilingual-uncased-sentiment} opera su testi multilingue per classificare il sentiment in stelle (1-5). \\
+Blended scoring & Il punteggio NLP viene combinato con il rating esplicito di eBay (60\% rating, 40\% NLP) per una valutazione più solida. \\
 Trust score composito & Formula ponderata con quattro segnali (ratio, sentiment, recency, confidence) calibrati sul dominio e-commerce. \\
 Decadimento esponenziale temporale & I feedback recenti pesano proporzionalmente di più nella valutazione della reputazione. \\
 Confidence adattiva & Il contributo dei dati scala con il volume disponibile, evitando stime ottimistiche su campioni piccoli. \\

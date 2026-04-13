@@ -13,7 +13,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "`n[2/2] Avvio del server FastAPI in modalita' dev..." -ForegroundColor Yellow
-.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8050
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8050
 
 Write-Host "`nServer chiuso. Arresto dei container Docker in corso..." -ForegroundColor Red
 docker-compose down
