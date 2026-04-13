@@ -50,8 +50,8 @@ async def rerank_items(
     # Configurazione esclusioni per il prompt
     excl_str = ", ".join(exclusions) if exclusions else "Nessuna"
     
-    # Selezioniamo massimo 12 item per garantire focus e profondità (Reasoning richiede token)
-    top_items = items[:12]
+    # Selezioniamo massimo 20 item per garantire focus e profondità (Reasoning richiede token)
+    top_items = items[:20]
     items_list_parts = []
     
     for i, it in enumerate(top_items):
@@ -161,8 +161,8 @@ Dati in Input:
                 rel_score = -0.5 if is_part_cat else 0.5
                 val_score = 0.5
         else:
-            # Item oltre i primi 15
-            rel_score = 0.1
+            # Item oltre i primi 20
+            rel_score = 0.5
             val_score = 0.5
             motivation = "Non valutato profondamente"
             

@@ -536,10 +536,11 @@ export default function MarketTrendsCard({ data }: MarketTrendsCardProps) {
                     label={q}
                     size="small"
                     variant="outlined"
+                    onClick={() => window.dispatchEvent(new CustomEvent("send-chat", { detail: q }))}
                     sx={{
                       borderRadius: 1.5, fontSize: "11px", height: "24px",
                       color: "var(--text-primary)", borderColor: "var(--border-color)", bgcolor: "var(--bg-primary)",
-                      "&:hover": { bgcolor: "var(--bg-secondary)" },
+                      "&:hover": { bgcolor: "var(--bg-secondary)", borderColor: "var(--brand-primary)" },
                     }}
                   />
                 ))}

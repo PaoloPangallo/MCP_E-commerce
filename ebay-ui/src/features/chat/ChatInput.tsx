@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import {
   Box,
   IconButton,
@@ -28,12 +28,26 @@ import StarsIcon from "@mui/icons-material/Stars"
 import TravelExploreIcon from "@mui/icons-material/TravelExplore"
 import MailOutlineIcon from "@mui/icons-material/MailOutline"
 
-
 interface Props {
   onSend: (value: string, image?: string) => void
   disabled?: boolean
   placeholder?: string
 }
+
+// ─── Token helpers ────────────────────────────────────────────────────────────
+
+/** OpenAI vision tile-based token cost for an image of given dimensions. */
+function calcImageTokens(width: number, height: number): number {
+  const tiles = Math.ceil(width / 512) * Math.ceil(height / 512)
+  return Math.min(tiles * 765, 2000)
+}
+
+/** Estimate text tokens using the standard ~3.5 chars/token heuristic. */
+function calcTextTokens(text: string): number {
+  return Math.round(text.length / 3.5)
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ChatInput({
   onSend,
@@ -42,7 +56,9 @@ export default function ChatInput({
 }: Props) {
   const [value, setValue] = useState("")
   const [image, setImage] = useState<string | null>(null)
+  const [imageTokens, setImageTokens] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const updateLocalSettings = useSettingsStore((s) => s.updateLocalSettings)
 
@@ -61,6 +77,51 @@ export default function ChatInput({
   const [isContactSellerModalOpen, setIsContactSellerModalOpen] = useState(false)
   const [contactSellerName, setContactSellerName] = useState("")
 
+  // ─── Image processing ──────────────────────────────────────────────────────
+
+  const processImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return
+    setIsProcessing(true)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      setImage(dataUrl)
+      // Measure real pixel dimensions for accurate token estimate
+      const img = new Image()
+      img.onload = () => {
+        setImageTokens(calcImageTokens(img.naturalWidth, img.naturalHeight))
+        setIsProcessing(false)
+      }
+      img.onerror = () => setIsProcessing(false)
+      img.src = dataUrl
+    }
+    reader.onerror = () => setIsProcessing(false)
+    reader.readAsDataURL(file)
+  }, [])
+
+  // ─── Paste (Ctrl+V) ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault()
+            processImageFile(file)
+            return
+          }
+        }
+      }
+    }
+    document.addEventListener("paste", handlePaste)
+    return () => document.removeEventListener("paste", handlePaste)
+  }, [processImageFile])
+
+  // ─── Handlers ──────────────────────────────────────────────────────────────
+
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -75,6 +136,7 @@ export default function ChatInput({
     onSend(trimmed, image || undefined)
     setValue("")
     setImage(null)
+    setImageTokens(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -89,17 +151,7 @@ export default function ChatInput({
     handleMenuClose()
     const file = e.target.files?.[0]
     if (!file) return
-
-    setIsProcessing(true)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      setImage(event.target?.result as string)
-      setIsProcessing(false)
-    }
-    reader.onerror = () => {
-      setIsProcessing(false)
-    }
-    reader.readAsDataURL(file)
+    processImageFile(file)
     e.target.value = ""
   }
 
@@ -150,10 +202,41 @@ export default function ChatInput({
     if (value.trim() === seller) setValue("")
   }
 
+  // ─── Drag & drop ───────────────────────────────────────────────────────────
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the outer Box entirely (not a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) processImageFile(file)
+  }
+
+  // ─── Token display ─────────────────────────────────────────────────────────
+
+  const textTokens = calcTextTokens(value)
+  const totalTokens = textTokens + (imageTokens ?? 0)
+  const showTokens = !!value.trim() || !!image
+
   const canSend = (!!value.trim() || !!image) && !disabled && !isProcessing
 
   return (
-    <Box>
+    <Box
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <input
         type="file"
         accept="image/*"
@@ -171,7 +254,7 @@ export default function ChatInput({
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         PaperProps={{
           sx: {
-mt: -1,
+            mt: -1,
             boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
             border: '1px solid var(--border-color)',
             bgcolor: 'var(--bg-primary)',
@@ -185,22 +268,22 @@ mt: -1,
           <ListItemIcon sx={{ color: '#64748b' }}>
             <AddPhotoAlternateIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText 
-            primary="Aggiungi foto e file" 
-            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: 'inherit' }} 
+          <ListItemText
+            primary="Aggiungi foto e file"
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: 'inherit' }}
           />
         </MenuItem>
-        
-        <MenuItem 
-          onClick={handleDealsClick} 
+
+        <MenuItem
+          onClick={handleDealsClick}
           sx={{ py: 1.5, px: 2 }}
         >
           <ListItemIcon sx={{ color: '#ef4444' }}>
             <SellIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText 
-            primary="eBay Deals" 
-            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }} 
+          <ListItemText
+            primary="eBay Deals"
+            primaryTypographyProps={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}
           />
         </MenuItem>
 
@@ -235,8 +318,6 @@ mt: -1,
         </MenuItem>
       </Menu>
 
-
-
       {/* Image Preview */}
       {image && (
         <Box sx={{ px: 2, mb: 1, display: "flex" }}>
@@ -258,7 +339,7 @@ mt: -1,
             />
             <IconButton
               size="small"
-              onClick={() => setImage(null)}
+              onClick={() => { setImage(null); setImageTokens(null) }}
               sx={{
                 position: "absolute",
                 top: 2,
@@ -284,10 +365,12 @@ mt: -1,
           py: 1,
           borderRadius: "16px",
           bgcolor: "var(--bg-primary)",
-          border: "1px solid var(--border-color)",
+          border: isDragging
+            ? "2px dashed var(--brand-primary)"
+            : "1px solid var(--border-color)",
           transition: "all 0.2s ease",
           "&:focus-within": {
-            borderColor: "var(--text-secondary)",
+            borderColor: isDragging ? "var(--brand-primary)" : "var(--text-secondary)",
           }
         }}
       >
@@ -298,7 +381,11 @@ mt: -1,
             mb: 0.25,
             color: "var(--text-secondary)",
             bgcolor: openMenu ? "var(--bg-secondary)" : "transparent",
-            "&:hover": { color: "var(--text-primary)", bgcolor: "var(--bg-secondary)" }
+            "&:hover": { color: "var(--text-primary)", bgcolor: "var(--bg-secondary)" },
+            "&.Mui-disabled": {
+              color: "var(--text-secondary)",
+              opacity: 0.5
+            }
           }}
         >
           {isProcessing ? <CircularProgress size={16} color="inherit" /> : <AddIcon sx={{ fontSize: 24 }} />}
@@ -311,7 +398,7 @@ mt: -1,
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={isDragging ? "Rilascia l'immagine qui…" : placeholder}
           disabled={disabled}
           sx={{
             px: 1,
@@ -321,6 +408,7 @@ mt: -1,
             lineHeight: 1.65,
             color: "var(--text-primary)",
             "& textarea": { resize: "none" },
+            "& textarea:disabled": { WebkitTextFillColor: "var(--text-secondary)", color: "var(--text-secondary)" },
             "& textarea::placeholder": { color: "var(--text-secondary)", opacity: 0.5 }
           }}
         />
@@ -350,22 +438,63 @@ mt: -1,
         </IconButton>
       </Box>
 
-      <Typography
+      {/* Footer: hint + token counter */}
+      <Box
         sx={{
           mt: 0.75,
           px: 1.75,
-          fontSize: 11,
-          color: "var(--text-secondary)",
-          opacity: 0.5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           userSelect: "none"
         }}
       >
-        Enter per inviare · Shift + Enter per andare a capo
-      </Typography>
+        <Typography
+          sx={{
+            fontSize: 11,
+            color: "var(--text-secondary)",
+            opacity: 0.5,
+          }}
+        >
+          Enter per inviare · Shift + Enter per andare a capo
+        </Typography>
+
+        {showTokens && (
+          <Typography
+            sx={{
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              opacity: 0.6,
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              fontVariantNumeric: "tabular-nums"
+            }}
+          >
+            ~{totalTokens} tok
+            {imageTokens !== null && (
+              <Box
+                component="span"
+                sx={{
+                  ml: 0.25,
+                  px: 0.75,
+                  py: 0.1,
+                  borderRadius: "4px",
+                  bgcolor: "var(--bg-secondary)",
+                  fontSize: 10,
+                  color: "var(--text-secondary)"
+                }}
+              >
+                🖼 +{imageTokens}
+              </Box>
+            )}
+          </Typography>
+        )}
+      </Box>
 
       {/* Deals Category Modal */}
-      <Dialog 
-        open={isCategoryModalOpen} 
+      <Dialog
+        open={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
         maxWidth="sm"
         fullWidth
@@ -379,10 +508,10 @@ mt: -1,
           }
         }}
       >
-        <DialogTitle sx={{ 
-          pt: 4, 
-          pb: 1.5, 
-          px: 4, 
+        <DialogTitle sx={{
+          pt: 4,
+          pb: 1.5,
+          px: 4,
           color: "var(--text-primary)",
           display: "flex",
           flexDirection: "column",
@@ -398,11 +527,11 @@ mt: -1,
         </DialogTitle>
 
         <DialogContent sx={{ px: 4, pb: 4, pt: 1 }}>
-          <Box sx={{ 
-            display: "grid", 
-            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, 
-            gap: 2, 
-            mt: 2 
+          <Box sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+            gap: 2,
+            mt: 2
           }}>
             {EBAY_CATEGORIES.map((cat) => (
               <Paper
@@ -446,8 +575,8 @@ mt: -1,
       </Dialog>
 
       {/* Playwright Query Modal */}
-      <Dialog 
-        open={isPlaywrightModalOpen} 
+      <Dialog
+        open={isPlaywrightModalOpen}
         onClose={() => setIsPlaywrightModalOpen(false)}
         maxWidth="xs"
         fullWidth
@@ -462,10 +591,10 @@ mt: -1,
           }
         }}
       >
-        <DialogTitle sx={{ 
-          pt: 3, 
-          pb: 1, 
-          px: 3, 
+        <DialogTitle sx={{
+          pt: 3,
+          pb: 1,
+          px: 3,
           color: "var(--text-primary)",
           display: "flex",
           flexDirection: "column",

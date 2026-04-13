@@ -14,12 +14,8 @@ import {
   MenuItem,
   CircularProgress,
   Divider,
-  Chip,
 } from "@mui/material"
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
-import InsightsIcon from "@mui/icons-material/Insights"
-import LayersIcon from "@mui/icons-material/Layers"
-import HistoryIcon from "@mui/icons-material/History"
+
 import DownloadIcon from "@mui/icons-material/Download"
 // @ts-ignore
 import html2pdf from "html2pdf.js"
@@ -74,43 +70,7 @@ export default function SettingsModal() {
     html2pdf().set(opt).from(element).save()
   }
 
-  // Helpers for AI labels
-  const getConditionLabel = (raw?: string) => {
-    if (!raw) return "Nessuna preferenza rilevata"
-    // raw è formato "new:3,used:1" -> prendiamo il primo
-    const match = raw.split(",")[0].split(":")[0]
-    const labels: Record<string, string> = {
-      new: "Preferisci prodotti Nuovi",
-      used: "Preferisci prodotti Usati",
-      refurbished: "Preferisci prodotti Ricondizionati"
-    }
-    return labels[match] || match
-  }
 
-  const getDepthLabel = (depth?: string) => {
-    const labels: Record<string, { title: string, desc: string }> = {
-      browser: { title: "Browser", desc: "Stai esplorando le basi" },
-      researcher: { title: "Ricercatore", desc: "Analizzi dettagli e confronti" },
-      power_buyer: { title: "Esperto", desc: "Interagisci attivamente con i venditori" }
-    }
-    return labels[depth || "browser"] || labels.browser
-  }
-
-  const getTopCategories = (raw?: string) => {
-    if (!raw) return []
-    try {
-      const data = JSON.parse(raw)
-      return Object.entries(data)
-        .sort((a: any, b: any) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([name]) => name)
-    } catch {
-      return []
-    }
-  }
-
-  const topCategories = getTopCategories(localSettings.categoryAffinities)
-  const depthInfo = getDepthLabel(localSettings.interactionDepth)
 
   return (
     <Dialog 
@@ -129,7 +89,8 @@ export default function SettingsModal() {
           bgcolor: "var(--bg-primary)",
           backgroundImage: 'none',
           color: "var(--text-primary)",
-          boxShadow: '0 24px 48px rgba(0,0,0,0.2), 0 0 0 1px var(--border-color)',
+          border: '1px solid var(--border-color)',
+          boxShadow: '0px 24px 48px rgba(0,0,0,0.25)',
           overflow: 'hidden'
         }
       }}
@@ -165,7 +126,7 @@ export default function SettingsModal() {
               value={localSettings.conversationTone}
               onChange={(e) => setLocalSettings({ ...localSettings, conversationTone: e.target.value as any })}
               sx={{ 
-                bgcolor: 'var(--bg-secondary)', 
+                bgcolor: 'transparent', 
                 color: 'var(--text-primary)',
                 '.MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border-color)' } 
               }}
@@ -194,8 +155,9 @@ export default function SettingsModal() {
             onChange={(e) => setLocalSettings({ ...localSettings, customInstructions: e.target.value })}
             InputProps={{
               sx: {
-                bgcolor: 'var(--bg-secondary)',
+                bgcolor: 'transparent',
                 color: 'var(--text-primary)',
+                '& .MuiInputBase-input': { color: 'var(--text-primary)' },
                 '& fieldset': { borderColor: 'var(--border-color)' }
               }
             }}
@@ -242,78 +204,7 @@ export default function SettingsModal() {
             />
           </Box>
         </Box>
-        <Divider sx={{ borderColor: 'var(--border-color)' }} />
 
-        {/* AI LEARNED PROFILE */}
-        <Box 
-          sx={{ 
-            p: 2, 
-            borderRadius: 3, 
-            bgcolor: 'rgba(139, 92, 246, 0.05)', 
-            border: '1px solid rgba(139, 92, 246, 0.15)',
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-            <AutoAwesomeIcon sx={{ fontSize: 18, color: '#8b5cf6' }} />
-            <Typography fontWeight={700} fontSize={14} color="#8b5cf6" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Profilo Appreso dall'AI
-            </Typography>
-          </Box>
-          <Typography variant="body2" color="var(--text-secondary)" mb={2}>
-            L'agente impara dalle tue interazioni per offrirti risultati più rilevanti.
-          </Typography>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Condition */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <HistoryIcon sx={{ fontSize: 20, color: 'var(--text-secondary)', opacity: 0.7 }} />
-              <Box>
-                <Typography fontSize={13} fontWeight={600}>{getConditionLabel(localSettings.conditionPreference)}</Typography>
-                <Typography fontSize={11} color="var(--text-secondary)">Basato sui tuoi click e filtri</Typography>
-              </Box>
-            </Box>
-
-            {/* Depth / Engagement */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <InsightsIcon sx={{ fontSize: 20, color: 'var(--text-secondary)', opacity: 0.7 }} />
-              <Box>
-                <Typography fontSize={13} fontWeight={600}>Livello: {depthInfo.title}</Typography>
-                <Typography fontSize={11} color="var(--text-secondary)">{depthInfo.desc}</Typography>
-              </Box>
-            </Box>
-
-            {/* Categories */}
-            {topCategories.length > 0 && (
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                <LayersIcon sx={{ fontSize: 20, color: 'var(--text-secondary)', opacity: 0.7, mt: 0.5 }} />
-                <Box>
-                  <Typography fontSize={13} fontWeight={600} mb={0.5}>Interessi Principali</Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {topCategories.map((cat, i) => (
-                      <Chip 
-                        key={i} 
-                        label={cat} 
-                        size="small" 
-                        sx={{ 
-                          height: 18, 
-                          fontSize: 9, 
-                          fontWeight: 600,
-                          bgcolor: 'var(--bg-secondary)',
-                          color: 'var(--text-primary)',
-                          border: '1px solid var(--border-color)'
-                        }} 
-                      />
-                    ))}
-                  </Box>
-                </Box>
-              </Box>
-            )}
-          </Box>
-        </Box>
-
-        <Divider sx={{ borderColor: 'var(--border-color)' }} />
 
         {/* MONDO MCP */}
         <Box>
@@ -386,7 +277,7 @@ export default function SettingsModal() {
           disabled={isSaving}
           sx={{
             bgcolor: "var(--brand-primary)", 
-            color: "#fff", 
+            color: "var(--bg-primary)", 
             textTransform: "none",
             fontWeight: 600,
             "&:hover": { bgcolor: "var(--brand-primary)", opacity: 0.9 }

@@ -291,9 +291,11 @@ export function WishlistToggleButton({
         size={size}
         onClick={toggle}
         sx={{
-          color: saved ? "#ef4444" : "var(--text-secondary)",
+          color: saved ? "#ef4444" : "var(--text-primary)",
+          bgcolor: "var(--bg-primary)",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
           transition: "all 0.2s ease",
-          "&:hover": { color: "#ef4444", transform: "scale(1.1)" },
+          "&:hover": { color: "#ef4444", transform: "scale(1.1)", bgcolor: "var(--bg-secondary)" },
           p: 0.5
         }}
       >

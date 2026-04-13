@@ -57,25 +57,52 @@ export default function ChatPage() {
     const container = scrollContainerRef.current
     if (!container) return
 
-    // Se l'utente ha scrollato in su, non forziamo l'aggancio in basso per non disturbarlo
-    if (running && !isAtBottomRef.current) return
+    // Se l'utente ha scrollato in su, non forziamo l'aggancio in basso per non disturbarlo.
+    // TUTTAVIA: se lo stato è appena passato da "non in esecuzione" a "in esecuzione" (loadingQuery non null),
+    // allora forziamo lo scroll perché scatta un nuovo turno.
+    if (running && !isAtBottomRef.current && !loadingQuery) return
 
-    isAutoScrollingRef.current = true
-    
-    // Lo scroll "smooth" in questa fase causa sfasamenti visivi (jittering) e trigger involontari
-    // degli eventi di scroll che rovinano la logica sticky. Usare "auto" per pinning perfetto stile ChatGPT.
-    container.scrollTo({ top: container.scrollHeight, behavior: "auto" })
-    
-    const timeoutId = setTimeout(() => {
-      isAutoScrollingRef.current = false
-    }, 50)
+    const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+      isAutoScrollingRef.current = true
+      // Use scrollIntoView on the bottomRef for maximum reliability across browsers
+      bottomRef.current?.scrollIntoView({ behavior })
+      
+      // Fallback to manual scroll on container if bottomRef fails
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior })
+      }
 
-    return () => clearTimeout(timeoutId)
-  }, [chat, steps, running, loadingQuery, finalPayload?.finalAnswer])
+      setTimeout(() => {
+        isAutoScrollingRef.current = false
+      }, 100)
+    }
+
+    scrollToBottom("auto")
+    
+    // Se stiamo iniziando una query (loadingQuery), facciamo un secondo tentativo dopo che il DOM si è assestato
+    if (loadingQuery || running) {
+       const t = setTimeout(() => scrollToBottom("smooth"), 100)
+       return () => clearTimeout(t)
+    }
+  }, [chat, steps, running, loadingQuery, finalPayload?.finalAnswer, scrollContainerRef])
 
   useEffect(() => {
     const handleSendChat = (e: CustomEvent<string>) => {
       handleSend(e.detail)
+      
+      // Force the at-bottom state to true so the auto-scroll effect doesn't skip
+      isAtBottomRef.current = true
+      
+      // Immediate jump to current bottom
+      bottomRef.current?.scrollIntoView({ behavior: "auto" })
+      
+      // Progressive scrolls to catch incoming thinking pills or content expansion
+      const attempts = [100, 300, 600, 1000]
+      attempts.forEach(ms => {
+        setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, ms)
+      })
     }
     window.addEventListener("send-chat", handleSendChat as EventListener)
     return () => window.removeEventListener("send-chat", handleSendChat as EventListener)

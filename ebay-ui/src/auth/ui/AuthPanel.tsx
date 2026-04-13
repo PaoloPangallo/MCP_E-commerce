@@ -46,7 +46,7 @@ export default function AuthPanel() {
                 width: 36,
                 height: 36,
                 bgcolor: "var(--accent-primary)",
-                color: "#fff",
+                color: "var(--bg-primary)",
                 fontWeight: 700,
                 fontSize: 12,
                 borderRadius: "10px",
@@ -86,7 +86,7 @@ export default function AuthPanel() {
                 width: 34,
                 height: 34,
                 bgcolor: "var(--accent-primary)",
-                color: "#fff",
+                color: "var(--bg-primary)",
                 fontWeight: 700,
                 fontSize: 12,
                 borderRadius: "10px"

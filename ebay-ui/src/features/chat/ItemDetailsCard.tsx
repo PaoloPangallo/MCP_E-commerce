@@ -15,6 +15,7 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined"
 import ImageIcon from "@mui/icons-material/Image"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
+import AnalyticsIcon from "@mui/icons-material/Analytics"
 import DOMPurify from "dompurify"
 import type { ItemDetailsData } from "../search/types"
 import { WishlistToggleButton } from "./WishlistPanel"
@@ -51,8 +52,11 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
             sx={{
                 width: "100%",
                 borderRadius: "16px",
-                border: "1px solid var(--border-color)",
+                border: "1px solid var(--border-color) !important",
+                borderColor: "var(--border-color) !important",
+                boxShadow: "none !important",
                 bgcolor: "var(--bg-primary)",
+                backgroundImage: "none",
                 overflow: "hidden",
                 mt: 1,
                 mb: 2
@@ -87,7 +91,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                 sx={{ bgcolor: "var(--bg-secondary)", color: "var(--text-primary)", fontWeight: 600, border: "1px solid var(--border-color)" }}
                             />
                         )}
-                        {brand && <Chip label={brand} size="small" variant="outlined" sx={{ fontWeight: 500 }} />}
+                        {brand && <Chip label={brand} size="small" variant="outlined" sx={{ fontWeight: 500, color: "var(--text-primary)", borderColor: "var(--border-color)" }} />}
                     </Box>
 
                 {/* Hero Image & Gallery */}
@@ -150,7 +154,38 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                     </Button>
                 )}
 
-                <Divider sx={{ my: 3 }} />
+                {/* Market Analysis Button */}
+                <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<AnalyticsIcon />}
+                    onClick={() =>
+                        window.dispatchEvent(
+                            new CustomEvent("send-chat", {
+                                detail: `Analisi di mercato e storico prezzi per ${title}`
+                            })
+                        )
+                    }
+                    sx={{
+                        py: 1.2,
+                        mt: item_url ? 1 : 0,
+                        borderRadius: 3,
+                        fontWeight: 700,
+                        textTransform: "none",
+                        boxShadow: "none",
+                        borderColor: "var(--border-color)",
+                        color: "var(--text-primary)",
+                        "&:hover": {
+                            borderColor: "var(--text-secondary)",
+                            bgcolor: "var(--bg-secondary)",
+                            boxShadow: "none"
+                        }
+                    }}
+                >
+                    Analisi di Mercato
+                </Button>
+
+                <Divider sx={{ my: 3, borderColor: "var(--border-color) !important" }} />
 
                 {/* Technical Specs */}
                 {specifics.length > 0 && (
@@ -205,8 +240,11 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                         sx={{
                             "&:before": { display: "none" },
                             bgcolor: "var(--bg-primary)",
+                            backgroundImage: "none",
                             borderRadius: "16px !important",
-                            border: "1px solid var(--border-color)",
+                            border: "1px solid var(--border-color) !important",
+                            borderColor: "var(--border-color) !important",
+                            boxShadow: "none !important",
                             mb: 2
                         }}
                     >
@@ -271,7 +309,11 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                 <Accordion
                     elevation={0}
                     sx={{
-                        borderTop: "1px solid var(--border-color)",
+                        bgcolor: "transparent",
+                        backgroundImage: "none",
+                        borderTop: "1px solid var(--border-color) !important",
+                        borderColor: "var(--border-color) !important",
+                        boxShadow: "none !important",
                         "&:before": { display: "none" }
                     }}
                 >
@@ -311,6 +353,8 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                         maxWidth: 160,
                                         p: 1.5,
                                         borderRadius: 3,
+                                        bgcolor: "transparent",
+                                        backgroundImage: "none",
                                         border: "1px solid var(--border-color)",
                                         textDecoration: "none",
                                         transition: "transform 0.2s, background-color 0.2s",
@@ -320,7 +364,7 @@ export default function ItemDetailsCard({ data }: ItemDetailsCardProps) {
                                         }
                                     }}
                                 >
-                                    <Box sx={{ width: "100%", height: 100, mb: 1.5, borderRadius: 2, overflow: "hidden", bgcolor: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <Box sx={{ width: "100%", height: 100, mb: 1.5, borderRadius: 2, overflow: "hidden", bgcolor: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         {item.image_url ? (
                                             <Box component="img" src={item.image_url} alt={item.title} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
                                         ) : (

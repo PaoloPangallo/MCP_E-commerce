@@ -875,6 +875,7 @@ async def run_search_pipeline(
 
     return {
         "parsed_query": parsed,
+        "parsed_product": parsed.get("product"),
         "ebay_query_used": ebay_query_used,
         "results_count": len(results_out),
         "saved_new_count": saved_count,

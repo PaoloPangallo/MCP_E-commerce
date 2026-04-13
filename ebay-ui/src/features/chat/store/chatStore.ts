@@ -47,11 +47,12 @@ type ChatStore = {
   clearMemory: () => Promise<void> // Clears MCP redis memory and resets current session
 
   setLoadingQuery: (query: string | null) => void
+  setSessionTitle: (title: string) => void
   appendMessage: (msg: AgentMessage) => void
   appendAssistantMessage: (content: string) => void
   appendSearchBlock: (search: SearchBlock) => void
   setCachedSearch: (key: string, value: SearchBlock) => void
-  saveAgentResponse: (query: string, payload: FinalPayload) => void
+  saveAgentResponse: (query: string, payload: FinalPayload, extractedTitle?: string) => void
 }
 
 const createNewSession = (title: string = "Nuova chat"): ChatSession => ({
@@ -131,6 +132,23 @@ export const useChatStore = create<ChatStore>()(
 
       setLoadingQuery: (query) => set({ loadingQuery: query }),
 
+      // Update the active session title only if it hasn't been set by a real search yet.
+      // This is called separately from saveAgentResponse to keep cache keys intact.
+      setSessionTitle: (title) => set((state) => {
+        const sid = state.activeSessionId || (state.sessions[0]?.id)
+        if (!sid) return state
+        return {
+          sessions: state.sessions.map(s => {
+            if (s.id !== sid) return s
+            // Only update if no search block exists yet (first search of this session)
+            const hasSearch = s.chat.some(e => e.type === "search")
+            if (hasSearch) return s
+            const trimmed = title.length > 35 ? title.slice(0, 35) + "\u2026" : title
+            return { ...s, title: trimmed }
+          })
+        }
+      }),
+
       appendMessage: (msg) => set((state) => {
         const sid = state.activeSessionId || (state.sessions[0]?.id)
         if (!sid) return state
@@ -176,7 +194,7 @@ export const useChatStore = create<ChatStore>()(
           cache: { ...state.cache, [key]: value }
         })),
 
-      saveAgentResponse: (query, payload) => set((state) => {
+    saveAgentResponse: (query: string, payload: FinalPayload, extractedTitle?: string) => set((state) => {
         const sid = state.activeSessionId || (state.sessions[0]?.id)
         if (!sid) return state
 
@@ -213,19 +231,35 @@ export const useChatStore = create<ChatStore>()(
               return s
             }
 
+            const hasSearchBefore = nextChat.some(entry => entry.type === "search")
+
             if (hasStructuredBlock) {
               nextChat.push({ type: "search", search: newSearch })
-              if (newSearch.final_answer && newSearch.final_answer !== "Ho completato l’analisi della richiesta.") {
-                nextChat.push({ type: "message", msg: { role: "assistant", content: newSearch.final_answer } })
+              if (payload.finalAnswer && payload.finalAnswer !== "Ho completato l’analisi della richiesta.") {
+                nextChat.push({ type: "message", msg: { role: "assistant", content: payload.finalAnswer } })
               }
-            } else {
-              nextChat.push({ type: "message", msg: { role: "assistant", content: newSearch.final_answer ?? "Ho completato l’analisi della richiesta." } })
+            } else if (payload.finalAnswer) {
+              nextChat.push({ type: "message", msg: { role: "assistant", content: payload.finalAnswer } })
             }
 
-            return { ...s, chat: nextChat }
+            const rawComputedTitle = 
+              payload.finalData?.search?.parsed_product || 
+              payload.finalData?.search?.query || 
+              payload.finalData?.search?.ebay_query_used || 
+              extractedTitle;
+              
+            let finalTitle = s.title;
+            if (!hasSearchBefore && rawComputedTitle) {
+              // Proper casing for the title
+              const words = rawComputedTitle.toLowerCase().split(' ');
+              const capitalized = words.map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+              finalTitle = capitalized.length > 35 ? capitalized.slice(0, 35) + "\u2026" : capitalized;
+            }
+
+            return { ...s, chat: nextChat, title: finalTitle }
           })
         }
-      })
+      }),
     }),
     {
       name: "ebay-gpt-sessions",

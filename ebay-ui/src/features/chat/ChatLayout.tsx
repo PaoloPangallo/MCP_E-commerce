@@ -11,8 +11,6 @@ import {
   useMediaQuery,
   Tooltip,
   InputBase,
-  Snackbar,
-  Alert,
   Divider,
   Badge,
 } from "@mui/material"
@@ -28,7 +26,6 @@ import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import SearchIcon from "@mui/icons-material/Search"
-import ShareIcon from "@mui/icons-material/Share"
 import SettingsIcon from "@mui/icons-material/Settings"
 import FavoriteIcon from "@mui/icons-material/Favorite"
 
@@ -194,8 +191,6 @@ export default function ChatLayout({
   
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [snackbarOpen, setSnackbarOpen] = useState(false)
-  const [snackbarMsg, setSnackbarMsg] = useState("")
   const [wishlistOpen, setWishlistOpen] = useState(false)
 
   const wishlistItems = useWishlistStore((s) => s.items)
@@ -250,11 +245,6 @@ export default function ChatLayout({
     if (isMobile) setMobileOpen(false)
   }
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href)
-    setSnackbarMsg("Link della chat copiato negli appunti!")
-    setSnackbarOpen(true)
-  }
     const handleClearMemory = () => {
     if (
       confirm(
@@ -571,11 +561,7 @@ export default function ChatLayout({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Condividi">
-              <IconButton size="small" sx={{ color: "var(--text-secondary)" }} onClick={handleShare}>
-                <ShareIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
+
 
           </Box>
         </Box>
@@ -741,17 +727,7 @@ export default function ChatLayout({
         </Box>
       )}
 
-      {/* SNACKBAR FEEDBACK */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity="success" sx={{ width: '100%' }}>
-          {snackbarMsg}
-        </Alert>
-      </Snackbar>
+
 
       <SettingsModal />
 
