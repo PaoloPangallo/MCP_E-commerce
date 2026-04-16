@@ -102,22 +102,39 @@ class BrowserManager:
             needs_launch = True
 
         if needs_launch:
+            import os
             logger.info("Launching browser (visible=%s)...", self._visible)
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
+            
+            # Utilizziamo un profilo persistente locale per mantenere il login salvato tra un'esecuzione e l'altra
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            user_data_dir = os.path.join(base_dir, "playwright_profile")
+            
+            self.context = await self.playwright.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
                 headless=not self._visible,
-                args=["--no-sandbox", "--disable-dev-shm-usage"]
-            )
-            self.context = await self.browser.new_context(
+                channel="chrome",  # Usare il vero Chrome locale elude i blocchi antibot molto meglio di Chromium Vanilla
                 viewport={"width": 1280, "height": 800},
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/123.0.0.0 Safari/537.36"
                 ),
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled"
+                ]
             )
-            self.page = await self.context.new_page()
-            logger.info("Browser launched and page created")
+            
+            # launch_persistent_context restituisce un context. La pagina va presa da quelle aperte di default.
+            self.browser = None  # Non c'è oggetto browser distinto nel context persistente
+            if self.context.pages:
+                self.page = self.context.pages[0]
+            else:
+                self.page = await self.context.new_page()
+                
+            logger.info("Browser launched and page created (Persistent Profile)")
         
         await self._inject_visual_tools()
         self._reset_timer()

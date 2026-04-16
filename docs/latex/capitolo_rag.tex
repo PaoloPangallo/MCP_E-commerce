@@ -1,0 +1,127 @@
+% =============================================================
+% Capitolo: Retrieval-Augmented Generation (RAG) e Memoria Globale
+% Progetto: MCP_ECOM — Agente e-commerce basato su MCP
+% =============================================================
+
+\chapter{Architettura RAG e Sistema di Memoria Globale}
+\label{chap:rag}
+
+% ─────────────────────────────────────────────────────────────
+\section{Introduzione al Modello RAG nell'E-commerce}
+\label{sec:rag-intro}
+% ─────────────────────────────────────────────────────────────
+
+Nel contesto del progetto MCP\_ECOM, l'architettura \textbf{RAG (Retrieval-Augmented Generation)} svolge una funzione cruciale: superare i limiti delle interrogazioni puramente \textit{live} alle API di eBay, dotando l'agente di una \textbf{Memoria Globale} persistente.
+
+Nelle classiche pipeline e-commerce, ogni ricerca è effimera: terminata l'elaborazione, i dati vengono scartati e l'integrazione di contesto storico è tipicamente nulla. Per un agente decisionale autonomo, invece, è fondamentale poter ricordare e recuperare prodotti visti in passato, specialmente articoli interessanti (ma magari sfuggiti alle query attuali) o profili di venditori sui quali si è già calcolata l'affidabilità. 
+
+Il sistema RAG si fa carico di:
+\begin{itemize}
+    \item \textbf{Ingestion (Indicizzazione)}: Memorizzare i metadati e i contenuti semantici dei prodotti visualizzati in un Vector Database locale.
+    \item \textbf{Retrieval (Recupero)}: Identificare e pescare asincronamente risultati pregressi pertinenti alla nuova richiesta dell'utente tramite vettori densi e sparsi.
+    \item \textbf{Merging \& Reranking}: Fondere le risposte dell'API in tempo reale (Live eBay) con i ricordi semantici, applicando controlli di aderenza ai vincoli e bonus di rilevanza.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────
+\section{Architettura Ibrida: Qdrant e FastEmbed}
+\label{sec:rag-arch}
+% ─────────────────────────────────────────────────────────────
+
+Il nucleo di memorizzazione semantica del RAG è appoggiato a \textbf{Qdrant}, un Vector Search Engine ottimizzato, in esecuzione in modalità file-system locale (\texttt{path="qdrant\_storage"}).
+
+Per massimizzare la precisione del recupero, il sistema adotta un modello di \textbf{Hybrid Search} (Ricerca Ibrida), affiancando il tradizionale embedding denso all'embedding sparso basato su frequenze documentali (BM25 locale).
+
+\subsection{Dense Embedding vs Sparse Embedding}
+\label{subsec:rag-embeddings}
+
+Ogni articolo inserito in memoria attraversa una duplice codifica:
+\begin{description}
+    \item[Vettori Densi (Dense Vectors)] Rappresentano il significato semantico latente. Utilizzano un modello \textit{Sentence Transformer} locale con dimensione vettoriale $d = 384$. La misurazione della similarità avviene tramite distanza coseno. Ottimi per gestire sinonimi o concetti latenti.
+    \item[Vettori Sparsi (Sparse Vectors)] Implementati tramite la libreria \texttt{fastembed} con modello \texttt{Qdrant/bm25}. Catturano l'esatta presenza sintattica delle parole e la loro rilevanza tramite ponderazione \textit{Term Frequency - Inverse Document Frequency (TF-IDF)}. Sono eccellenti per intercettare termini specifici, come codici prodotto, esatti nomi di brand o numeri di modello (es. "GTX 1660").
+\end{description}
+
+\subsection{Reciprocal Rank Fusion (RRF)}
+\label{subsec:rag-rrf}
+
+La fase di recupero (query) sfrutta nativamente la pipeline \texttt{Prefetch} di Qdrant unita al meccanismo \textbf{Reciprocal Rank Fusion (RRF)}. Piuttosto che calcolare medie ponderate tra gli score di natura differente, l'RRF riordina basandosi sui rank di ciascuna coda:
+\begin{equation}
+    RRFScore(d) = \sum_{q \in Queries} \frac{1}{k + rank(d, q)}
+\end{equation}
+Qdrant esegue un prefetch sia sui vettori densi (limite empirico configurato a $2k$) sia sui vettori sparsi (limite $2k$), fondendo le due distribuzioni prima di restituire il set top-$k$ prefiltrato.
+
+% ─────────────────────────────────────────────────────────────
+\section{Ingestion: Costruzione del Paylod Documentale}
+\label{sec:rag-ingestion}
+% ─────────────────────────────────────────────────────────────
+
+L'indicizzazione degli articoli (\textit{index\_search\_items}) avviene proattivamente durante lo scraping o l'estrazione dai risultati d'asta. 
+Affinché i calcoli semantici producano vettori densamente informativi, è essenziale che il testo di input aggreghi i metadati essenziali dell'articolo (\textit{Title Enrichement}).
+
+\begin{verbatim}
+enrich_text = f"{title}"
+if item.get("brand"):
+    enrich_text += f" brand:{item.get('brand')}"
+if item.get("condition"):
+    enrich_text += f" condition:{item.get('condition')}"
+\end{verbatim}
+
+\subsection{Generazione deterministica dei Point ID}
+La gestione degli identificativi in Qdrant accetta limitatamente \textit{str UUID} o Interi. Per garantire l'idempotenza durante gli \textit{upsert} (inserimenti/aggiornamenti evitano duplicati qualora il sistema visiti più volte lo stesso annuncio), il sistema converte l'\texttt{ebay\_id} univoco in UUID attraverso una funzione di hashing MD5 standard:
+
+\begin{verbatim}
+import hashlib
+h = hashlib.md5(doc_id_str.encode("utf-8")).hexdigest()
+point_id = str(uuid.UUID(h))
+\end{verbatim}
+
+I metadati (comprensivi di prezzo originale, rating del venditore, condition e url) vengono isolati da artefatti e serializzati tramite parser \textit{Pydantic-NumPy Sanitization} (\texttt{sanitize\_scalars}) prima di essere iniettati nel payload di Qdrant.
+
+% ─────────────────────────────────────────────────────────────
+\section{Retrieval: Integrazione nella Search Pipeline}
+\label{sec:rag-pipeline}
+% ─────────────────────────────────────────────────────────────
+
+All'arrivo di una richiesta utente, la pipeline esegue il cosiddetto processo \textbf{Phantom Fetch}. Onde evitare l'innalzamento dei cicli di clock e latenza in attesa alle chiamate Network verso eBay, l'estrapolazione in Qdrant è confinata in un Thread asincrono parallelizzato al fetching esterno (\texttt{asyncio.create\_task(asyncio.to\_thread(...))}).
+
+\subsection{Query Expansion (Espansione Autonoma)}
+Un micro-servizio LLM innesca dinamicamente l'\textbf{Expand Query}: la stringa primigenia dell'utente (es. \textit{"scarpa da tennis azzurra"}) viene de-codificata, privata di stop words e allargata ai sinonimi semantici, potenziando drasticamente il recall del Vector DB (\textit{"scarpa sneaker calzatura tennis corsa azzurra blu ciano"}).
+
+\subsection{Logica di Fusione e Filtraggio Constraint (\_merge\_hybrid\_results)}
+Una volta terminate le due query concorrenti (eBay Live + Qdrant Memoria), i due listati subiscono una brutale intersecazione logica.
+
+Se un annuncio "fantasma" arriva dalla Memoria, subisce restrizioni fortissime (Hard Filters) prima di avere accesso all'orologio del Reranker finale:
+\begin{itemize}
+    \item \textbf{Overlap Soggettivo}: Almeno il 50\% delle parole chiave utili nella stringa della Query originale devono figurare nel titolo.
+    \item \textbf{Match Esatto di Prodotto}: Se l'LLM ha dedotto un \texttt{product} cardine (\textit{product constraint extraction}), il lemma base (depauperato da inflessioni plurali) deve obbligatoriamente persistere nell'annuncio memoria.
+    \item \textbf{Filtri Prezzo / Condizione Logici}: Analisi condizionale sui vincoli \texttt{<=, >=, between} estratti preventivamente, tagliando ogni ramo inosservante senza pietà.
+\end{itemize}
+
+\subsection{Verifica in tempo reale API (Dead Listing check)}
+\label{subsec:rag-validation}
+Una forte vulnerabilità delle memorie vettoriali su scenari market asincroni (dove un lotto può scadere arbitrariamente) consiste nell'esporre all'utente un ricordo, sebbene logicamente congruente, oramai deceduto materialmente.
+
+Per salvaguardare l'accuratezza, la pipeline setaccia gli articoli provenienti unicamente dal RAG (che \textit{non} sono accoppiati da rinvenimenti Live d'eBay). Su questa nicchia viene imbastito un blocco asincrono massivo (\texttt{asyncio.gather}) puntando singolarmente all'API \texttt{get\_item\_details(ebay\_id)}. Se l'endpoint eBay dà responso fallimentare o nullo, l'identificativo viene tacciato come \textit{Dead ID} e l'oggetto estirpato dalla fusione semantica. Ove vitale si beneficia per aggiornare metadati instabili come Pricing o Spedizioni, fornendo freschezza istantanea d'informazione (\textit{Data Enrichment}).
+
+\subsection{Calcolazione dell'Hybrid Bonus}
+Al termine degli smistamenti i due universi (Live e Memoria) si combinano. A qualunque listing che figura in \textit{entrambe i listati} (essendo scovato sul Web adesso ma risultante egualmente da profitti semantici incassati sui vettori storici passati) viene insignito un \textbf{hybrid bonus} pari a 0.15. 
+Questo segnale rinforzato decreta un indizio empirico di importanza colossale e si appoggia alla logica base del Sort Array tramite inverse rank ponderale:
+\begin{equation}
+    SortWeight = \frac{1}{\rho_{\text{eBay}} + 10} + \frac{0.5}{\rho_{\text{Memoria}} + 10} + Bonus_{\text{Hybrid}}
+\end{equation}
+
+% ─────────────────────────────────────────────────────────────
+\section{Sfide Architetturali, Limitazioni Server e Future Iterazioni}
+\label{sec:rag-critics}
+% ─────────────────────────────────────────────────────────────
+
+Sebbene l'architettura si sia dimostrata una cerniera innovativa tra la ritenzione d'informazione ed un workflow ReAct flessibile, solleva delle problematiche architetturali in ambito esecutivo:
+
+\begin{description}
+    \item[Concorrenza e Locks di Qdrant Local] Operando Qdrant su filesystem in ambiente \textit{in-process} originario tramite l'engine SQLite/RocksDB sottostante si manifestano crash catastrofici non appena \texttt{Uvicorn} effettui uno scale verticale (\textit{Workers $>$ 1}). Avendo i Thread Worker una spartizione parallela, incappano in un Lock file fatale alla cartella "qdrant\_storage". Questo esige l'evaporazione verso un \textit{Microservizio Docker Qdrant standalone} in caso di migrazione in prod.
+    
+    \item[Rate Limiting d'Arricchimento API] Il sistema \texttt{gather} adibito alla convalida in Real-Time (\textit{Deep-Check eBay Details}) per i filettaggi della memoria avvia dozzine di chiamate HTTP sincrone concorrenti. Questa voracità network disarmante, senza adeguati semafori asincroni (es. \texttt{asyncio.Semaphore(5)}), incappa in Rate-Limit severi e \textit{IP Blocking / HTTP 429} dalle barricate d'eBay qualora il traffico salisse drasticamente in un'unica instanza.
+    
+    \item[Memoria Iniziale ad Aggancio Lazy] L'inizializzazione del modello Transformer di \texttt{fastembed} in \texttt{qdrant\_store.py} viene demandata brutalmente \textit{Lazy} alla prima istanza di richiesta. Tale design posticipa uno spike spropositato I/O di memoria Ram alla prima query che potrebbe stallare i pool asincroni.
+\end{description}
+    
+Questa architettura RAG rappresenta una svolta vitale nell'ibridazione decisionale: l'unione rigorosa di estrazione Live transitoria con un motore latente e stratificato ad Hybrid Search vettoriale, capace di rielaborare, autogiustificarsi e ricalibrare i falli.

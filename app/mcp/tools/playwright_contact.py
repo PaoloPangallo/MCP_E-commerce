@@ -166,7 +166,14 @@ async def _async_contact_seller(
         ) from exc
 
     logger.info("PW contact_seller START | url=%s", product_url)
-    _launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+    _launch_args = [
+        "--no-sandbox", 
+        "--disable-dev-shm-usage", 
+        "--disable-blink-features=AutomationControlled",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-sync"
+    ]
 
     # ── Selectors ────────────────────────────────────────────────────────────
 
@@ -204,6 +211,7 @@ async def _async_contact_seller(
     submit_selectors = [
         "button[aria-label='Invia il messaggio']",
         "button[aria-label='Invia']",
+        "button[aria-label='Send']",
         "[data-testid*='send-button']",
         "[data-testid*='sendbutton']",
         "[data-testid='imageupload__send-btn']",
@@ -211,8 +219,15 @@ async def _async_contact_seller(
         ".imageupload__send-btn-wrapper div[role='button']",
         ".imageupload__sendbutton",
         "button[aria-label*='Invia']",
+        "button[aria-label*='Send']",
         "#imageupload__send--button",
-        "svg[viewBox*='0 0 24 24']",
+        "button#sbtBtn",
+        "input#sbtBtn",
+        "input[type='submit'][name='send']",
+        "input[type='submit'][name='Invia']",
+        "button[name*='send']",
+        ".btn.btn--primary:has-text('Invia')",
+        ".btn.btn--primary:has-text('Send')"
     ]
 
     contact_page_selectors = [
@@ -525,7 +540,7 @@ async def _async_contact_seller(
         logger.info("PW contact_seller: Testo che sto per inviare: \n%s", message)
         
         current_url_for_fill = page.url
-        is_sendmsg_page = "sendmsg" in current_url_for_fill or "messages" in current_url_for_fill
+        is_sendmsg_page = "sendmsg" in current_url_for_fill or "messages" in current_url_for_fill or "mesgweb" in current_url_for_fill.lower()
         
         target_context = page
         if not is_sendmsg_page:
@@ -655,11 +670,12 @@ async def _async_contact_seller(
         # ── Caso 2: overlay item-page (iframe o no) ───────────────────────────
         if not filled:
             # Cerchiamo di identificare l'elemento che funge da 'composer' (div, textarea o input)
-            # che contiene o ha come placeholder 'Invia il messaggio'
+            # che contiene o ha come placeholder 'Invia il messaggio' o simili
             composer_found = await target_context.evaluate("""() => {
                 const candidates = Array.from(document.querySelectorAll('textarea, input, [role="textbox"], .textbox__control, div'))
                     .filter(el => {
-                        if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || el.getAttribute('type') === 'submit') return false;
+                        if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') return false;
+                        if (el.tagName === 'INPUT' && ['checkbox', 'radio', 'submit', 'button', 'hidden'].includes(el.getAttribute('type'))) return false;
                         if (el.innerText && el.innerText.trim() === 'Invia il messaggio') return false; // This is a button!
                         
                         const text = el.innerText || "";
@@ -668,9 +684,12 @@ async def _async_contact_seller(
                         
                         const isComposer = placeholder.includes('messaggio') || 
                                            placeholder.includes('message') || 
-                                           ariaLabel.includes('messaggio') || 
-                                           ariaLabel.includes('message') ||
-                                           (el.tagName === 'TEXTAREA');
+                                           ariaLabel.includes('invia il messaggio') || 
+                                           ariaLabel.includes('scrivi un messaggio') ||
+                                           (el.tagName === 'TEXTAREA' && !el.readOnly);
+
+                        // Escludiamo se l'aria-label riguarda selezioni (come i checkbox mascherati)
+                        if (ariaLabel.includes('seleziona') || ariaLabel.includes('select')) return false;
 
                         return isComposer;
                     });
@@ -752,23 +771,29 @@ async def _async_contact_seller(
                         }
 
                         // 2. Cerca bottoni con Paper Plane o icone simili (Send)
-                        const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a'))
+                        // Limito ad "a" e "button", l'id 'sbtBtn' è il top priority per page classica.
+                        const sbt = document.querySelector('#sbtBtn, input[type="submit"][name="send"]');
+                        if (sbt) return sbt;
+
+                        const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a, input[type="submit"]'))
                             .filter(b => b.offsetWidth > 0 && b.offsetHeight > 0);
                         
-                        // Cerca per SVG path (paper plane)
-                        const sendByIcon = allButtons.find(b => {
-                            const svg = b.querySelector('svg');
-                            if (!svg) return false;
-                            const html = svg.innerHTML.toLowerCase();
-                            // Paper plane paths often contain these coordinate patterns
-                            return html.includes('m2.01 21') || html.includes('m1.01 3') || 
-                                   html.includes('l23 12') || b.classList.contains('send');
-                        });
-                        if (sendByIcon) return sendByIcon;
+                        // Cerca per SVG path (paper plane) SE in chat SPA
+                        if (window.location.href.includes('message')) {
+                            const sendByIcon = allButtons.find(b => {
+                                const svg = b.querySelector('svg');
+                                if (!svg) return false;
+                                const html = svg.innerHTML.toLowerCase();
+                                return html.includes('m2.01 21') || html.includes('m1.01 3') || 
+                                       html.includes('l23 12') || b.classList.contains('send');
+                            });
+                            if (sendByIcon) return sendByIcon;
+                        }
 
                         // 2. Cerca per ARIA label o testo
                         const candidates = allButtons.filter(el => {
-                                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.getAttribute('role') === 'textbox') return false;
+                                if (el.tagName === 'TEXTAREA' || el.getAttribute('role') === 'textbox') return false;
+                                if (el.tagName === 'INPUT' && el.getAttribute('type') !== 'submit' && el.getAttribute('type') !== 'button') return false;
                                 // Escludi righe inbox con checkbox (non sono bottoni di invio)
                                 if (el.querySelector('input[type="checkbox"]')) return false;
                                 const ariaRaw = (el.getAttribute('aria-label') || '').toLowerCase();
@@ -844,7 +869,11 @@ async def _async_contact_seller(
                     # VERIFICA: se il testo è ancora nel textarea, il click non ha funzionato
                     still_has_text = await page.evaluate("""() => {
                         const el = document.getElementById('imageupload__sendmessage--textbox') || 
-                                 document.querySelector('[data-testid="message-input-textarea"]');
+                                 document.querySelector('[data-testid="message-input-textarea"]') ||
+                                 document.querySelector('textarea[name="body"]') ||
+                                 document.querySelector('textarea.textbox__control');
+                        // Se troviamo l'elemento ma è vuoto -> il messaggio s'è inviato.
+                        // Se non lo troviamo (null), potrebbe essere stato rimosso -> assunto inviato.
                         return el && (el.value || el.innerText).length > 2; // threshold for safety
                     }""")
                     
@@ -854,13 +883,15 @@ async def _async_contact_seller(
                         await asyncio.sleep(2.0)
                         still_has_text = await page.evaluate("""() => {
                             const el = document.getElementById('imageupload__sendmessage--textbox') || 
-                                     document.querySelector('[data-testid="message-input-textarea"]');
+                                     document.querySelector('[data-testid="message-input-textarea"]') ||
+                                     document.querySelector('textarea[name="body"]') ||
+                                     document.querySelector('textarea.textbox__control');
                             return el && (el.value || el.innerText).length > 2;
                         }""")
                     
                     if not still_has_text:
                         submitted = True
-                        logger.info("PW contact_seller: message submitted (textarea is clear) | now at %s", page.url)
+                        logger.info("PW contact_seller: message submitted (textarea is clear or gone) | now at %s", page.url)
                         break
                     else:
                         logger.warning("PW contact_seller: Send failed to clear textarea. Will try next selector.")
@@ -917,23 +948,30 @@ async def _async_contact_seller(
 
     finally:
         if success:
-            # Chiudi solo la tab aperta
+            # Chiudi solo la tab aperta se possibile
             if page is not None:
                 try:
-                    # await context.close()
-                    # await browser.close()
                     pass
                 except Exception:
                     pass
+            # Svuota Playwright memory
+            try:
+                await pw.stop()
+            except Exception:
+                pass
         else:
             logger.info("PW contact_seller: browser left open for manual interaction")
             
-        # IMPORTANTISSIMO: Ferma SEMPRE il socket bridge locale di Playwright per svuotare la memoria (Node.js backend)
-        # Nota: questo NON ti chiuderà il browser remoto originario
-        try:
-            await pw.stop()
-        except Exception:
-            pass
+            # Se ci siamo connessi via CDP a un browser GIÀ aperto, possiamo fermare il client PW
+            if using_cdp:
+                try:
+                    await pw.stop()
+                except Exception:
+                    pass
+            else:
+                # Se abbiamo lanciato noi Chrome, `pw.stop()` KILLEREBBE il processo Chrome all'istante,
+                # impedendo all'utente di finire il Captcha! Lo lasciamo quindi running "orfano".
+                logger.warning("PW contact_seller: Skipping pw.stop() to leave Chrome window alive for CAPTCHA/login.")
 
 
 def _run_contact_in_proactor_loop(
