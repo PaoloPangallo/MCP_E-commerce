@@ -71,6 +71,26 @@ def extract_ltr_features(query: str, item: Dict[str, Any], context: Optional[Dic
     # 8. Accessory Detection (High negative weight if undesired)
     features["accessory_score"] = float(item.get("_accessory_penalty", 0.0))
 
+    # 9. Brand Alignment
+    query_brands = context.get("query_brands") or []
+    brand_mismatch = 0.0
+    if query_brands:
+        title_low = item.get("title", "").lower()
+        # Se l'utente ha chiesto un brand X, ma nel titolo c'è un brand Y (noto) diverso da X
+        # Lista di brand "competitori" famosi per evitare falsi positivi con parole comuni
+        known_brands = ["apple", "iphone", "samsung", "huawei", "hp", "dell", "acer", "asus", "sony", "xiaomi"]
+        
+        has_other_brand = False
+        for kb in known_brands:
+            if kb in title_low and kb not in [b.lower() for b in query_brands]:
+                has_other_brand = True
+                break
+        
+        if has_other_brand:
+            brand_mismatch = 1.0
+            
+    features["brand_mismatch"] = brand_mismatch
+
     return features
 
 def get_feature_names() -> List[str]:
@@ -78,5 +98,5 @@ def get_feature_names() -> List[str]:
         "lexical_sim", "semantic_sim", "trust_score", "seller_rating",
         "log_price", "price_z", "has_image", "is_new", "has_brand",
         "has_model", "num_specs", "rag_product_boost", "rag_seller_boost", 
-        "rag_sentiment", "price_match_constraint", "accessory_score"
+        "rag_sentiment", "price_match_constraint", "accessory_score", "brand_mismatch"
     ]

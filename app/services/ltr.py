@@ -11,22 +11,21 @@ logger = logging.getLogger(__name__)
 # Prompt avanzato con Few-Shot per distinguere Hardware da Ricambi/Accessori
 RELEVANCE_PROMPT_TEMPLATE = """
 Ti occupi di valutare la pertinenza di prodotti e-commerce per la query: "{query}".
-Il tuo obiettivo è massimizzare la soddisfazione dell'utente che cerca un PRODOTTO COMPLETO E FUNZIONANTE (es. un telefono sciolto, un laptop), scartando ricambi, accessori o componenti (a meno che non siano esplicitamente richiesti).
+Il tuo obiettivo è massimizzare la soddisfazione dell'utente che cerca: {intent_description}.
 
 ### REGOLE DI VALUTAZIONE (Ritorna un JSON):
 1. RELEVANCE (punteggio da -1.0 a 1.0):
-    - 1.0: Match Perfetto (il dispositivo intero cercato).
-    - 0.5: Match parziale o correlato (es. un modello diverso ma pertinente).
-    - 0.0: Dubbio o poco correlato.
-    - -1.0: DA SCARTARE ASSOLUTAMENTE. Include: Accessori (case, cover, caricatori), Parti di ricambio (schermi LCD, batterie, scocche), Scatole vuote, Manuali, Oggetti "finti" (dummy).
+### RULES:
+- If Query is a specific model (e.g. "Aspire 5") and Item is a compatible component for that SERIES (e.g. "Batteria per Acer Aspire A515 / A315"), it is HIGHLY RELEVANT (0.9-1.0).
+- Be intentional: "Aspire 5" is a series. Batteries for "Aspire Series 5" or models like "A515" are perfect matches.
+- A "Part" (battery, screen) is RELEVANT if it matches the device model in the query.
+- An "Accessory" (case, cover, glass) is ONLY relevant if the user specifically asked for it.
+- If the brand mismatches (e.g., search for Samsung, item is for Apple), it is NOT RELEVANT (0.0).
+- If the item is a listing for a "Service", "Manual", "Box only", or "Broken/For parts", it is NOT RELEVANT (0.0).
+- Search results (live from eBay) are usually fresh and should be given fair consideration.
 
 ### LOGICA DI PREZZO E TITOLO:
-- Sii estremamente sospettoso se il titolo parla di un dispositivo (es. "iPhone 12") ma il prezzo è quello di un accessorio (es. 20-50€). In tal caso, è quasi certamente un ricambio o un accessorio. Segnala come -1.0.
-
-### ESEMPI:
-- Query: "iPhone 12" | Prodotto: "iPhone 12 128GB" | 400€ -> {{ "relevance": 1.0, "motivation": "Prodotto corretto" }}
-- Query: "iPhone 12" | Prodotto: "Vetro temperato per iPhone 12" | 10€ -> {{ "relevance": -1.0, "motivation": "Accessorio non richiesto" }}
-- Query: "iPhone 12" | Prodotto: "Batteria iPhone 12" | 30€ -> {{ "relevance": -1.0, "motivation": "Ricambio non richiesto" }}
+- Sii estremamente sospettoso se il titolo parla di un dispositivo (es. "iPhone 12") ma il prezzo è quello di un accessorio (es. 20-50€). In tal caso, è quasi certamente un ricambio o un accessorio. {price_logic_instruction}.
 
 Dati in Input:
 {items_list}
@@ -38,7 +37,9 @@ async def rerank_items(
     query: str, 
     items: List[Dict[str, Any]], 
     exclusions: Optional[List[str]] = None,
-    rag_context: Optional[List[Dict[str, Any]]] = None
+    rag_context: Optional[List[Dict[str, Any]]] = None,
+    product_type: str = "Main",
+    product_requested: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Giudice LLM Unificato (Deep-Check 3.0). 
@@ -50,10 +51,23 @@ async def rerank_items(
     # Configurazione esclusioni per il prompt
     excl_str = ", ".join(exclusions) if exclusions else "Nessuna"
     
-    # Selezioniamo massimo 20 item per garantire focus e profondità (Reasoning richiede token)
-    top_items = items[:20]
+    # Selezioniamo TUTTI gli item (o i primi 50 per limiti di token, ma l'utente ha chiesto tutti)
+    top_items = items[:50] 
     items_list_parts = []
     
+    # Nome prodotto specifico per l'intento
+    target_name = product_requested or query
+    
+    # Adattamento dinamico del prompt in base al tipo prodotto
+    if product_type in ("Part", "Accessory"):
+        intent_description = f"un COMPONENTE o ACCESSORIO specifico ({product_type}) identificato come '{target_name}'. Premia solo i ricambi compatibili con il modello indicato che siano effettivamente '{target_name}'."
+        exclusion_rules = f"Prodotti che NON sono '{target_name}' (es. se cerco batteria, scarta schermi e cerniere) o incompatibili."
+        price_logic_instruction = "Segnala come 1.0 se il prezzo è basso (tipico di un ricambio) MA il titolo conferma che è il pezzo corretto"
+    else:
+        intent_description = f"un PRODOTTO COMPLETO E FUNZIONANTE ({target_name}). Scarta ricambi e accessori fuori contesto."
+        exclusion_rules = "Accessori (case, cover, caricatori), Parti di ricambio (schermi LCD, batterie, scocche)"
+        price_logic_instruction = "Segnala come -1.0 se il prezzo basso indica che è solo un ricambio o accessorio"
+
     for i, it in enumerate(top_items):
         title = str(it.get('title', '')).strip().replace('"', "'")
         price = it.get('price', 'N/A')
@@ -89,24 +103,13 @@ async def rerank_items(
     items_list_str = "\n\n".join(items_list_parts)
     
     # Prompt con CHAIN-OF-THOUGHT (Ragionamento obbligatorio)
-    prompt = f"""
-Sei un esperto pignolo di e-commerce. Valuta la pertinenza dei prodotti per la query: "{query}"
-VINCOLI DI ESCLUSIONE (L'utente NON vuole assolutamente): {excl_str}
-
-### PROTOCOLLO DI VALUTAZIONE PER OGNI PRODOTTO:
-1. **Analisi Critica (Reasoning)**: Leggi Titolo, Specifiche e Descrizione. 
-   - Verifica se il prodotto è quello cercato (marca, categoria).
-   - RICERCA ELEMENTI ESCLUSI: Cerca parole chiave o concetti legati alle esclusioni (es. se excl è 'zip', cerca 'zip', 'zipper', 'cerniera', 'zip-up' nella descrizione o specifiche).
-2. **Veredetto di Rilevanza (-1.0 a 1.0)**:
-   - 1.0: Match Perfetto e SENZA violazioni.
-   - -1.0: VIOLAZIONE VINCOLI o Prodotto errato (es. ricambio/accessorio). Se trovi un elemento escluso (es. cerniera/zip), devi assegnare -1.0.
-
-Ritorna un JSON array di oggetti con: "id", "reasoning", "relevance", "value", "motivation".
-L'Analisi Critica va nel campo "reasoning". La sintesi del verdetto in "motivation".
-
-Dati in Input:
-{items_list_str}
-""".strip()
+    prompt = RELEVANCE_PROMPT_TEMPLATE.format(
+        query=query,
+        intent_description=intent_description,
+        exclusion_rules=exclusion_rules,
+        price_logic_instruction=price_logic_instruction,
+        items_list=items_list_str
+    ).strip()
 
     score_map = {}
     value_map = {}
@@ -115,6 +118,7 @@ Dati in Input:
     try:
         response, _ = await call_llm(prompt)
         if response:
+            logger.info("LTR | Expert Judge RAW response: %s", response[:500] if response else "Empty")
             # Pulizia e parsing (estratto per brevità)
             if "```" in response:
                 json_match = re.search(r"```(?:json)?\s*(\[\s*\{.*?\}\s*\])\s*```", response, re.DOTALL | re.IGNORECASE)

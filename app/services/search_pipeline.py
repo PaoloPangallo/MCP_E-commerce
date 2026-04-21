@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL = SEARCH_PIPELINE_TTL
 
-MAX_RESULTS_FROM_EBAY = 15
+MAX_RESULTS_FROM_EBAY = 40
 MAX_SELLERS_FOR_TRUST = 5
 MAX_FEEDBACK_PER_SELLER = 40
 FEEDBACK_WORKERS = 6
@@ -75,17 +75,24 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
         parts.append(str(product).strip())
         
     # Includiamo constraints testuali (no price/condition)
+    # IMPORTANTE: includiamo gli 'aspect' (es. Model: 15) nella query testuale
     constraints = parsed.get("constraints") or []
     for c in constraints:
         ctype = c.get("type")
         val = c.get("value")
-        if ctype not in ("price", "condition", "aspect") and val:
-            # Gestione negazioni per query eBay
+        name = c.get("name")
+        # Includiamo 'aspect' nella query keyword oltre agli altri tipi testuali
+        if ctype not in ("price", "condition") and val:
+            # Se è un aspect, cerchiamo di mettere anche il nome se è rilevante (es. "CPU")
+            if ctype == "aspect" and name and len(name) > 2:
+                # Per aspetti comuni come 'Model' o 'Storage' mettiamo solo il valore
+                if name.lower() not in ("model", "marca", "brand", "storage", "capacità", "series", "serie"):
+                    parts.append(name)
+            
             vals = val if isinstance(val, list) else [val]
             for v in vals:
                 v_str = str(v).strip()
-                # Se la query originale contiene "no", "senza", "nè" riferiti a questo valore
-                # cerchiamo di usare l'operatore NOT di eBay (-)
+                # Gestione negazioni
                 neg_patterns = [r"\bno\b", r"\bsenza\b", r"\bn[èe]\b"]
                 orig_low = fallback_query.lower()
                 is_negated = any(re.search(pf + r"\s+" + re.escape(v_str.lower()), orig_low) for pf in neg_patterns)
@@ -94,6 +101,24 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
                     parts.append(f"-{v_str}")
                 else:
                     parts.append(v_str)
+
+    # RECALL SAFEGUARD: Verifica se token critici (alfanumerici) della query originale sono spariti
+    # Spesso l'LLM dimentica il modello "5" o "Pro" nel semantic_query
+    orig_tokens = re.findall(r"\b\w+\b", fallback_query.lower())
+    gen_tokens_low = {p.lower().lstrip("-") for p in parts}
+    
+    # Stop words da non reinserire mai
+    stop_words = {"un", "una", "per", "cerca", "trova", "mi", "un", "il", "lo", "la", "di", "da", "con", "e", "ed"}
+    
+    for t in orig_tokens:
+        if t in stop_words: continue
+        if t in gen_tokens_low: continue
+        
+        # Se il token è alfanumerico (contiene cifre) o è una parola "pesante" (lunga)
+        if any(c.isdigit() for c in t) or len(t) > 3:
+            # Verifica se è già contenuto in qualche modo (es "A515" contiene "5")
+            if not any(t in g for g in gen_tokens_low):
+                parts.append(t)
                 
     if not parts:
         return fallback_query
@@ -102,18 +127,17 @@ def _build_ebay_query(parsed: Dict[str, Any], fallback_query: str) -> str:
     final_tokens: List[str] = []
     seen_tokens_low = set()
     
+    # Uniamo e puliamo
     raw_query = " ".join(parts)
-    # CRITICAL DEBUG: Vediamo cosa stiamo mandando a eBay
-    logger.debug("EBAY SEARCH QUERY: '%s' (Original fallback: '%s')", raw_query, fallback_query)
-    logger.info("EBAY QUERY: %s", raw_query)
-    
     for word in raw_query.split():
         w_low = word.lower()
         if w_low not in seen_tokens_low:
             final_tokens.append(word)
             seen_tokens_low.add(w_low)
             
-    return " ".join(final_tokens).strip()
+    final_q = " ".join(final_tokens).strip()
+    logger.info("EBAY QUERY (Hardened): %s", final_q)
+    return final_q
 
 
 
@@ -279,8 +303,8 @@ def _apply_final_ranking(
     user: Optional[object] = None,
 ) -> None:
     for item in items:
-        # Use the highly calibrated _final_score from the RAG reranker and Cross-Encoder
-        base_relevance = float(item.get("_final_score", item.get("_rerank_score", 0)) or 0)
+        # ⚡ PRIORITÀ: Usiamo l'Expert Judge (_ltr_score) se presente, altrimenti fallback su RAG/Cross-Encoder
+        base_relevance = float(item.get("_ltr_score", item.get("_final_score", item.get("_rerank_score", 0))) or 0)
         trust = float(item.get("trust_score") or 0)
         price = item.get("price") or 0
 
@@ -447,6 +471,13 @@ def _merge_hybrid_results(ebay_items: List[Dict], memory_items: List[Dict], quer
             if match_count < required:
                 continue
 
+        # Filtro forte 2.5: Brand mismatch (NEW)
+        target_brands = (parsed or {}).get("brands") or []
+        if target_brands:
+            # Se nessuno dei brand cercati è presente nel titolo, scarta (per il RAG)
+            if not any(str(b).lower() in title_low for b in target_brands):
+                continue
+
         # Filtro forte 3: Prezzo (se presente nel parsed)
         price_val = item.get("price")
         if parsed and parsed.get("constraints") and price_val:
@@ -557,13 +588,21 @@ async def run_search_pipeline(
 
     # Recupera il contesto se disponibile (session_id or user_id)
     context_info = ""
+    last_intent = None
     target_id = session_id or (str(getattr(user, "id", "")) if user else None)
+    
     if target_id:
+        # 1. Recupera la storia testuale per retrocompatibilità/debug
         history = redis_client.get_user_queries(target_id)
         if history:
-            # Prendi le ultime 3 per non appesantire troppo il prompt
             context_info = " | ".join(history[:3])
-            logger.info("PIPELINE: Found context in history: %s", context_info)
+            logger.info("PIPELINE: Found text history: %s", context_info)
+            
+        # 2. Recupera l'ultimo INTENTO STRUTTURATO (Stateful tracking)
+        intent_key = f"user_last_intent:{target_id}"
+        last_intent = redis_client.get_json(intent_key)
+        if last_intent:
+            logger.info("PIPELINE: Found structured last_intent for product: %s", last_intent.get("product"))
 
     t = time.time()
     parsed = await parse_query_service(
@@ -571,6 +610,7 @@ async def run_search_pipeline(
         use_llm=(llm_engine != "rule_based"),
         include_meta=True,
         context_info=context_info,
+        last_intent=last_intent,  # Passiamo lo stato strutturato
     )
     t_parse = time.time() - t
     timings["parse_query_s"] = int(float(t_parse) * 1000) / 1000.0
@@ -747,6 +787,7 @@ async def run_search_pipeline(
                 product_docs=product_docs,
                 seller_docs=seller_docs,
                 constraints=parsed.get("constraints"),
+                brands=parsed.get("brands"),
             )
             
             # --- FASE FINALE: LLM Come Giudice (Deep-Check) ---
@@ -756,7 +797,9 @@ async def run_search_pipeline(
                 query=query, 
                 items=items, 
                 exclusions=parsed.get("exclusions"),
-                rag_context=product_docs
+                rag_context=product_docs,
+                product_type=parsed.get("product_type", "Main"),
+                product_requested=parsed.get("product")
             )
             
         except Exception as e:
@@ -873,8 +916,9 @@ async def run_search_pipeline(
     
     logger.debug("PIPELINE DONE | results=%d | time=%ss", len(results_out), timings['total_s'])
 
-    return {
+    res = {
         "parsed_query": parsed,
+        "suggested_title": parsed.get("suggested_title"),
         "parsed_product": parsed.get("product"),
         "ebay_query_used": ebay_query_used,
         "results_count": len(results_out),
@@ -887,3 +931,15 @@ async def run_search_pipeline(
         "metrics": metrics,
         "_timings": timings,
     }
+    
+    # 10) PERSISTENZA INTENTO (Stateful Tracking - Streamlined)
+    if target_id and parsed:
+        state_to_save = {
+            "semantic_query": parsed.get("semantic_query"),
+            "product": parsed.get("product"),
+            "product_type": parsed.get("product_type"),
+        }
+        redis_client.set_json(f"user_last_intent:{target_id}", state_to_save, ttl_seconds=3600)
+        logger.info("PIPELINE END: Streamlined intent state saved for user %s", target_id)
+
+    return res

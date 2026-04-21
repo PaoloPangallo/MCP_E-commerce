@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # Search config
-    EBAY_PAGE_SIZE: int = 20
+    EBAY_PAGE_SIZE: int = 50
     EBAY_MAX_OFFSET_PAGES: int = 3
     EBAY_REQUEST_TIMEOUT: float = 15.0
     APPROX_PRICE_PCT: float = 0.2

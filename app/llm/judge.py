@@ -27,11 +27,11 @@ logger = logging.getLogger(__name__)
 _MAX_ITEMS_FOR_JUDGE = 8
 
 _SYSTEM_PROMPT = (
-    "Sei un assistente e-commerce esperto. "
-    "Il tuo compito è valutare se i prodotti elencati sono pertinenti "
-    "rispetto alla richiesta dell'utente. "
+    "Sei un assistente e-commerce esperto e molto selettivo. "
+    "Il tuo compito è filtrare i prodotti simili mantenendo SOLO quelli che rispettano la MARCA e la CATEGORIA della richiesta dell'utente. "
+    "Se l'utente cerca una marca specifica (es. Acer), scarta immediatamente prodotti di altre marche (es. Apple, Samsung). "
     "Rispondi SOLO con un array JSON di indici (interi, 0-indexed) dei prodotti pertinenti. "
-    "Non aggiungere testo, spiegazioni o markdown. Esempio: [0, 2, 4]"
+    "Esempio: [0, 2]"
 )
 
 
@@ -75,10 +75,10 @@ async def filter_similar_items_with_llm(
         f"Richiesta utente: \"{user_query}\"\n"
         f"{context_line}"
         f"Prodotti simili proposti:\n{candidates_text}\n\n"
-        "Quali indici (0-based) sono pertinenti alla richiesta? "
-        "Escludi accessori irrilevanti, prodotti di categoria completamente diversa "
-        "o articoli palesemente non correlati. "
-        "Rispondi SOLO con l'array JSON degli indici da tenere."
+        "Quali indici (0-based) sono DAVVERO pertinenti? "
+        "REQUISITO RIGIDO: Mantieni solo prodotti della STESSA MARCA e CATEGORIA dell'oggetto di riferimento o della richiesta. "
+        "Se l'oggetto di riferimento è Acer e vedi un iPhone, scartalo anche se ha la parola 'batteria'. "
+        "Rispondi SOLO con l'array JSON degli indici."
     )
 
     try:

@@ -97,6 +97,7 @@ class StartEvent(BaseModel):
 
     type: Literal["start"] = "start"
     query: str
+    suggested_title: Optional[str] = None
     llm_engine: str
     max_steps: int
     planned_tasks: List[Dict[str, Any]] = Field(default_factory=list)
@@ -138,6 +139,7 @@ class FinalEvent(BaseModel):
 
     type: Literal["final"] = "final"
     final_answer: str
+    suggested_title: Optional[str] = None
     agent_trace: List[Dict[str, Any]] = Field(default_factory=list)
     final_data: Dict[str, Any] = Field(default_factory=dict)
     steps_used: int = 0

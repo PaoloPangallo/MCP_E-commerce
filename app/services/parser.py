@@ -58,6 +58,11 @@ BRAND_WHITELIST = {
     "bose": "Bose",
     "jbl": "JBL",
     "levis": "Levi's",
+}
+
+PARSER_VERSION = "v6" # Update this to invalidate cache when logic changes
+
+BRAND_WHITELIST.update({
     "levi": "Levi's",
     "nike": "Nike",
     "adidas": "Adidas",
@@ -66,7 +71,7 @@ BRAND_WHITELIST = {
     "zara": "Zara",
     "bimby": "Bimby",
     "folletto": "Folletto",
-}
+})
 
 STOP_WORDS = {
     "ciao", "buon", "buongiorno", "buonasera", "ehi", "hey",
@@ -89,6 +94,7 @@ VAGUE_PRODUCT_TERMS = {
 DEFAULT_RESULT_TEMPLATE: Dict[str, Any] = {
     "original_query": "",
     "semantic_query": "",
+    "suggested_title": "",
     "product": None,
     "product_type": "Unknown",
     "brands": [],
@@ -312,6 +318,16 @@ def validate_llm_result(data: Dict[str, Any], original_query: str) -> Dict[str, 
         cleaned = product.strip()
         result["product"] = None if is_vague_product(cleaned) else cleaned
 
+    title = data.get("suggested_title")
+    if isinstance(title, str) and title.strip():
+        result["suggested_title"] = title.strip()
+    else:
+        # Fallback naming logic: Brand + Product
+        brand_str = result["brands"][0] if result["brands"] else ""
+        prod_str = result["product"] or ""
+        fallback = f"{brand_str} {prod_str}".strip()
+        result["suggested_title"] = fallback if fallback else original_query
+
     product_type = data.get("product_type")
     if product_type in {"Main", "Accessory", "Part", "Service", "Unknown"}:
         result["product_type"] = product_type
@@ -370,10 +386,13 @@ def enforce_numeric_consistency(original_query: str, result: Dict[str, Any]) -> 
 
 # ── LLM parse ─────────────────────────────────────────────────────────────────
 
-async def llm_parse(query: str, context_info: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], str]:
+async def llm_parse(query: str, context_info: Optional[str] = None, last_intent: Optional[Dict[str, Any]] = None) -> Tuple[Optional[Dict[str, Any]], str]:
     context_block = ""
+    if last_intent:
+        context_block += f"\nPREVIOUS USER INTENT:\n- Subject: {last_intent.get('semantic_query')}\n- Category: {last_intent.get('product_type')}\n"
+        
     if context_info:
-        context_block = f"\nCONVERSATION CONTEXT (History of recent topics/products):\n{context_info}\n"
+        context_block += f"\nCONVERSATION HISTORY (Last Queries):\n{context_info}\n"
 
     prompt = f"""
 You are a strict semantic query parser for an e-commerce assistant.
@@ -384,6 +403,7 @@ No markdown. No explanations. No code fences.
 Schema:
 {{
   "semantic_query": "",
+  "suggested_title": "",
   "product": null,
   "product_type": "Main" | "Accessory" | "Part" | "Service" | "Unknown",
   "brands": [],
@@ -412,12 +432,14 @@ Rules:
 - Put ONLY mandatory requirements in constraints.
 - Put optional wishes in preferences.
 - Extract adjectives like "blu", "rosa", "leather", "taglia 42", "64gb" as 'aspect' constraints.
+- 'product': Extract the specific model name and series. For 'Acer Aspire 5', use 'Acer Aspire 5'.
+- 'suggested_title': Generate a short descriptive title in Italian.
 - 'product_type': If the user wants the device itself (phone, laptop, console), use "Main". If they want a case, cover, charger, use "Accessory". If they want a screen replacement, battery, scocca, use "Part".
 - Do NOT invent brands or products.
-- Resolve pronouns (e.g., "li", "le", "quelli", "cercalo", "them", "it") using the CONVERSATION CONTEXT.
-- IMPORTANT: If the user says "without", "no", "senza", "non", "nò" followed by a feature (e.g., "senza zip", "no wireless", "non usato"), extract those features into the "exclusions" array.
-- If the user says "cercalo", "trovali", "show me more", etc., the 'product' and 'brands' fields must be populated based on the previous topic found in the context.
-- Target Seller: Extract the seller name if the user mentions one (e.g., "venduto da pegaso_italia", "di apple_store", "da monclick").
+- **ITALIAN ANAPHORA (ANAFORA)**: Identify Italian pronouns: 'lo', 'la', 'li', 'le', 'quello', 'quella', 'quelli', 'quelle', 'un', 'una', 'ne'. 
+- If the current query uses one of these (e.g., "e ne cerchiamo una...", "e se la volessi...", "cercalo per..."), you MUST resolve them using the PREVIOUS INTENT and CONVERSATION CONTEXT.
+- INHERITANCE RULE: If the user says "ne cerchiamo una per [Model X]", the 'product' and 'product_type' should be inherited from the PREVIOUS INTENT (e.g., if previous was "batteria", the new one is "batteria" for "Model X").
+- Never ignore these pronouns; they define the subject of the search.
 - Output JSON only.
 
 Query: {json.dumps(query, ensure_ascii=False)}
@@ -513,7 +535,7 @@ async def parse_query_service(
     text = normalize_text(text)
     text = correct_brands_in_text(text)
 
-    cache_key = f"query_parse:{text}:{use_llm}:{context_info or ''}"
+    cache_key = f"query_parse:{PARSER_VERSION}:{text}:{use_llm}:{context_info or ''}"
     if use_llm:
         cached = redis_client.get_json(cache_key)
         if cached:
@@ -524,7 +546,12 @@ async def parse_query_service(
     used_provider: Optional[str] = None
 
     if use_llm:
-        llm_result, used_provider = await llm_parse(text, context_info=context_info)
+        last_intent = kwargs.get("last_intent")
+        llm_result, used_provider = await llm_parse(
+            text, 
+            context_info=context_info,
+            last_intent=last_intent
+        )
 
     final = llm_result if llm_result else empty_result(text)
 

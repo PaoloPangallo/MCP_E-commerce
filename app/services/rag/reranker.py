@@ -47,7 +47,8 @@ SCORING_WEIGHTS = {
     "rag_seller_boost": 0.15,
     "rag_sentiment": 0.05,
     "price_match_constraint": 0.30,
-    "accessory_score": -0.45  # Strong negative weight for accessories
+    "accessory_score": -0.45,  # Strong negative weight for accessories
+    "brand_mismatch": -0.70    # Massive penalty for wrong brand
 }
 
 # ============================================================
@@ -246,6 +247,7 @@ def rerank_products(
     product_docs: Optional[List[Dict]] = None,
     seller_docs: Optional[List[Dict]] = None,
     constraints: Optional[List[Dict]] = None,
+    brands: Optional[List[str]] = None,
 ) -> List[Dict]:
 
     if not items:
@@ -355,9 +357,20 @@ def rerank_products(
             price_penalty = 0.15  # Small penalty for overly expensive items
 
         # ----------------------------------------
-        # ACCESSORY PENALTY (Offloaded to LLM Judge)
+        # ACCESSORY PENALTY (Hardened Logic)
         # ----------------------------------------
-        item["_accessory_penalty"] = 0.0
+        acc_penalty = 0.0
+        acc_keywords = ["cover", "custodia", "vetro", "scocca", "pellicola", "case", "guscio", "copri"]
+        is_acc_item = any(k in title_lower for k in acc_keywords)
+        
+        # Se la query NON chiede cover/custodia ma l'item lo è
+        query_w = query.lower()
+        query_wants_acc = any(k in query_w for k in ["cover", "custodia", "case"])
+        
+        if is_acc_item and not query_wants_acc:
+            acc_penalty = 1.0 # Will be multiplied by -0.45 weight
+            
+        item["_accessory_penalty"] = acc_penalty
 
         # ----------------------------------------
         # TITLE QUALITY
@@ -395,7 +408,8 @@ def rerank_products(
         ltr_context = {
             "avg_price": avg_price,
             "std_price": std_price,
-            "constraints": constraints
+            "constraints": constraints,
+            "query_brands": brands
         }
         
         features = extract_ltr_features(query, item, context=ltr_context)

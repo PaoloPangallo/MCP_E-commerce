@@ -489,6 +489,7 @@ async def search_items(
     offset = 0
     pages_done = 0
     aspects: List[Dict[str, Any]] = []
+    categories: List[Dict[str, Any]] = []
 
     client = get_client()
     while len(items) < wanted and pages_done < MAX_OFFSET_PAGES:

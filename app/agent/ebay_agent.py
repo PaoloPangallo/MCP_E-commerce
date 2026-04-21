@@ -452,8 +452,12 @@ class EbayReactAgent:
 
             await asyncio.to_thread(self._persist_outcome_safely, memory, final_answer)
 
+            # Extract suggested title if available in memory
+            suggested_title = (memory.search_payload or {}).get("suggested_title")
+
             yield FinalEvent(
                 final_answer=final_answer,
+                suggested_title=suggested_title,
                 agent_trace=[s.model_dump() for s in trace] if request.return_trace else [],
                 final_data=memory.final_data(),
                 steps_used=executed_actions,

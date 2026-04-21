@@ -24,7 +24,7 @@ OLLAMA_API_KEY: str = os.getenv("OLLAMA_API_KEY", "").strip()
 OLLAMA_CLOUD_HOST: str = os.getenv("OLLAMA_CLOUD_HOST", "https://ollama.com").rstrip("/")
 OLLAMA_CLOUD_MODEL: str = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
 OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:235b-cloud")
-OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", "45"))
+OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 
 
 def _get_ollama_client():
