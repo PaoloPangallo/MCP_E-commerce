@@ -1,0 +1,107 @@
+<section id="s16">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Ecosystem · Capabilities</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Modular Architecture</div>
+      <h2 class="section">The <em>MCP</em> Toolkit</h2>
+      <p class="lead">14 tool registrati via FastMCP. L'agente ReAct li concatena autonomamente nel loop Thought → Action → Observation.</p>
+    </div>
+
+    <!-- Tool Grid - Cohere Style -->
+    <div class="anim d2" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">search_products</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Ricerca eBay con filtri semantici. Motore principale della pipeline RAG + API.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 4.4 3.4 8.5 8 9.5 4.6-1 8-5.1 8-9.5V7z"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">analyze_seller</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Trust Score composito, sentiment NLP su feedback reali e profilo venditore.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v18M4 21h16M6 12l-3 6h6zM18 12l-3 6h6zM6 8l6-4 6 4"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">compare_products</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Scoring matrix multi-prodotto (prezzo, trust, rilevanza) → vincitore logico.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">get_market_trends</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Benchmark Google Shopping + Trends. Verdetto dinamico "compra ora o aspetta".</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:5px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">describe_image</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Vision multimodale Qwen3-VL. Foto → brand + tag + condizione → ricerca.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><polyline points="9 10 12 13 15 10"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">ebay_scrape</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Fallback Playwright: navigazione browser reale quando le API sono limitate.</p>
+      </div>
+    </div>
+
+    <!-- Secondary tools -->
+    <div class="anim d3 card" style="display:flex;align-items:center;gap:20px;padding:20px 32px;background:var(--co-snow);">
+      <span style="font-size:14px;font-weight:600;color:var(--co-black);">+ 8 TOOLS</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="pill">wishlist</span>
+        <span class="pill">chat</span>
+        <span class="pill">metadata</span>
+        <span class="pill">deals</span>
+        <span class="pill">contact</span>
+        <span class="pill">shipping</span>
+        <span class="pill">profile</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s16');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card:not(.anim)').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]);
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top  - rect.height/ 2) / sc * 0.04;
+        gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">15 / 23</span><span class="tl"></span>
+    <span>Ecosistema Toolkit</span>
+  </div>
+</section>

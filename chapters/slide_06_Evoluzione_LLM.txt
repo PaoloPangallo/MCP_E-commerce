@@ -1,0 +1,16 @@
+Titolo Slide: Evoluzione LLM
+
+Il Problema: Ricerca dell'equilibrio tra la privacy/controllo del locale e la potenza/ragionamento dei modelli Cloud di grandi dimensioni.
+
+La Soluzione: Transizione dai modelli locali alle API di Ollama Cloud (Minimax 2.7) per ottenere reasoning di classe 100B+ con latenza minima.
+
+Contenuto della slide:
+- Test iniziali: Llama 3.1 e Mistral NeMo 12B (Locale)
+- Prove intermedie: Google Gemini API (Cloud)
+- Approdo finale: Ollama Cloud (Modello Minimax 2.7)
+- Streaming SSE per un'esperienza "Zero-Lag"
+
+Note / Evoluzione Tecnica:
+1. Approccio Locale: Testati Llama 3.1 e Mistral NeMo 12B. Ottima privacy, ma latenza elevata e reasoning limitato su hardware consumer.
+2. Approccio API: Sperimentata l'integrazione con Gemini. Buone performance ma necessità di un'infrastruttura più flessibile.
+3. Compromesso Ideale: Ollama Cloud con Minimax 2.7. Combina la potenza dei modelli "Large" con una velocità di risposta istantanea tramite streaming SSE.

@@ -1,0 +1,205 @@
+<section id="s05">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Protocol · Tool Orchestration</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:80px;align-items:center;">
+    <!-- Left: Evolution -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:40px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Model Context Protocol</div>
+        <h2 class="section">The <em>FastMCP</em> Standard</h2>
+        <p class="lead">Evoluzione da coordinamento file-based allo standard industriale per il disaccoppiamento totale dell'agente dai tool.</p>
+      </div>
+
+      <!-- Evolution timeline - Cohere Style -->
+      <div class="anim d2" style="display:flex;flex-direction:column;gap:0;">
+        <!-- Step 1 -->
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:var(--co-gray-cool);margin-top:8px;"></div>
+            <div style="width:1px;height:60px;background:var(--co-gray-light);"></div>
+          </div>
+          <div style="padding-bottom:32px;">
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-muted);margin-bottom:8px;">Planner / Worker <span style="font-size:14px;font-family:var(--font-body);color:var(--co-muted);opacity:0.6;">(Legacy)</span></div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;">Scambio di report via markdown. Lento, difficile da coordinare e non scalabile.</p>
+          </div>
+        </div>
+        <!-- Step 2 -->
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:var(--co-gray-cool);margin-top:8px;"></div>
+            <div style="width:1px;height:60px;background:var(--co-gray-light);"></div>
+          </div>
+          <div style="padding-bottom:32px;">
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-muted);margin-bottom:8px;">LangGraph <span style="font-size:14px;font-family:var(--font-body);color:var(--co-muted);opacity:0.6;">(Experimental)</span></div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;">Flusso a grafo, ma ancora troppo rigido. Colli di bottiglia nell'orchestrazione multi-tool.</p>
+          </div>
+        </div>
+        <!-- Step 3 -->
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
+            <div style="width:16px;height:16px;border-radius:50%;background:var(--co-blue);margin-top:6px;box-shadow:0 0 0 4px rgba(13,122,95,0.1);"></div>
+          </div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:8px;">FastMCP Protocol <span style="font-size:14px;font-family:var(--font-body);color:var(--co-blue);font-weight:600;">(Production)</span></div>
+            <p style="font-size:16px;color:var(--co-near-black);line-height:1.5;">Disaccoppiamento totale. Tool come risorse universali. Scalabilità illimitata e sincronizzazione prompt real-time.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Architecture - clickable nodes -->
+    <div class="anim d3" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:16px;position:relative;">
+
+      <div id="s05-node-user" class="card" style="width:340px;text-align:center;cursor:pointer;transition:box-shadow 0.2s,transform 0.2s;">
+        <div class="eyebrow" style="margin-bottom:8px;font-size:12px;">Interface</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);">End User</div>
+        <div style="font-size:11px;color:var(--co-blue);margin-top:6px;font-family:var(--font-mono);opacity:0.7;">click for details ↗</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div id="s05-node-agent" class="card glass-blue" style="width:400px;text-align:center;border-color:var(--co-blue);cursor:pointer;transition:box-shadow 0.2s,transform 0.2s;">
+        <div class="eyebrow" style="margin-bottom:8px;color:var(--co-blue);font-size:12px;">Core Logic</div>
+        <div style="font-family:var(--font-display);font-size:32px;color:var(--co-black);margin-bottom:12px;">ReAct Agent</div>
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <span class="pill blue">Minimax 2.7</span>
+          <span class="pill">Ollama</span>
+        </div>
+        <div style="font-size:11px;color:var(--co-blue);margin-top:8px;font-family:var(--font-mono);opacity:0.7;">click for details ↗</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div id="s05-node-router" class="card" style="width:400px;text-align:center;background:var(--co-snow);cursor:pointer;transition:box-shadow 0.2s,transform 0.2s;">
+        <div class="eyebrow" style="margin-bottom:8px;font-size:12px;">Orchestration</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);">FastMCP Router</div>
+        <div style="font-size:14px;color:var(--co-muted);margin-top:8px;">14 Registered Tools · Declarative Schema</div>
+        <div style="font-size:11px;color:var(--co-blue);margin-top:6px;font-family:var(--font-mono);opacity:0.7;">click for details ↗</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div id="s05-node-tools" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:440px;cursor:pointer;">
+        <span class="pill">search_items</span>
+        <span class="pill">analyze_trust</span>
+        <span class="pill">market_trends</span>
+        <span class="pill">describe_ui</span>
+        <span class="pill">+9 tools</span>
+      </div>
+
+      <!-- Detail overlay -->
+      <div id="s05-overlay" style="display:none;position:absolute;inset:0;
+        background:rgba(255,255,255,0.97);border-radius:16px;border:1px solid var(--co-gray-cool);
+        padding:32px;z-index:10;backdrop-filter:blur(4px);">
+        <button id="s05-close" style="position:absolute;top:16px;right:16px;background:var(--co-snow);
+          border:1px solid var(--co-gray-cool);border-radius:8px;padding:6px 14px;
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);cursor:pointer;">✕ close</button>
+        <div id="s05-detail-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var details = {
+      user: {
+        title: 'End User Interface',
+        color: 'var(--co-black)',
+        items: [
+          ['Chat UI', 'Interfaccia web con SSE streaming — risposte token-by-token in real-time'],
+          ['Drag & Drop', 'Upload immagini per ricerca visuale multimodale'],
+          ['Ctrl+V', 'Paste diretto di screenshot — analisi immediata via vision LLM'],
+          ['History', 'Thread persistente con memoria semantica delle interazioni passate']
+        ]
+      },
+      agent: {
+        title: 'ReAct Agent — Loop Ragionamento',
+        color: 'var(--co-blue)',
+        items: [
+          ['Planner', 'Classifica intent e seleziona tool — app/agent/planner.py'],
+          ['Executor', 'Chiama MCP via HTTP, applica cache Redis, costruisce Observation'],
+          ['Loop', 'Max 5 step · terminal state detection · fallback automatico'],
+          ['LLM', 'Minimax 2.7 (cloud) → Gemini 1.5 Flash (fallback)']
+        ]
+      },
+      router: {
+        title: 'FastMCP Router — /mcp/standard + /mcp/playwright',
+        color: 'var(--co-black)',
+        items: [
+          ['Standard', '12 tool core: search, analyze_seller, wishlist, get_item_details...'],
+          ['Playwright', '2 tool browser: contact_seller, playwright_search — automazione eBay'],
+          ['Schema', 'Declarative JSON — l\'agente scopre i tool a runtime via /list_tools'],
+          ['Cache', 'Redis con TTL stratificati: 2min executor / 5min general / 24h history']
+        ]
+      },
+      tools: {
+        title: 'Tool Ecosystem — 14 Tool Registrati',
+        color: 'var(--co-blue)',
+        items: [
+          ['search_products', 'Hybrid RAG: Dense + BM25 + RRF su Qdrant'],
+          ['analyze_seller', 'BERT sentiment + eBay rating → trust score blend 60/40'],
+          ['market_trends', 'Google Trends API + competitor price analysis'],
+          ['contact_seller', 'Playwright automation — compila form eBay in autonomia']
+        ]
+      }
+    };
+
+    function renderDetail(key) {
+      var d = details[key];
+      if (!d) return;
+      var html = '<div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Detail View</div>';
+      html += '<div style="font-family:var(--font-display);font-size:28px;color:' + d.color + ';margin-bottom:24px;">' + d.title + '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+      d.items.forEach(function(item) {
+        html += '<div style="display:flex;gap:16px;align-items:flex-start;">';
+        html += '<span style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);min-width:140px;padding-top:2px;">' + item[0] + '</span>';
+        html += '<span style="font-size:14px;color:var(--co-near-black);line-height:1.5;">' + item[1] + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+      document.getElementById('s05-detail-content').innerHTML = html;
+    }
+
+    function openOverlay(key) {
+      renderDetail(key);
+      var ov = document.getElementById('s05-overlay');
+      ov.style.display = 'block';
+      if (window.gsap) {
+        gsap.fromTo(ov, { opacity:0, scale:0.96 }, { opacity:1, scale:1, duration:0.25, ease:'power2.out' });
+      }
+    }
+
+    function closeOverlay() {
+      var ov = document.getElementById('s05-overlay');
+      if (window.gsap) {
+        gsap.to(ov, { opacity:0, scale:0.96, duration:0.2, ease:'power2.in',
+          onComplete: function() { ov.style.display = 'none'; } });
+      } else {
+        ov.style.display = 'none';
+      }
+    }
+
+    document.getElementById('s05-node-user').addEventListener('click', function() { openOverlay('user'); });
+    document.getElementById('s05-node-agent').addEventListener('click', function() { openOverlay('agent'); });
+    document.getElementById('s05-node-router').addEventListener('click', function() { openOverlay('router'); });
+    document.getElementById('s05-node-tools').addEventListener('click', function() { openOverlay('tools'); });
+    document.getElementById('s05-close').addEventListener('click', closeOverlay);
+
+    // Hover lift effect
+    ['s05-node-user','s05-node-agent','s05-node-router'].forEach(function(id) {
+      var el = document.getElementById(id);
+      el.addEventListener('mouseenter', function() {
+        if (window.gsap) gsap.to(el, { y:-4, boxShadow:'0 8px 24px rgba(13,122,95,0.15)', duration:0.25, ease:'power2.out' });
+      });
+      el.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(el, { y:0, boxShadow:'', duration:0.35, ease:'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">05 / 23</span><span class="tl"></span>
+    <span>Orchestration Strategy</span>
+  </div>
+</section>

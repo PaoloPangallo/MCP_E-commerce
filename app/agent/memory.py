@@ -352,6 +352,21 @@ class MemoryService:
         key = f"long_term_memory:{memory.user_key}"
         redis_client.set_json(key, asdict(memory), ttl_seconds=2592000)  # 30 days
 
+    def clear_vision_description(self, user: Optional[object]) -> None:
+        """
+        Azzera la descrizione vision persistita per l'utente.
+
+        Serve quando arriva una nuova immagine ma l'analisi fallisce: senza questo,
+        `hydrate_request_state` continuerebbe a iniettare nel prompt del planner la
+        descrizione dell'immagine PRECEDENTE (TTL 24h), facendo rispondere l'agente
+        sulla foto sbagliata.
+        """
+        session_memory = self.load_session_memory(user)
+        if session_memory.vision_description is None:
+            return
+        session_memory.vision_description = None
+        self.save_session_memory(session_memory)
+
     def hydrate_request_state(self, user_query: str, user: Optional[object]) -> "RequestState":
         session_memory = self.load_session_memory(user)
         long_term_memory = self.load_long_term_memory(user)

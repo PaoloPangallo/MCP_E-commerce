@@ -1,0 +1,14 @@
+Titolo Slide: Cover
+
+
+
+Contenuto della slide:
+• MCP_ECOM — AI Shopping Assistant
+• Paolo Pangallo — A.A. 2025/2026 Matricola 263594
+• Giovanni Lodari - A.A. 2025/2026 Matricola 263597
+
+
+Potrebbe esserci una hero section con il titolo del corso (IR-NLP) e il logo di E-bayGPT
+
+
+

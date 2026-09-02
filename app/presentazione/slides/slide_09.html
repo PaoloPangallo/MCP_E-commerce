@@ -1,0 +1,102 @@
+<section id="s09">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Processing · Data Structuring</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Pipeline</div>
+        <h2 class="section">Batch <em>NER</em></h2>
+        <p class="lead" style="max-width:580px;">I titoli eBay sono stringhe non strutturate. Named Entity Recognition via LLM Batch estrae brand e specs in un solo call atomico.</p>
+      </div>
+
+      <!-- Pipeline flow - Cohere Style -->
+      <div class="anim d2 card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:20px 24px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);">
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Input — Raw Titles</div>
+          <div style="font-family:var(--font-mono);font-size:14px;color:var(--co-near-black);opacity:0.8;">
+            "Apple iPhone 13 Pro Max 256GB Blu Mezzanotte - Usato"<br>
+            "Sony WH-1000XM5 Cuffie Wireless Noise Cancelling NUOVO"
+          </div>
+        </div>
+        <div style="padding:16px 24px;background:var(--co-blue);color:var(--co-white);display:flex;align-items:center;gap:16px;">
+          <div style="width:24px;height:24px;flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><circle cx="9.5" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9.5 17.5h5"/></svg></div>
+          <div style="font-family:var(--font-display);font-size:20px;">LLM Batch Processing</div>
+          <div style="margin-left:auto;font-family:var(--font-mono);font-size:12px;opacity:0.8;">OLLAMA INFRASTRUCTURE</div>
+        </div>
+        <div style="padding:24px;background:var(--co-deep-dark);color:#e5e7eb;">
+          <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Output — Structured Entities</div>
+          <div style="font-family:var(--font-mono);font-size:14px;color:#4ade80;">
+            { "brand": "Apple", "model": "iPhone 13 Pro Max", "specs": { "storage": "256GB" } }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div class="g2">
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">BRAND</div>
+          <div style="font-family:var(--font-display);font-size:20px;">Normalized</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">MODEL</div>
+          <div style="font-family:var(--font-display);font-size:20px;">Cleaned</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">SPECS</div>
+          <div style="font-family:var(--font-display);font-size:20px;">KV Dictionary</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">CATEGORY</div>
+          <div style="font-family:var(--font-display);font-size:20px;">Classification</div>
+        </div>
+      </div>
+
+      <!-- Integration note -->
+      <div class="card glass-blue" style="padding:32px;">
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Pipeline Integration</div>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:15px;color:var(--co-near-black);">
+          <div style="display:flex;gap:12px;">
+            <div style="color:var(--co-blue);">✓</div>
+            <span>NER iniettato in <code style="color:var(--co-blue);">item_specifics</code> prima del reranker.</span>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="color:var(--co-blue);">✓</div>
+            <span>Cross-Encoder e LLM Judge operano su dati già strutturati.</span>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="color:var(--co-blue);">✓</div>
+            <span>Minimizzazione latenza tramite batching multi-titolo.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div class="stat-box" style="align-items:flex-start;">
+          <span class="stat-num">1</span>
+          <span class="stat-label">LLM Call / Batch</span>
+        </div>
+        <div class="stat-box" style="align-items:flex-start;">
+          <span class="stat-num">N</span>
+          <span class="stat-label">Processed Titles</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">09 / 23</span><span class="tl"></span>
+    <span>Entity Structuring</span>
+  </div>
+</section>

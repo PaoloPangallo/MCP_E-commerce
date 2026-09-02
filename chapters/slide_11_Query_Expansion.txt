@@ -1,0 +1,10 @@
+Titolo Slide: Query Expansion
+
+Il Problema: Le query degli utenti sono spesso brevissime ("iphone 15 max", "cuffie gaming") e povere di keyword. Il modello BM25 del RAG (sparse retrieval) non trova corrispondenze se il testo indicizzato usa terminologia diversa. Query corte producono recall basso sia nel vector store che nella ricerca semantica.
+
+La Soluzione: LLM Query Expansion. Prima del recupero RAG, la query originale viene arricchita da un LLM veloce (Ollama) con brand, categorie, sinonimi e termini correlati, mantenendo il risultato sotto le 10 parole. La query espansa viene usata esclusivamente per interrogare il Qdrant RAG (sia dense che sparse), mentre la query originale parsata continua a essere usata per la ricerca eBay. L'espansione avviene in parallelo alla ricerca eBay, quindi non aggiunge latenza percepita.
+
+Contenuto della slide:
+• LLM Expansion — Il modello riceve la query e restituisce una versione arricchita ≤ 10 parole: "cerca iphone 15 max" → "Apple iPhone 15 Pro Max smartphone"
+• Solo per RAG — La query espansa va esclusivamente a Qdrant (Dense + BM25/Sparse); la ricerca eBay usa il parsed output originale con filtri strutturati, separazione netta delle responsabilità
+• Parallel Execution — expand_query() e search_items() girano in asyncio.gather(): l'espansione non blocca il recupero live; la latenza aggiuntiva è zero sul critical path

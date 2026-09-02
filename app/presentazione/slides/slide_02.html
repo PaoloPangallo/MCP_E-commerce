@@ -1,0 +1,113 @@
+<section id="s02">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Capitolo 01 · Visione</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:56px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Problem & Vision</div>
+      <h2 class="section">Shopping Online <em>2026</em></h2>
+      <p class="lead" style="max-width:1000px;color:var(--co-near-black);">
+        Migliaia di inserzioni irrilevanti e venditori inaffidabili saturano il mercato. 
+        <strong style="color:var(--co-black);">MCP_ECOM</strong> introduce un'architettura enterprise basata su quattro pilastri per restituire fiducia e precisione all'utente.
+      </p>
+    </div>
+
+    <!-- 4-pillar grid - Cohere Card Style -->
+    <div class="g4 anim d2">
+      <!-- RAG -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">ENGINE</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">Hybrid RAG</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          Dense + BM25 + RRF su Qdrant. Ogni risultato è supportato da evidenze reali dal knowledge base.
+        </p>
+      </div>
+      <!-- Trust -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">SECURITY</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">Trust Score</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          Feedback ratio + NLP sentiment. Punteggio oggettivo derivato da analisi testuale profonda.
+        </p>
+      </div>
+      <!-- Memory -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">ADAPTATION</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">Implicit Memory</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          Profilazione EMA (Exponential Moving Average) su budget e brand. Il sistema impara in tempo reale.
+        </p>
+      </div>
+      <!-- MCP -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">PROTOCOL</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">FastMCP</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          14 tool registrati su protocollo standard. L'agente ReAct opera con precisione infrastrutturale.
+        </p>
+      </div>
+    </div>
+
+    <!-- Bottom stat bar - Cohere Enterprise Style -->
+    <div class="anim d3" style="display:flex;gap:80px;padding-top:32px;border-top:1px solid var(--co-gray-light);">
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-tools">14</span>
+        <span class="stat-label">MCP Tools</span>
+      </div>
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-feedback">300+</span>
+        <span class="stat-label">Feedback / Seller</span>
+      </div>
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-dim">384</span>
+        <span class="stat-label">Dense Dimensions</span>
+      </div>
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-engines">3</span>
+        <span class="stat-label">Engines</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s02');
+    var counters = [
+      { el: null, id: 's02-tools',    end: 14,  suffix: ''  },
+      { el: null, id: 's02-feedback', end: 300, suffix: '+' },
+      { el: null, id: 's02-dim',      end: 384, suffix: ''  },
+      { el: null, id: 's02-engines',  end: 3,   suffix: ''  },
+    ];
+    function run() {
+      counters.forEach(function(c) {
+        var el = document.getElementById(c.id);
+        if (!el) return;
+        var obj = { val: 0 };
+        gsap.to(obj, {
+          val: c.end, duration: 1.5, ease: 'power2.out',
+          onUpdate: function() { el.textContent = Math.round(obj.val) + c.suffix; }
+        });
+      });
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) run();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) run();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">02 / 23</span><span class="tl"></span>
+    <span>Vision & Architecture</span>
+  </div>
+</section>

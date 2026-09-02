@@ -1,0 +1,18 @@
+Titolo Slide: Prompting Engineering
+
+Il Problema: Allucinazioni creative e output non strutturati che impediscono l'automazione dei processi e rompono la pipeline dell'agente.
+
+La Soluzione: Un framework multi-tecnica che combina CoT, ReAct e Structured Prompting per garantire determinismo e ragionamento logico.
+
+Contenuto della slide:
+- CoT (Chain of Thought) in Italiano
+- Role-based Prompting
+- Framework ReAct (Thought-Action-Obs)
+- Structured Output (JSON Rigido)
+
+Note / Tecniche di Prompting:
+1. Role-based Prompting: "Sei ebayGPT, il cervello strategico...". Definisce il perimetro di azione e il tono.
+2. Chain of Thought (CoT): Obbligo di ragionare nel campo "thought" prima di agire. Esempio: "thought: L'utente cerca un iPhone. Devo prima usare search_products...".
+3. Few-Shot Prompting: Esempi di chiamate tool inclusi nel catalogo per guidare il modello verso l'input corretto.
+4. ReAct Pattern: Ciclo iterativo di Pensiero, Azione e Osservazione per adattarsi ai risultati dei tool in tempo reale.
+5. Structured Output Prompting: Vincolo assoluto di risposta in formato JSON per l'integrazione automatica con il backend.

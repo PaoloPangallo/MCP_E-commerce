@@ -1,0 +1,11 @@
+Titolo Slide: Market Intelligence
+
+Il Problema: eBay mostra solo i prezzi delle inserzioni attive: non c'è contesto di mercato. L'utente non sa se 450€ per un iPhone 13 è un affare o una fregatura, se il prodotto è in trend o se conviene aspettare qualche settimana.
+
+La Soluzione: Il MCP Tool market_trends (tool: get_market_trends) integra SERP API per interrogare Google Shopping e Google Trends in parallelo. Google Shopping fornisce benchmark di prezzo da tutto il web (min, max, media, mediana, deviazione standard, seller breakdown) con outlier removal IQR. Google Trends fornisce la serie storica dell'interesse (24h / 7gg / 3 mesi). I dati vengono fusi in un verdetto testuale leggibile che dice all'utente se comprare ora o aspettare.
+
+Contenuto della slide:
+• Google Shopping (SerpAPI) — Prezzi da tutto il web, filtraggio outlier IQR (Q1-1.5×IQR ÷ Q3+1.5×IQR), statistiche complete: min/max/media/mediana/σ + seller breakdown ordinato per prezzo
+• Google Trends (SerpAPI) — Serie temporale interesse (TIMESERIES), classificazione trend: forte crescita / in crescita / stabile / in calo / forte calo con soglie ±10% e ±30%
+• Parallel Execution — asyncio.gather su fetch_google_shopping + fetch_google_trends + fetch_price_history (24h/7gg/3mesi): tre chiamate API in una sola latenza
+• Verdetto Automatico — build_verdetto() fonde dati shopping e trend in una frase d'azione: "Ottima offerta (87/100). OTTIMA OPPORTUNITÀ. Il prezzo medio (€412) è vicino al minimo riscontrato (€389). La domanda è in forte aumento: agisci ora."

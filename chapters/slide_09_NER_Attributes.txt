@@ -1,0 +1,11 @@
+Titolo Slide: NER & Attributes
+
+Il Problema: Anche con un parser LLM-First, i titoli dei prodotti eBay restano sporchi: "Apple iPhone 13 Pro Max 256GB Blu Mezzanotte - Usato - Ottimo" contiene brand, modello, storage, colore e condizione mischiati in una stringa non strutturata. I metadati strutturati (brand, model, specs) sono spesso assenti nella risposta dell'API eBay.
+
+La Soluzione: Named Entity Recognition via LLM Batch. Dopo che la pipeline ha recuperato i risultati di eBay, un secondo passaggio LLM riceve i titoli in batch e restituisce per ognuno un JSON strutturato con brand, model, specs (dizionario chiave-valore: storage, color, condition, etc.) e category. Il batch processing riduce il numero di chiamate LLM a una sola per gruppo di prodotti. I dati estratti vengono iniettati direttamente negli item prima del reranking.
+
+Contenuto della slide:
+• Batch LLM — Un solo call_llm con tutti i titoli numerati; il modello restituisce una lista di oggetti JSON nel campo "results", allineata per indice ai titoli di input
+• Schema NER — Ogni titolo produce: brand, model, specs {storage, color, condition…}, category — null se non presente, senza invenzioni
+• Arricchimento pipeline — I dati NER vengono iniettati negli item (full_item_specifics, brand) prima del reranker: il Cross-Encoder e l'LLM Judge operano su item già strutturati
+• Integrazione eBay getItem — Per i top risultati, la pipeline chiama anche getItem per ottenere localizedAspects direttamente dall'API; NER serve da fallback e enrichment sui titoli eBay privi di metadati

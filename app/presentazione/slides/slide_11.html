@@ -1,0 +1,95 @@
+<section id="s11">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Retrieval · Recall Optimization</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Search Pipeline</div>
+      <h2 class="section">Query <em>Expansion</em></h2>
+      <p class="lead">Query brevi producono recall basso su BM25. L'LLM arricchisce la query con sinonimi e termini correlati solo per il RAG interno.</p>
+    </div>
+
+    <!-- Before/After hero - Cohere Clean Style -->
+    <div class="anim d2 card" style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0;overflow:hidden;">
+      <!-- Before -->
+      <div style="padding:40px;background:var(--co-snow);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Original Query</div>
+        <div style="font-family:var(--font-display);font-size:32px;color:var(--co-black);margin-bottom:16px;">
+          "compara iphone 15 max"
+        </div>
+        <div style="display:flex;gap:8px;">
+          <span class="pill">3 Tokens</span>
+          <span class="pill" style="color:var(--co-muted);">Low Recall</span>
+        </div>
+      </div>
+      <!-- Divider / Action -->
+      <div style="background:var(--co-blue);padding:40px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-white);text-transform:uppercase;writing-mode:vertical-lr;transform:rotate(180deg);">LLM EXPAND</div>
+        <div style="color:var(--co-white);font-size:24px;">→</div>
+      </div>
+      <!-- After -->
+      <div style="padding:40px;background:var(--co-white);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Expanded Query → Qdrant</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;">
+          "Apple iPhone 15 Pro Max smartphone comparison"
+        </div>
+        <div style="display:flex;gap:8px;">
+          <span class="pill blue">Hybrid Boost</span>
+          <span class="pill blue">N-Gram Coverage</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom properties -->
+    <div class="g4 anim d3">
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);text-transform:uppercase;margin-bottom:8px;">LLM Strategy</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Brand, categorie e sinonimi. Output limitato a 10 parole per precisione.</p>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Isolation</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Esclusivamente per Qdrant (RAG). eBay usa i filtri strutturati originali.</p>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Performance</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;"><code style="color:var(--co-blue);">asyncio.gather</code> — latenza aggiuntiva nulla sul critical path.</p>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Resilience</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Fallback automatico alla query originale in caso di timeout o errori LLM.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s11');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.g4 .card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top - rect.height / 2) / sc * 0.04;
+        if (window.gsap) gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">11 / 23</span><span class="tl"></span>
+    <span>Recall Optimization</span>
+  </div>
+</section>

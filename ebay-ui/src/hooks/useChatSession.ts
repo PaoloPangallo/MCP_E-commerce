@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
 
 import type { ChatEntry, Message } from "../features/chat/store/chatStore.ts"
@@ -48,12 +48,21 @@ export function useChatSession() {
 
   const refreshSettings = useSettingsStore(s => s.refreshSettings)
 
+  // Deduplica per identità dell'oggetto: ogni run produce un finalPayload nuovo,
+  // quindi due run distinti non collidono mai (a differenza del confronto per
+  // contenuto, che scartava i turni con immagine).
+  const processedPayloadRef = useRef<unknown>(null)
+  // Un turno con immagine non deve popolare la cache testuale.
+  const lastSendHadImageRef = useRef(false)
+
   // Watch for payload completion
   useEffect(() => {
     if (!finalPayload || running || !loadingQuery) return
-    
+    if (processedPayloadRef.current === finalPayload) return
+    processedPayloadRef.current = finalPayload
+
     // saveAgentResponse handles the atomic title update to prevent race conditions
-    saveAgentResponse(loadingQuery, finalPayload, ebayQuery || undefined)
+    saveAgentResponse(loadingQuery, finalPayload, ebayQuery || undefined, !lastSendHadImageRef.current)
     
     // Auto-refresh settings if the agent potentially updated them
     const hasProfileUpdate = steps.some((s: any) => 
@@ -85,7 +94,10 @@ export function useChatSession() {
     if ((!text.trim() && !image) || running) return
 
     const query = text.trim()
-    const cacheKey = (query + (image ? "_img" : "")).toLowerCase()
+    lastSendHadImageRef.current = !!image
+    // La cache è indicizzata solo sul testo: servire un turno con immagine da lì
+    // significherebbe restituire la risposta di una richiesta precedente.
+    const cacheKey = image ? null : query.toLowerCase()
 
     const userMessage: Message = {
       role: "user",
@@ -95,7 +107,7 @@ export function useChatSession() {
 
     appendMessage(userMessage)
 
-    const cached = cache[cacheKey]
+    const cached = cacheKey ? cache[cacheKey] : undefined
 
     if (cached) {
       appendAssistantMessage(

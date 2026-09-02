@@ -1,0 +1,145 @@
+<section id="s20">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Ranking · NLP Processing</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Trust Verification</div>
+        <h2 class="section">BERT <em>Sentiment</em></h2>
+        <p class="lead" style="max-width:560px;">I feedback dei venditori contengono sfumature che un semplice conteggio di stelle non può catturare. Un classificatore Transformer legge la soddisfazione reale.</p>
+      </div>
+
+      <!-- Pipeline flow - Cohere Style -->
+      <div style="display:flex;flex-direction:column;gap:12px;" class="anim d2">
+        <div class="card" style="padding:20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="width:20px;height:20px;flex-shrink:0;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--co-black);">Raw Feedback Data</div>
+            <div style="font-size:12px;color:var(--co-muted);">"Ottimo prodotto ma spedizione lenta"</div>
+          </div>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card glass-blue" style="padding:20px;display:flex;align-items:center;gap:16px;border-color:var(--co-blue);">
+          <div style="width:20px;height:20px;flex-shrink:0;color:var(--co-blue);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><circle cx="9.5" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9.5 17.5h5"/></svg></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--co-black);">BERT Transformer Model</div>
+            <div style="font-size:12px;color:var(--co-muted);">Distingue ironia e contesto oltre le keyword</div>
+          </div>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card" style="padding:20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="width:20px;height:20px;flex-shrink:0;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--co-black);">Final Trust Score Blend</div>
+            <div style="font-size:12px;color:var(--co-muted);">60% eBay Rating + 40% BERT Sentiment</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blend formula + doughnut -->
+      <div class="anim d3 card" style="padding:32px;background:var(--co-snow);display:flex;align-items:center;gap:32px;">
+        <div style="flex:1;">
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Blend Algorithm</div>
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);">
+            score = <span style="color:var(--co-blue);">0.60</span> × eBay + <span style="color:var(--co-blue);opacity:0.6;">0.40</span> × BERT
+          </div>
+        </div>
+        <canvas id="s20-blend-chart" width="130" height="130" style="flex-shrink:0;"></canvas>
+      </div>
+    </div>
+
+    <!-- Right: examples -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:24px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:4px;">BERT Insight Analysis</div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:14px;color:var(--co-near-black);margin-bottom:12px;font-style:italic;">"Arrivato in ritardo come al solito, ma prodotto ok"</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <span style="color:var(--co-muted);">eBay: ⭐⭐⭐⭐⭐</span>
+          <span class="pill" style="color:var(--co-blue);">BERT: ⭐⭐⭐</span>
+        </div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:14px;color:var(--co-near-black);margin-bottom:12px;font-style:italic;">"Perfetto in tutto, venditore fantastico, super consigliato!"</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <span style="color:var(--co-muted);">eBay: ⭐⭐⭐⭐⭐</span>
+          <span class="pill blue">BERT: ⭐⭐⭐⭐⭐</span>
+        </div>
+      </div>
+
+      <div class="card" style="padding:20px;border-color:rgba(226,117,136,0.2);">
+        <div style="font-size:14px;color:var(--co-near-black);margin-bottom:12px;font-style:italic;">"Pessima esperienza. Oggetto non corrispondente alla descrizione"</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <span style="color:var(--co-muted);">eBay: ⭐</span>
+          <span class="pill" style="color:red;opacity:0.6;">BERT: ⭐</span>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">5</span>
+          <span class="stat-label">Levels of Class.</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">Redis</span>
+          <span class="stat-label">Batch Cache</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s20');
+    var chart;
+    function buildChart() {
+      if (chart) { chart.destroy(); }
+      var ctx = document.getElementById('s20-blend-chart');
+      if (!ctx || !window.Chart) return;
+      chart = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: ['eBay Rating', 'BERT Sentiment'],
+          datasets: [{
+            data: [60, 40],
+            backgroundColor: ['#0d7a5f', 'rgba(13,122,95,0.45)'],
+            borderWidth: 0, hoverOffset: 4
+          }]
+        },
+        options: {
+          cutout: '68%',
+          responsive: false,
+          animation: { duration: 1000, easing: 'easeInOutQuart' },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#93939f', font: { size: 10, family: 'JetBrains Mono' }, boxWidth: 10, padding: 8 }
+            }
+          }
+        }
+      });
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) buildChart();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) buildChart();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">18 / 23</span><span class="tl"></span>
+    <span>Sentiment Processing</span>
+  </div>
+</section>

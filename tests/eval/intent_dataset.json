@@ -1,0 +1,358 @@
+[
+  {
+    "id": 1,
+    "query": "Vorrei un iPhone rigenerato blu che stia sotto i 300 euro. Ma cercalo venduto da pegaso_italia per favore.",
+    "expected": {
+      "product": "iPhone",
+      "brands": ["Apple"],
+      "constraints": [
+        {"type": "condition", "value": "refurbished"},
+        {"type": "price", "operator": "<=", "value": 300},
+        {"type": "aspect", "name": "color", "value": "blue"}
+      ],
+      "target_seller": "pegaso_italia"
+    }
+  },
+  {
+    "id": 2,
+    "query": "Cerco delle scarpe Nike da corsa.",
+    "expected": {
+      "product": "scarpe da corsa",
+      "brands": ["Nike"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 3,
+    "query": "Trova una PlayStation 5 usata a meno di 400€.",
+    "expected": {
+      "product": "PlayStation 5",
+      "brands": ["Sony"],
+      "constraints": [
+        {"type": "condition", "value": "used"},
+        {"type": "price", "operator": "<=", "value": 400}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 4,
+    "query": "Voglio comprare un Samsung Galaxy S23 nuovo. Il venditore deve essere mediaworld_it",
+    "expected": {
+      "product": "Galaxy S23",
+      "brands": ["Samsung"],
+      "constraints": [
+        {"type": "condition", "value": "new"}
+      ],
+      "target_seller": "mediaworld_it"
+    }
+  },
+  {
+    "id": 5,
+    "query": "Sto cercando un laptop economico",
+    "expected": {
+      "product": "laptop",
+      "brands": [],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 6,
+    "query": "Samsung usato",
+    "expected": {
+      "product": null,
+      "brands": ["Samsung"],
+      "constraints": [
+        {"type": "condition", "value": "used"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 7,
+    "query": "vorrei tipo cercare un telefono mm non troppo caro magari Samsung o qualcosa di simile",
+    "expected": {
+      "product": "telefono",
+      "brands": ["Samsung"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 8,
+    "query": "Cerco un laptop che non sia ricondizionato",
+    "expected": {
+      "product": "laptop",
+      "brands": [],
+      "exclusions": ["refurbished"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 9,
+    "query": "Voglio uno smartwatch tra i 200 e i 500 euro",
+    "expected": {
+      "product": "smartwatch",
+      "brands": [],
+      "constraints": [
+        {"type": "price", "operator": "between", "value": [200, 500]}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 10,
+    "query": "Comprami delle cuffie da venditore TechShop",
+    "expected": {
+      "product": "cuffie",
+      "brands": [],
+      "constraints": [],
+      "target_seller": "TechShop"
+    }
+  },
+  {
+    "id": 11,
+    "query": "Cerco un iPhone o un Samsung Galaxy nuovo sotto i 600 euro",
+    "expected": {
+      "product": null,
+      "brands": ["Apple", "Samsung"],
+      "constraints": [
+        {"type": "condition", "value": "new"},
+        {"type": "price", "operator": "<=", "value": 600}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 12,
+    "query": "cover protettiva per iPhone 14",
+    "expected": {
+      "product": "cover",
+      "product_type": "Accessory",
+      "brands": ["Apple"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 13,
+    "query": "caricatore originale per MacBook Pro 2022",
+    "expected": {
+      "product": "caricatore",
+      "product_type": "Accessory",
+      "brands": ["Apple"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 14,
+    "query": "Voglio solo prodotti nuovi, cercami un televisore 4K Sony",
+    "expected": {
+      "product": "televisore 4K",
+      "brands": ["Sony"],
+      "constraints": [
+        {"type": "condition", "value": "new"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 15,
+    "query": "Cerca tablet Android con almeno 128GB di storage",
+    "expected": {
+      "product": "tablet",
+      "brands": [],
+      "constraints": [
+        {"type": "aspect", "name": "storage", "value": "128GB"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 16,
+    "query": "Voglio delle scarpe Adidas rosse taglia 42",
+    "expected": {
+      "product": "scarpe",
+      "brands": ["Adidas"],
+      "constraints": [
+        {"type": "aspect", "name": "color", "value": "red"},
+        {"type": "aspect", "name": "size", "value": "42"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 17,
+    "query": "Cuffie wireless Sony sotto i 150 euro ma non usate",
+    "expected": {
+      "product": "cuffie wireless",
+      "brands": ["Sony"],
+      "exclusions": ["used"],
+      "constraints": [
+        {"type": "price", "operator": "<=", "value": 150}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 18,
+    "query": "Mouse gaming Logitech sopra i 50 euro",
+    "expected": {
+      "product": "mouse gaming",
+      "brands": ["Logitech"],
+      "constraints": [
+        {"type": "price", "operator": ">=", "value": 50}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 19,
+    "query": "Tastiera meccanica nuova tra 80 e 200 euro da venditore top_peripherals",
+    "expected": {
+      "product": "tastiera meccanica",
+      "brands": [],
+      "constraints": [
+        {"type": "condition", "value": "new"},
+        {"type": "price", "operator": "between", "value": [80, 200]}
+      ],
+      "target_seller": "top_peripherals"
+    }
+  },
+  {
+    "id": 20,
+    "query": "iPhone",
+    "expected": {
+      "product": "iPhone",
+      "brands": ["Apple"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 21,
+    "query": "Batteria di ricambio per iPhone 12",
+    "expected": {
+      "product": "batteria",
+      "product_type": "Part",
+      "brands": ["Apple"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 22,
+    "query": "Videogioco FIFA 25 per PS5 sotto i 30 euro",
+    "expected": {
+      "product": "FIFA 25",
+      "brands": [],
+      "constraints": [
+        {"type": "price", "operator": "<=", "value": 30},
+        {"type": "aspect", "name": "platform", "value": "PS5"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 23,
+    "query": "Cerca qualcosa di economico ma non di seconda mano",
+    "expected": {
+      "product": null,
+      "brands": [],
+      "exclusions": ["used"],
+      "constraints": [],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 24,
+    "query": "Notebook Dell XPS 15 ricondizionato certificato",
+    "expected": {
+      "product": "XPS 15",
+      "brands": ["Dell"],
+      "constraints": [
+        {"type": "condition", "value": "refurbished"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 25,
+    "query": "Devo comprare una TV LG OLED, non voglio spendere più di 1200 euro",
+    "expected": {
+      "product": "TV OLED",
+      "brands": ["LG"],
+      "constraints": [
+        {"type": "price", "operator": "<=", "value": 1200}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 26,
+    "query": "Drone DJI usato o ricondizionato sotto i 300",
+    "expected": {
+      "product": "Drone",
+      "brands": ["DJI"],
+      "constraints": [
+        {"type": "price", "operator": "<=", "value": 300}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 27,
+    "query": "Cerca iPad Pro 12.9 pollici con almeno 256GB",
+    "expected": {
+      "product": "iPad Pro",
+      "brands": ["Apple"],
+      "constraints": [
+        {"type": "aspect", "name": "storage", "value": "256GB"},
+        {"type": "aspect", "name": "size", "value": "12.9"}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 28,
+    "query": "Fotocamera Canon reflex professionale tra 500 e 1500 euro nuova",
+    "expected": {
+      "product": "fotocamera reflex",
+      "brands": ["Canon"],
+      "constraints": [
+        {"type": "condition", "value": "new"},
+        {"type": "price", "operator": "between", "value": [500, 1500]}
+      ],
+      "target_seller": null
+    }
+  },
+  {
+    "id": 29,
+    "query": "AirPods Pro nuovi da venditore apple_store_it",
+    "expected": {
+      "product": "AirPods Pro",
+      "brands": ["Apple"],
+      "constraints": [
+        {"type": "condition", "value": "new"}
+      ],
+      "target_seller": "apple_store_it"
+    }
+  },
+  {
+    "id": 30,
+    "query": "Zaino per laptop 15 pollici impermeabile",
+    "expected": {
+      "product": "zaino per laptop",
+      "product_type": "Accessory",
+      "brands": [],
+      "constraints": [
+        {"type": "aspect", "name": "size", "value": "15"}
+      ],
+      "target_seller": null
+    }
+  }
+]

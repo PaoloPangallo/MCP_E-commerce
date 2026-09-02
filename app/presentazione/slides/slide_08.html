@@ -1,0 +1,204 @@
+<section id="s08">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Parsing · Semantic Understanding</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Pipeline</div>
+        <h2 class="section">LLM-First <em>Parser</em></h2>
+        <p class="lead" style="max-width:560px;">Oltre le regex: il parsing semantico delega l'intera comprensione a un modello con output JSON validato e cachato.</p>
+      </div>
+
+      <!-- JSON Schema visual - Cohere Dark Code style -->
+      <div class="anim d2 card" style="background:var(--co-deep-dark);border:none;padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Strict Schema Output</div>
+        <div style="font-family:var(--font-mono);font-size:14px;line-height:1.8;color:#e5e7eb;">
+          {<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"product"</span>: <span style="color:#4ade80;">"iPhone 15 Pro Max"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"brands"</span>: [<span style="color:#4ade80;">"Apple"</span>],<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"constraints"</span>: {<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c084fc;">"price"</span>: {<span style="color:#c084fc;">"max"</span>: <span style="color:#fbbf24;">1100</span>},<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c084fc;">"condition"</span>: <span style="color:#4ade80;">"used"</span><br>
+          &nbsp;&nbsp;},<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"type"</span>: <span style="color:#4ade80;">"MainSearch"</span><br>
+          }
+        </div>
+      </div>
+
+      <!-- Fuzzy brand matching -->
+      <div class="anim d3 card" style="display:flex;align-items:center;gap:20px;padding:24px;">
+        <div class="pill" style="border-color:var(--co-gray-cool);background:var(--co-snow);color:var(--co-muted);">"adidaz"</div>
+        <div class="arrow">→</div>
+        <div class="pill blue">"Adidas"</div>
+        <div style="font-size:14px;color:var(--co-muted);margin-left:auto;">Correzione pre-LLM con <code style="color:var(--co-blue);">rapidfuzz</code></div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d2">
+      <!-- Confidence score breakdown -->
+      <div class="card" style="padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:24px;">Confidence Metric Breakdown</div>
+        <div style="display:flex;flex-direction:column;gap:20px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;">
+              <span style="color:var(--co-muted);">Semantic Brand Detection</span>
+              <span style="font-weight:600;color:var(--co-black);">+0.30</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s08-bar-brand" style="height:100%;width:30%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;">
+              <span style="color:var(--co-muted);">Numeric Constraints</span>
+              <span style="font-weight:600;color:var(--co-black);">+0.30</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s08-bar-num" style="height:100%;width:30%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;">
+              <span style="color:var(--co-muted);">Product Identification</span>
+              <span style="font-weight:600;color:var(--co-black);">+0.40</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s08-bar-prod" style="height:100%;width:40%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:24px;display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:15px;color:var(--co-muted);">LLM Parser Precision</span>
+            <span class="stat-num" id="s08-precision" style="font-size:48px;">0.95</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Redis cache -->
+      <div class="card glass-blue" style="display:flex;gap:16px;align-items:center;">
+        <div style="width:24px;height:24px;flex-shrink:0;color:var(--co-blue);"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h8l-1 8 10-12h-8z"/></svg></div>
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:600;color:var(--co-black);margin-bottom:4px;">Distributed Cache — Redis</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.5;">Hit = zero latenza LLM per query ripetute. TTL dinamico basato su query context.</p>
+        </div>
+      </div>
+
+      <!-- Live demo widget -->
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:10px 16px;background:var(--co-deep-dark);display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex;gap:5px;">
+            <div style="width:9px;height:9px;border-radius:50%;background:#ff5f57;"></div>
+            <div style="width:9px;height:9px;border-radius:50%;background:#febc2e;"></div>
+            <div style="width:9px;height:9px;border-radius:50%;background:#28c840;"></div>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,0.4);flex:1;">Live Demo — Parser</span>
+          <span id="s08-status" style="font-family:var(--font-mono);font-size:10px;color:rgba(255,255,255,0.3);">●  idle</span>
+        </div>
+        <div style="background:var(--co-deep-dark);padding:12px 16px;display:flex;gap:8px;">
+          <input id="s08-query" type="text" value="iPhone 15 Pro Max usato meno di 900 euro"
+            style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:6px;padding:6px 10px;font-family:var(--font-mono);font-size:12px;
+            color:#e5e7eb;outline:none;" />
+          <button id="s08-run" style="background:#0d7a5f;border:none;border-radius:6px;
+            padding:6px 14px;font-family:var(--font-mono);font-size:12px;color:#fff;cursor:pointer;">▶ Run</button>
+        </div>
+        <div id="s08-output" style="background:var(--co-deep-dark);padding:0 16px 12px;
+          font-family:var(--font-mono);font-size:11px;color:#a3e635;line-height:1.7;
+          min-height:56px;max-height:80px;overflow-y:auto;white-space:pre-wrap;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s08');
+    if (!section) return;
+    var bars = [
+      { id: 's08-bar-brand', delay: 0   },
+      { id: 's08-bar-num',   delay: 0.12 },
+      { id: 's08-bar-prod',  delay: 0.24 },
+    ];
+    function run() {
+      if (!window.gsap) return;
+      bars.forEach(function(b) {
+        var el = document.getElementById(b.id);
+        if (!el) return;
+        gsap.fromTo(el,
+          { scaleX: 0 },
+          { scaleX: 1, duration: 0.7, ease: 'power3.out', delay: b.delay,
+            transformOrigin: 'left center' }
+        );
+      });
+      var precEl = document.getElementById('s08-precision');
+      if (precEl) {
+        var obj = { val: 0 };
+        gsap.to(obj, { val: 0.95, duration: 1.4, ease: 'power2.out', delay: 0.3,
+          onUpdate: function() { precEl.textContent = obj.val.toFixed(2); }
+        });
+      }
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) run();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) run();
+
+    // Live demo
+    var es = null;
+    var runBtn = document.getElementById('s08-run');
+    var output = document.getElementById('s08-output');
+    var status = document.getElementById('s08-status');
+    if (runBtn) {
+      runBtn.addEventListener('click', function() {
+        if (es) { es.close(); es = null; }
+        var q = (document.getElementById('s08-query').value || '').trim();
+        if (!q) return;
+        output.textContent = '';
+        status.textContent = '●  streaming…';
+        status.style.color = '#4ade80';
+        runBtn.disabled = true;
+        var url = 'http://localhost:8050/agent/stream?query=' + encodeURIComponent(q);
+        es = new EventSource(url);
+        es.onmessage = function(e) {
+          try {
+            var d = JSON.parse(e.data);
+            var line = d.content || d.text || d.delta || JSON.stringify(d);
+            output.textContent += line;
+            output.scrollTop = output.scrollHeight;
+          } catch(_) {
+            output.textContent += e.data + '\n';
+            output.scrollTop = output.scrollHeight;
+          }
+        };
+        es.onerror = function() {
+          es.close(); es = null;
+          status.textContent = '●  done';
+          status.style.color = 'rgba(255,255,255,0.3)';
+          runBtn.disabled = false;
+        };
+        es.addEventListener('done', function() {
+          es.close(); es = null;
+          status.textContent = '●  done';
+          status.style.color = 'rgba(255,255,255,0.3)';
+          runBtn.disabled = false;
+        });
+      });
+    }
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">08 / 23</span><span class="tl"></span>
+    <span>Semantic Parser</span>
+  </div>
+</section>

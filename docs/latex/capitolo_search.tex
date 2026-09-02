@@ -1,0 +1,361 @@
+% ============================================================
+% chapter2-Search_Pipeline.tex
+% ============================================================
+\chapter{La Pipeline di Elaborazione della Query}
+
+La Search Pipeline costituisce il nucleo operativo dell'assistente ed è
+orchestrata interamente all'interno del modulo \path{search_pipeline.py}.
+Alla ricezione di una richiesta in linguaggio naturale, il sistema attiva
+una sequenza strutturata di elaborazioni che sfrutta la concorrenza asincrona
+offerta da \path{asyncio}, combinando interrogazioni parallele a database
+interni ed API esterne per produrre risultati classificati, arricchiti e
+contestualizzati. La pipeline si articola in dodici fasi distinte, ciascuna
+delle quali alimenta le successive con strutture dati progressivamente più
+raffinate.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 1: Recupero Anticipato della Memoria (Phantom Fetch)}
+% ------------------------------------------------------------------
+Non appena la richiesta raggiunge la pipeline, viene avviata in background
+un'interrogazione su \textbf{Qdrant}, il database vettoriale del sistema,
+tramite il metodo \path{retrieve_context}. Questa operazione, denominata
+\emph{Phantom Fetch}, non attende le fasi di analisi semantica: agisce sul
+testo grezzo per recuperare, con il massimo anticipo temporale, le inserzioni
+già validate in sessioni precedenti su query semanticamente affini. Il
+principio è semplice: prodotti già incontrati e giudicati positivamente
+costituiscono una baseline di alta qualità, e il loro recupero anticipato
+parallelizza la latenza con le fasi computazionalmente più intensive.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 2: Recupero dello Storico Conversazionale}
+% ------------------------------------------------------------------
+Per mantenere coerenza su conversazioni multi-turno, la pipeline recupera
+la cronologia recente della sessione tramite \path{redis_client.get_user_queries},
+estraendo le ultime tre query (\path{history[:3]}). Questo \textit{snapshot}
+contestuale è volutamente leggero: fornisce un riferimento minimo per
+risolvere anafore e riferimenti impliciti senza sovraccaricare la
+\textit{context window} dell'LLM. La gestione della memoria a lungo termine
+e le logiche di \textit{summarization} sono demandate all'Orchestratore
+ReAct, circoscrivendo il compito della pipeline al solo
+\textit{intent-matching} istantaneo.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 3: Analisi Logica della Query (NLP Parsing)}
+% ------------------------------------------------------------------
+Il testo grezzo e lo storico vengono consegnati al servizio
+\path{parse_query_service}, che trasforma il linguaggio naturale in
+strutture rigide interrogabili dai sistemi a valle. Il processo opera su
+due livelli complementari.\\
+
+\noindent
+Il primo livello applica \textbf{spaCy} per l'estrazione deterministica di
+elementi ad alta rilevanza: soglie numeriche di budget (es.\ \emph{"sotto i
+200 euro"} genera il vincolo \path{max\_price=200}) e indicatori di
+condizione (es.\ \emph{"rovinato"} forza \path{condition="usato"}).
+Il secondo livello delega a un LLM l'interpretazione delle ambiguità
+semantiche, restituendo un oggetto strutturato con marchio, specifiche
+tecniche e il campo \path{intent_product_type}: un classificatore binario
+che distingue un dispositivo principale (\texttt{Main}) da un accessorio
+(\texttt{Accessory}), e che governa il filtraggio nelle fasi successive.\\
+
+\noindent
+Fondamentale è l'estrazione sistematica dei \textbf{vincoli di esclusione}
+(\path{exclusions}): l'LLM identifica negazioni esplicite o implicite
+(es.\ \emph{"senza cerniera"}, \emph{"no ricambi"}) e le struttura in un
+insieme di predicati che alimenteranno il rigore dell'Expert Judge nella
+Fase~9. In parallelo, il modulo \path{_build_ebay_query} traduce queste
+negazioni nella sintassi di esclusione delle API eBay, prependendovi il
+segno meno (\texttt{-}), per evitare che termini negativi vengano
+interpretati come keyword di inclusione.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 4: Ricerca Parallela su API eBay e RAG Locale}
+% ------------------------------------------------------------------
+Tramite \path{asyncio.gather}, la pipeline lancia simultaneamente due flussi
+di recupero su sorgenti eterogenee.\\
+
+\noindent
+Il primo interroga le \textbf{Browse API di eBay} tramite \path{search_items},
+richiedendo un massimo di 15 inserzioni secondo i criteri costruiti in
+Fase 3. Il volume dei risultati è deliberatamente limitato: operare su un sottoinsieme ristretto e pre-selezionato garantisce elaborazioni successive più rapide rispetto a un dataset ampio e rumoroso, ottimizzando contestualmente il numero di chiamate alle API.\\
+
+\noindent
+Il secondo attiva il modulo \path{_do_rag}, che implementa un approccio
+\textbf{Retrieval-Augmented Generation} sul corpus documentale interno.
+La query viene prima espansa semanticamente da \path{expand_query} —
+identificando sinonimi e varianti terminologiche — quindi biforcata su due
+collezioni Qdrant distinte: \path{product_docs} (schede tecniche) e
+\path{seller_docs} (guide operative e problemi ricorrenti segnalati dai
+venditori). Questo arricchimento qualitativo contestualizza le inserzioni
+eBay con informazioni assenti nelle schede commerciali.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 5: Fusione Ibrida dei Risultati}
+% ------------------------------------------------------------------
+I risultati della ricerca live vengono fusi con il corpus storico del
+Phantom Fetch nel modulo \path{_merge_hybrid_results}. Prima della fusione,
+ogni inserzione storica è sottoposta a due verifiche: la conformità ai
+vincoli di budget correnti e la disponibilità effettiva sull'API eBay
+tramite il suo \path{ebay_id}, scartando prodotti venduti o rimossi dalla
+prima indicizzazione.\\
+
+\noindent
+Il sistema applica poi un meccanismo di rinforzo (\path{_hybrid_bonus}):
+i prodotti presenti sia nel corpus storico sia tra i risultati live ricevono
+un incremento di \(+0.15\) punti sullo score RRF (Reciprocal Rank Fusion). La logica è diretta: un
+prodotto che emerge spontaneamente da due sorgenti indipendenti ha maggiori
+probabilità di essere genuinamente rilevante.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 6: Elaborazioni Parallele (Profilazione e Trust)}
+% ------------------------------------------------------------------
+Prima di procedere con interrogazioni intensive di dettaglio, la pipeline esegue due operazioni in background fondamentali per la personalizzazione asincrona del ranking.\\
+
+\noindent
+In primo luogo, il modulo \path{update_user_profile} analizza l'intento logico della ricerca per aggiornare dinamicamente il profilo dell'utente (ad esempio per registrare una forte preferenza contingente per un brand o una categoria) all'interno del database relazionale. In secondo luogo, tramite \path{_prefetch_top_sellers_feedback}, viene calcolata ed iniettata in parallelo la reputazione dei venditori in gara, valutando la composizione sentimentale dei loro feedback. L'estrazione tempestiva del \emph{Trust Score} in questa fase è vitale poiché costituisce un segnale chiave per l'architettura vettoriale a valle.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 7: Arricchimento Contestuale Profondo}
+% ------------------------------------------------------------------
+Prima del giudizio semantico definitivo, la pipeline effettua un passaggio
+di \textbf{arricchimento totale}. Per ogni identificatore univoco
+(\path{ebay_id}) del pool (inserzioni live e RAG) vengono eseguite
+chiamate asincrone parallele all'API di dettaglio eBay (\path{getItem}).\\
+
+\noindent
+Questo recupera la descrizione integrale e gli aspetti tecnici (Item Specifics) di ciascun prodotto: dati strutturati non
+disponibili nei risultati sintetici della Browse API. L'arricchimento è il
+prerequisito architetturale della fase successiva: senza le specifiche
+ufficiali originali, l'Expert Judge non potrebbe verificare la conformità
+ai vincoli di esclusione in modo oggettivo, ricadendo in inferenze
+allucinatorie.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 8: Vector Reranker e Cross-Encoder}
+% ------------------------------------------------------------------
+A questo punto della pipeline, il pool di candidati è stato filtrato,
+arricchito e fuso da sorgenti eterogenee. Il problema che rimane è
+decidere l'ordine: quale prodotto mostrare per primo? Questa fase
+risponde a quella domanda attraverso due stadi in cascata, dal più
+rapido al più preciso.
+
+\paragraph{Stadio 1 — Base-Score.}
+Ogni inserzione viene valutata su un sistema di oltre quindici
+\textit{feature} ingegnerizzate manualmente, ciascuna delle quali
+cattura una dimensione distinta della rilevanza. Tra le principali
+figurano la similarità semantica tra la query e il titolo del prodotto
+(\path{semantic_sim}), la similarità lessicale (\path{lexical_sim}),
+l'affidabilità del venditore derivata dall'analisi del sentiment dei
+feedback (\path{trust_score}), la distanza del prezzo dalla mediana
+di mercato (\path{price_z}), il boost derivante dal corpus documentale
+RAG (\path{rag_product_boost}) e il punteggio di accessorietà
+(\path{accessory_score}). Il risultato è un punteggio numerico
+aggregato che riflette la qualità complessiva dell'inserzione rispetto
+alla richiesta.
+
+\paragraph{Stadio 2 — Cross-Encoder.}
+I dieci candidati con il Base-Score più alto vengono sottoposti a
+un'analisi semantica più profonda. A differenza del primo stadio,
+che valuta query e prodotto separatamente, un modello Cross-Encoder,
+nello specifico, \path{ms-marco-MiniLM-L-6-v2}, pre-addestrato
+su task di ranking documentale; li legge \emph{insieme}, in un
+unico contesto. Questo consente al modello di valutare non quanto
+il prodotto assomigli alla query in astratto, ma quanto la risponda
+concretamente. Il costo computazionale più elevato giustifica
+l'applicazione selettiva ai soli dieci finalisti.
+
+\paragraph{Fusione degli score.}
+I due punteggi vengono combinati in un voto finale pesato.
+Al cross-score, che ragiona sull'intento reale della
+richiesta leggendo query e prodotto insieme, viene assegnato
+il 70\% del peso finale. Al Base-Score, che valuta
+criteri oggettivi come prezzo e reputazione del venditore,
+il restante 30\%. La scelta riflette una gerarchia
+deliberata: la comprensione semantica della richiesta è il
+segnale più prezioso, ma i criteri numerici concreti non
+vengono ignorati.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 9: Expert Judge LLM (Chain-of-Thought Reranking)}
+% ------------------------------------------------------------------
+Questa fase introduce il validatore finale a tolleranza zero (\path{ltr.py}).
+Il modello opera tramite un protocollo \textbf{Chain-of-Thought (CoT)}: per
+ogni prodotto nella lista arricchita, esegue un ragionamento critico
+esplicito che confronta i vincoli di esclusione estratti in Fase~3 con i
+dati tecnici profondi ottenuti in Fase~7. Se la descrizione integrale
+specifica la presenza di un attributo escluso dalla richiesta
+(es.\ \emph{"full-length zipper"} a fronte di \emph{"senza cerniera"}),
+il Giudice assegna uno score di \(-1.0\), eliminando l'inserzione dalla
+graduatoria indipendentemente da qualsiasi altro segnale di rilevanza.
+I voti del Giudice vengono infine combinati con gli score vettoriali della
+Fase 8 e il \path{trust_score} reputazionale per determinare l'ordinamento
+definitivo dei risultati.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 10: Persistenza Transazionale Preliminare}
+% ------------------------------------------------------------------
+Per isolare la latenza delle operazioni sul database relazionale dal
+percorso critico della classificazione, la memorizzazione permanente viene
+avviata prima che la graduatoria finale sia conclusa. Il modulo
+\path{_prepare_and_persist_items} opera in un \textit{thread} isolato,
+salvando i dati su Postgres. \textbf{Redis} agisce a monte come layer di
+deduplicazione: tramite la chiave \path{known_ebay_ids}, intercetta ogni
+scrittura e blocca gli identificatori già archiviati, inviando in
+\texttt{INSERT} esclusivamente le inserzioni inedite. Questo meccanismo
+riduce il carico I/O sul database e annulla il rischio di collisioni.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 11: Classificazione Finale e Modificatori Deterministici}
+% ------------------------------------------------------------------
+Ogni inserzione riceve la sua calibrazione definitiva tramite
+\path{_apply_final_ranking}. All'ordinamento prodotto nelle Fasi~8 e~9
+vengono sovrapposti modificatori deterministici derivati dal profilo
+storico dell'utente. Il \textbf{Brand Affinity Bonus} incrementa di
+\(+0.15\) punti le inserzioni di brand verso cui l'utente ha documentato
+una predilezione storica. L'\textbf{euristica value-for-money} eroga un
+premio di \(+0.10\) punti ai prodotti il cui prezzo si posizioni
+tangibilmente al di sotto delle soglie di \path{contextual_budgets},
+elevando in classifica le opzioni con il miglior rapporto qualità/prezzo
+nel contesto soggettivo dell'acquirente.
+
+% ------------------------------------------------------------------
+\subsection*{Fase 12: Metriche IR e Indicizzazione Finale su Qdrant}
+% ------------------------------------------------------------------
+A conclusione dell'elaborazione, la pipeline calcola le metriche di qualità
+del recupero secondo gli standard dell'\textbf{Information Retrieval}:
+\textbf{Precision@5}, \textbf{Recall@10} e \textbf{nDCG@10} (Normalized
+Discounted Cumulative Gain). Questi indicatori sono resi disponibili per
+diagnosi offline sulle performance dell'IR engine.\\
+
+\noindent
+Contestualmente, i quindici risultati di vertice vengono inviati a
+\path{index_search_items} per l'indicizzazione su \textbf{Qdrant}. Questo
+passaggio chiude il ciclo architetturale: i prodotti appena classificati e
+validati entrano nel corpus disponibile per i Phantom Fetch delle sessioni
+future, migliorando progressivamente la qualità del recupero anticipato su
+query semanticamente affini.
+
+% ============================================================
+% LTR EXPERIMENT
+% ============================================================
+\section{Approfondimento di Ricerca: Learning to Rank Personalizzato (LTR)}
+
+Come anticipato nell'evoluzione della pipeline, l'architettura di
+classificazione ha attraversato una fase di sviluppo intensivo orientata
+all'addestramento di un modello supervisionato nativo. Benché questo approccio
+sia stato superato in produzione dall'attuale sistema ibrido, le logiche
+simulative e ingegneristiche sviluppate per sopperire alle limitazioni del
+dominio costituiscono un contributo architetturale di rilievo che merita
+documentazione formale.
+
+\subsection*{Studio Preliminare: Personalità Acquirenti e Selezione degli LLM}
+
+Prima di procedere alla progettazione della simulazione, è stato condotto uno
+studio approfondito su due assi complementari: la caratterizzazione delle
+personalità acquirenti più diffuse nell'e-commerce online e l'identificazione
+dei modelli linguistici che meglio ne incarnano i tratti comportamentali.\\
+
+\noindent
+Sul primo asse, la letteratura accademica e i report di settore convergono
+nell'identificare cluster psicografici ricorrenti tra i consumatori digitali,
+ciascuno con euristiche decisionali, tolleranze al rischio e sensibilità al
+prezzo ben distinte. Profili come il \textit{Bargain Hunter}, orientato
+esclusivamente alla minimizzazione del costo, o il \textit{Luxury Buyer},
+insensibile al prezzo ma esigente sulla reputazione del venditore, non sono
+costrutti arbitrari, ma riflettono distribuzioni empiricamente validate nei
+clickstream di piattaforme come eBay e Amazon.\\
+
+\noindent
+Sul secondo asse, è emerso che i \textit{Foundation Model} differiscono
+significativamente nella loro propensione naturale a simulare determinati
+profili. Architetture addestrate su corpus prevalentemente anglofoni con
+allineamento conservativo (es.\ Llama) tendono a incarnare più fedelmente
+profili cauti e orientati alla qualità; modelli con parametri di allineamento
+più laschi o addestrati su distribuzioni culturalmente diverse (es.\
+DeepSeek, Qwen) mostrano una maggiore varianza nelle valutazioni e una minore
+tendenza alla compiacenza organica, rendendoli più adatti a simulare profili
+impulsivi o irrazionali. Istanze locali a temperatura elevata (\textbf{Ollama})
+sono state invece privilegiate per i profili ad alta entropia decisionale,
+come l'\textit{Emotional Bidder}.\\
+
+\noindent
+Questo studio ha fornito la base metodologica per la progettazione delle
+Persona e per l'assegnazione deliberata dei modelli ai profili nella fase
+di simulazione.
+
+\subsection*{Obiettivo e Infrastruttura}
+
+L'obiettivo era addestrare un modello LTR capace di riordinare i risultati
+in base al profilo comportamentale dell'utente: comprendere, ad esempio,
+che un consumatore orientato al risparmio privilegia sistematicamente le
+fasce di prezzo inferiori, indipendentemente dalla pertinenza nominale.
+Il problema è stato formulato come ranking supervisionato \textbf{Pointwise},
+in cui ogni coppia \emph{(utente, prodotto)} riceveva un'etichetta di
+rilevanza da $0$ a $N-1$, con addestramento su \textbf{LightGBM}
+(\path{rank:ndcg}). A differenza di un cross-encoder isolato, l'LTR
+consentiva il vaglio simultaneo dell'intero pool di candidati e integrava
+le \textit{feature utente} direttamente nel peso di predizione.
+
+\subsection*{Il Problema dei Dati e l'Ecosystem Simulation}
+
+L'ostacolo strutturale è stata la mancanza di dataset pubblici di
+\textit{clickstream} per eBay. La soluzione è stata la progettazione di un
+\textbf{Dataset Sintetico} tramite simulazione algoritmica
+(\textit{Ecosystem Simulation}): un layer di 15 agenti LLM incaricati di
+impersonare le Persona identificate nello studio preliminare, vincolati a
+parametri numerici rigidi (\path{price_sensitivity}, \path{quality_preference}, \path{brand_loyalty}) e a \textit{System Prompt} calibrati per inibire
+deviazioni creative e ancorare l'inferenza al profilo assegnato.\\
+
+\noindent
+L'assegnazione LLM-Persona non è stata casuale ma motivata dallo studio
+precedente: a ciascun profilo è stato abbinato il modello la cui distribuzione
+inferenziale naturale risultava più compatibile con le euristiche decisionali
+del profilo stesso. Questo ha trasformato i \textit{bias} intrinseci di
+ciascuna architettura in uno strumento: il bias
+conservativo di \textbf{Llama 3.3} per i profili cauti, la maggiore
+varianza inferenziale di \textbf{DeepSeek} e \textbf{Qwen} per i profili
+impulsivi, l'alta entropia di istanze \textbf{Ollama} (locali) a temperatura elevata
+per i profili irrazionali. I punteggi prodotti venivano infine normalizzati
+tramite scale logaritmiche $\log(1+x)/\log(1+p_{99})$ per smorzare le
+derive esponenziali di variabili ad alto range come il numero di feedback
+per venditore.
+
+\subsection*{Integrazione LightGBM e Conclusioni}
+Le estrazioni depurate hanno prodotto un dataset di \textbf{19 feature}
+per migliaia di coppie \emph{(query, prodotto)}, memorizzate nel file
+\path{training_set.csv}. Prima di addestrare il modello, è stato
+necessario verificare che i giudizi sintetici prodotti dalle diverse
+Persona fossero sufficientemente coerenti tra loro ma non identici:
+una convergenza totale avrebbe indicato che i modelli si stavano
+semplicemente copiando, mentre una divergenza eccessiva avrebbe reso
+il dataset inaffidabile. Questa coerenza inter-modello è stata misurata
+tramite il \textbf{Cohen's Kappa Quadratico Pesato}, uno strumento
+statistico standard per valutare l'accordo tra valutatori indipendenti.
+Il valore ottenuto, $\kappa \in [0.4, 0.6]$, ha confermato una
+eterogeneità positiva: i modelli ragionavano in modo abbastanza simile
+da essere utili, ma abbastanza diverso da arricchire il dataset.\\
+
+\noindent
+Il dataset è stato quindi utilizzato per addestrare un modello
+\textbf{LightGBM} con obiettivo \textit{lambdarank}, ottimizzato
+direttamente sulla metrica nDCG — la stessa usata per valutare la
+qualità del ranking nella pipeline.\\
+
+\noindent
+L'analisi dei risultati ha tuttavia rivelato un problema diverso da quello
+atteso. I giudizi sintetici non erano semplicemente distorti verso descrizioni
+organiche: erano \textbf{eccessivamente polarizzati}. Le Persona tendevano
+ad assegnare valutazioni estreme — punteggi molto alti o molto bassi —
+con una deviazione standard dei giudizi prossima a $3$, un valore che
+indica scarsa capacità discriminativa nelle fasce intermedie. Il paradosso
+è che il \textbf{Cohen's Kappa Quadratico Pesato} risultava comunque
+accettabile ($\kappa \in [0.4, 0.6]$): i modelli \emph{concordavano}
+su cosa fosse buono o cattivo, ma lo facevano in modo troppo netto,
+senza le sfumature graduali che caratterizzano il comportamento reale
+di un consumatore. In assenza di un \textit{gold set} organico con cui
+ancorare e correggere questa polarizzazione, il dataset si è rivelato
+insufficiente ad addestrare un modello di ranking credibile.\\
+
+\noindent
+Questo fallimento ha però direttamente orientato la progettazione
+dell'\textbf{Expert Judge LLM} descritto in precedenza.

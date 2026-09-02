@@ -1,0 +1,11 @@
+Titolo Slide: Shopping Online 2026 & Visione
+
+Il Problema: Nel 2026 lo shopping online è un campo minato: migliaia di inserzioni irrilevanti, venditori inaffidabili ecc. L'utente è solo, senza strumenti per distinguere un affare reale da una truffa mascherata.
+
+La Soluzione: MCP_ECOM è un AI Shopping Assistant costruito su quattro pilastri sinergici — RAG per arricchire ogni risposta con evidenze reali, Trust per quantificare l'affidabilità di ogni venditore, Memory per ricordare preferenze e prodotti tra le sessioni, e MCP (Model Context Protocol) come layer di disaccoppiamento che espone tool, risorse e prompt in modo standardizzato all'agente ReAct.
+
+Contenuto della slide:
+ RAG — Hybrid search (Dense + BM25 + RRF) su Qdrant: ogni risultato è supportato da evidenze recuperate dal knowledge base
+ Trust — Trust Score composito (feedback ratio + NLP sentiment + recency decay): ogni venditore ha un punteggio oggettivo, non solo stelle
+ Memory — Profilazione EMA implicita (budget, brand, condizione) + Redis session state: il sistema impara senza form
+ MCP — Model Context Protocol (FastMCP): 14 tool registrati, risorse profilo utente live, prompt template — l'agente ReAct opera su un'interfaccia standard aperta (Anthropic)

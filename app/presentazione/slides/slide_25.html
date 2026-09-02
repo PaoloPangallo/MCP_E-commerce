@@ -1,0 +1,96 @@
+<section id="s25" class="hero" style="background:var(--co-purple);">
+  <!-- Ambient glows for parallax -->
+  <div id="s25-glow1" style="position:absolute;top:-300px;left:-300px;width:1100px;height:1100px;
+    background:radial-gradient(circle,rgba(13,122,95,0.10) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+  <div id="s25-glow2" style="position:absolute;bottom:-400px;right:-300px;width:1000px;height:1000px;
+    background:radial-gradient(circle,rgba(13,122,95,0.06) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+
+  <div class="chrome" style="background:transparent;border-bottom-color:rgba(255,255,255,0.1);">
+    <div class="brand" style="color:#fff;">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r" style="color:rgba(255,255,255,0.4);">Conclusions</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:64px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:rgba(255,255,255,0.6);margin-bottom:24px;">Grazie per l'attenzione</div>
+      <h1 style="font-size:120px;color:#fff;margin:0;line-height:1;letter-spacing:-4px;">MCP_<em>ECOM</em></h1>
+      <p class="lead" style="color:rgba(255,255,255,0.6);margin-top:24px;font-size:24px;">Un AI Shopping Assistant production-grade su eBay</p>
+    </div>
+
+    <!-- Tech Stack - Pill Cluster -->
+    <div class="anim d2" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:1000px;">
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">FastAPI</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">PostgreSQL</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Redis</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Qdrant</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Ollama Cloud</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">eBay APIs</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">FastMCP</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Qwen3-VL 235B</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Hybrid RAG</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">BERT Sentiment</span>
+    </div>
+
+    <!-- Authors -->
+    <div class="anim d3" style="display:flex;gap:120px;margin-top:24px;">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-family:var(--font-display);font-size:24px;color:#fff;font-weight:700;">Paolo Pangallo</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);text-transform:uppercase;">MAT. 263594</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-family:var(--font-display);font-size:24px;color:#fff;font-weight:700;">Giovanni Lodari</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);text-transform:uppercase;">MAT. 263597</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s25');
+    var g1 = document.getElementById('s25-glow1');
+    var g2 = document.getElementById('s25-glow2');
+    var deck = document.getElementById('deck');
+
+    // Staggered pill entrance
+    function animatePills() {
+      if (!window.gsap) return;
+      var pills = section.querySelectorAll('.pill');
+      gsap.fromTo(pills,
+        { opacity: 0, y: 20, scale: 0.85 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'power2.out', stagger: 0.06, delay: 0.4 }
+      );
+    }
+
+    // Parallax on mousemove
+    function onMove(e) {
+      if (!section.classList.contains('active')) return;
+      var rect = deck.getBoundingClientRect();
+      var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+      var mx = ((e.clientX - rect.left) / sc / 1920 - 0.5) * 2;
+      var my = ((e.clientY - rect.top) / sc / 1080 - 0.5) * 2;
+      if (window.gsap) {
+        gsap.to(g1, { x: mx * 35, y: my * 25, duration: 1.6, ease: 'power2.out' });
+        gsap.to(g2, { x: -mx * 20, y: -my * 18, duration: 2.0, ease: 'power2.out' });
+      }
+    }
+    document.addEventListener('mousemove', onMove, { passive: true });
+
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) animatePills();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) animatePills();
+  })();
+  </script>
+
+  <div class="footer" style="background:transparent;border-top-color:rgba(255,255,255,0.1);">
+    <span class="pg" style="color:rgba(255,255,255,0.4);">23 / 23</span>
+    <span class="tl"></span>
+    <span style="color:rgba(255,255,255,0.4);">Conclusioni</span>
+  </div>
+</section>

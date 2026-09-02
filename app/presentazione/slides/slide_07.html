@@ -1,0 +1,103 @@
+<section id="s07">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Agentic · Prompt Framework</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">System Architecture</div>
+      <h2 class="section">Prompt <em>Engineering</em></h2>
+      <p class="lead">Un framework multi-tecnica per eliminare allucinazioni e garantire output deterministici. Quattro strati logici in un unico system prompt.</p>
+    </div>
+
+    <div class="g4 anim d2">
+      <!-- Role-based -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Persona</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Identity</div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;margin-bottom:20px;">
+          Definisce perimetro e tono: <em>"ebayGPT, cervello strategico..."</em> Riduce allucinazioni out-of-scope.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);opacity:0.6;">Scope Enforcement</div>
+      </div>
+
+      <!-- CoT -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Logic</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Chain of Thought</div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;margin-bottom:20px;">
+          Obbligo di ragionare nel campo <code style="color:var(--co-blue);">thought</code> prima di agire. Step-by-step obbligatorio.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);opacity:0.6;">Reasoning Trace</div>
+      </div>
+
+      <!-- ReAct -->
+      <div class="card glass-blue">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Pattern</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">ReAct Loop</div>
+        <p style="font-size:15px;color:var(--co-near-black);line-height:1.6;margin-bottom:20px;">
+          Ciclo iterativo per adattarsi ai tool. Thought → Action → Obs. Orchestrazione multi-tool dinamica.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);">Iterative Feedback</div>
+      </div>
+
+      <!-- Structured Output -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Delivery</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">JSON Schema</div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;margin-bottom:20px;">
+          Vincolo assoluto di risposta in formato JSON per integrazione automatica deterministica col backend.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);opacity:0.6;">Strict JSON Mode</div>
+      </div>
+    </div>
+
+    <!-- Bottom flow bar - Cohere Enterprise style -->
+    <div class="anim d3 card" style="display:flex;align-items:center;gap:24px;padding:24px 32px;background:var(--co-snow);">
+      <span style="font-size:14px;font-weight:600;color:var(--co-black);">PIPELINE FLOW</span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="pill blue">Role</span>
+        <div class="arrow">→</div>
+        <span class="pill">CoT</span>
+        <div class="arrow">→</div>
+        <span class="pill">ReAct</span>
+        <div class="arrow">→</div>
+        <span class="pill">Structured JSON</span>
+      </div>
+      <span style="margin-left:auto;font-size:14px;color:var(--co-muted);">Risultato: Automazione verificabile e deterministica.</span>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s07');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]);
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top  - rect.height/ 2) / sc * 0.04;
+        gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">07 / 23</span><span class="tl"></span>
+    <span>Prompt Framework</span>
+  </div>
+</section>

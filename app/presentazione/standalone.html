@@ -1,0 +1,3378 @@
+﻿<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP_ECOM â€” AI Shopping Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Instrument+Serif:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@400;500;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <style>
+:root {
+  /* Color Palette */
+  --co-black:      #0d0d0d;
+  --co-near-black: #1a1a1a;
+  --co-deep-dark:  #141418;
+  --co-blue:       #0d7a5f; /* Teal accent */
+  --co-white:      #ffffff;
+  --co-snow:       #f8f8f6;
+  --co-gray-light: #efefed;
+  --co-gray-cool:  #d4d4d0;
+  --co-muted:      #888880;
+  --co-purple:     #1a2e28; /* Deep forest green hero */
+  --co-purple-glow: rgba(13, 122, 95, 0.15);
+
+  /* Typography */
+  --font-display: 'Instrument Serif', serif;
+  --font-body:    'Outfit', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* Spacing & Radius */
+  --radius-sig:   22px; /* Cohere signature radius */
+  --radius-sm:    8px;
+  --shadow-none:  none;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { 
+  font-family: var(--font-body); 
+  background: var(--co-black); 
+  color: var(--co-near-black);
+  -webkit-font-smoothing: antialiased;
+}
+
+section {
+  position: absolute;
+  inset: 0;
+  width: 1920px; height: 1080px;
+  background: var(--co-white);
+  display: none;
+  overflow: hidden;
+  left: 0; top: 0;
+}
+section.active { display: block; }
+
+/* Progress bar */
+#progress-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--co-gray-light);
+  z-index: 100;
+}
+#progress-fill {
+  height: 100%;
+  background: var(--co-blue);
+  transition: width 0.5s cubic-bezier(.4,0,.2,1);
+  width: 0%;
+}
+
+/* Nav arrows - Cohere Ghost Style */
+#nav-prev, #nav-next {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 56px; height: 56px;
+  background: transparent;
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  transition: all .2s;
+  color: var(--co-muted);
+  font-size: 24px;
+  user-select: none;
+}
+#nav-prev { left: 24px; }
+#nav-next { right: 24px; }
+#nav-prev:hover, #nav-next:hover { color: var(--co-blue); }
+
+/* Chrome / Header */
+.chrome {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 60px;
+  border-bottom: 1px solid var(--co-gray-light);
+  background: var(--co-white);
+  z-index: 10;
+}
+.brand {
+  display: flex; align-items: center; gap: 12px;
+  font-weight: 500; font-size: 16px; color: var(--co-black);
+}
+.logo {
+  width: 32px; height: 32px;
+  background: var(--co-black);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.logo svg { width: 18px; height: 18px; }
+
+.chrome .r {
+  font-family: var(--font-mono);
+  font-size: 13px; color: var(--co-muted);
+  letter-spacing: .15em; text-transform: uppercase;
+}
+
+/* Footer */
+.footer {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 60px;
+  border-top: 1px solid var(--co-gray-light);
+  background: var(--co-white);
+}
+.footer .pg {
+  font-family: var(--font-mono);
+  font-size: 13px; color: var(--co-muted);
+}
+.footer .tl { flex: 1; text-align: center; font-size: 14px; color: var(--co-muted); }
+.footer > span:last-child { font-size: 14px; color: var(--co-muted); font-weight: 400; }
+
+/* Typography Rules */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 14px; color: var(--co-muted);
+  text-transform: uppercase; letter-spacing: 0.28px;
+  margin-bottom: 16px;
+}
+h2.section {
+  font-family: var(--font-display);
+  font-size: 72px; font-weight: 400; color: var(--co-black);
+  line-height: 1.0; letter-spacing: -2px; margin-bottom: 24px;
+}
+h2.section em {
+  font-family: var(--font-display);
+  font-style: italic; color: var(--co-blue);
+}
+.lead { font-size: 24px; color: var(--co-near-black); line-height: 1.5; font-weight: 400; letter-spacing: -0.01em; }
+.sublead { font-size: 18px; color: var(--co-muted); line-height: 1.5; }
+.eyebrow { letter-spacing: 0.18em; }
+
+/* Cards & Containers - Cohere Style */
+.card {
+  background: var(--co-white);
+  border: 1px solid var(--co-gray-light);
+  border-radius: var(--radius-sig);
+  padding: 32px;
+  transition: border-color 0.2s ease;
+}
+.card:hover { border-color: var(--co-gray-cool); }
+
+/* Card Variants (Subtle Backgrounds) */
+.card.glass-blue   { background: var(--co-snow); border-color: var(--co-gray-light); }
+.card.glass-purple { background: #f4f8f6; border-color: #ddeee9; }
+
+/* Grids */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; }
+.g4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 24px; }
+
+/* Pills - Pill shape */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 16px; border-radius: 9999px;
+  font-size: 13px; font-weight: 500;
+  font-family: var(--font-body);
+  border: 1px solid var(--co-gray-light);
+  background: var(--co-white);
+  color: var(--co-near-black);
+}
+.pill.blue   { border-color: rgba(13, 122, 95, 0.2); color: var(--co-blue); }
+.pill.purple { border-color: rgba(26, 46, 40, 0.2); color: var(--co-purple); }
+
+/* Formula - Code like */
+.formula {
+  background: var(--co-snow);
+  border: 1px solid var(--co-gray-light);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 16px; color: var(--co-black);
+}
+
+/* Code block */
+pre.code {
+  background: var(--co-deep-dark); color: #e5e7eb;
+  border-radius: var(--radius-sm); padding: 24px;
+  font-family: var(--font-mono);
+  font-size: 14px; line-height: 1.6;
+  overflow: auto;
+}
+.kw  { color: #c084fc; } /* purple */
+.fn  { color: #60a5fa; } /* blue */
+.st  { color: #4ade80; } /* green */
+.cm  { color: #9ca3af; font-style: italic; }
+.nu  { color: #fbbf24; }
+.op  { color: #f87171; }
+
+/* Tables - Enterprise Trust Style */
+table.dt { width: 100%; border-collapse: collapse; font-size: 16px; }
+table.dt th {
+  text-align: left; padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--co-muted);
+  border-bottom: 1px solid var(--co-gray-cool);
+}
+table.dt td {
+  padding: 16px; border-bottom: 1px solid var(--co-gray-light);
+  color: var(--co-near-black); vertical-align: top; line-height: 1.5;
+}
+table.dt tr:last-child td { border-bottom: none; }
+
+/* Main content area */
+.main {
+  position: absolute;
+  top: 100px; bottom: 100px; left: 100px; right: 100px;
+}
+
+/* Animation system */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.anim { opacity: 0; }
+section.active .anim { animation: fadeUp .55s ease forwards; }
+section.active .anim.d1 { animation-delay: .08s; }
+section.active .anim.d2 { animation-delay: .18s; }
+section.active .anim.d3 { animation-delay: .28s; }
+section.active .anim.d4 { animation-delay: .38s; }
+section.active .anim.d5 { animation-delay: .48s; }
+section.active .anim.d6 { animation-delay: .58s; }
+section.active .anim.scale { animation-name: scaleIn; }
+section.active .anim.fi    { animation-name: fadeIn; }
+section.active .anim.sr    { animation-name: slideRight; }
+
+/* Slide enter transition — skipped for hero/hero-dark to avoid opacity resets on revisit */
+section.active:not(.hero):not(.hero-dark) {
+  animation: slideEnter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes slideEnter {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Film grain on dark hero slides */
+section.hero::after,
+section.hero-dark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+
+.arrow {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--co-muted); font-size: 24px;
+}
+
+/* Node */
+.node {
+  background: var(--co-white);
+  border: 1px solid var(--co-gray-light);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  font-size: 15px; font-weight: 500; color: var(--co-black);
+}
+
+/* Stat box */
+.stat-box {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px;
+}
+.stat-num {
+  font-family: var(--font-display);
+  font-size: 80px; font-weight: 400;
+  letter-spacing: -2px; line-height: 1;
+  color: var(--co-blue);
+}
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 13px; color: var(--co-muted);
+  text-transform: uppercase; letter-spacing: 0.15em;
+}
+
+    html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
+    body { background: #0d0d0d; overflow: hidden; }
+    #stage { position: fixed; inset: 0; }
+    #deck { position: absolute; top: 50%; left: 50%; width: 1920px; height: 1080px; transform-origin: center center; transform: translate(-50%, -50%) scale(1); }
+    #nav-dots { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:7px; z-index:100; pointer-events:none; }
+    #nav-dots .dot { width:5px; height:5px; border-radius:50%; background:rgba(147,147,159,0.35); cursor:pointer; pointer-events:all; transition:background 0.25s,transform 0.25s; }
+    #nav-dots .dot.active { background:#0d7a5f; transform:scale(1.6); }
+    #slide-subtitle { position:fixed; bottom:34px; left:50%; transform:translateX(-50%); font-family:'JetBrains Mono',monospace; font-size:10px; color:rgba(147,147,159,0.6); text-transform:uppercase; letter-spacing:0.2em; z-index:99; pointer-events:none; white-space:nowrap; }
+    .logo { animation:logoPulse 3s ease-in-out infinite; }
+    @keyframes logoPulse { 0%,100%{box-shadow:0 0 0 0 rgba(13,122,95,0.3);} 50%{box-shadow:0 0 0 6px rgba(13,122,95,0);} }
+    .main[style*="flex-direction:column"] { justify-content:center !important; }
+  </style>
+</head>
+<body>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <div id="stage"><div id="deck"></div></div>
+  <div id="nav-prev">&#8592;</div>
+  <div id="nav-next">&#8594;</div>
+
+  <div id="nav-dots"></div>
+  <div id="slide-subtitle"></div>
+
+  <!-- Slide templates (no fetch needed) -->
+  
+<template id="slide-0"><section id="s01" class="hero-dark" style="background:var(--co-purple); overflow:hidden;">
+  <!-- Ambient glows - Forest green theme -->
+  <div id="s01-glow1" style="position:absolute;top:-200px;left:-200px;width:1000px;height:1000px;
+    background:radial-gradient(circle,rgba(13,122,95,0.12) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+  <div id="s01-glow2" style="position:absolute;bottom:-300px;right:-200px;width:900px;height:900px;
+    background:radial-gradient(circle,rgba(13,122,95,0.06) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+
+  <!-- Glassmorphism overlay strip -->
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:900px;height:560px;border-radius:32px;
+    background:rgba(255,255,255,0.04);
+    backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+    border:1px solid rgba(255,255,255,0.08);
+    pointer-events:none;z-index:0;"></div>
+
+  <!-- Chrome - Transparent on dark -->
+  <div class="chrome" style="background:transparent;border-bottom-color:rgba(255,255,255,0.08);">
+    <div class="brand" style="color:#fff;">
+      <span class="logo" style="background:#fff;color:var(--co-purple);">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z" />
+        </svg>
+      </span>
+      <b style="letter-spacing:-0.02em;">MCP_ECOM</b>
+    </div>
+    <div class="r" style="color:rgba(255,255,255,0.4);"> Progetto di IR-NLP · 2026</div>
+  </div>
+
+  <!-- Hero content -->
+  <div class="main" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:48px;">
+
+    <!-- Mono Label -->
+    <div class="anim d1">
+      <span class="eyebrow" style="color:rgba(255,255,255,0.5);margin:0;">AI INFRASTRUCTURE FOR E-COMMERCE</span>
+    </div>
+
+    <!-- Main title -->
+    <div class="anim d2" style="text-align:center;">
+      <h1 style="font-family:var(--font-display);font-size:160px;font-weight:400;color:#ffffff;line-height:0.9;
+        letter-spacing:-4px;margin-bottom:24px;">
+        MCP_<em style="color:rgba(255,255,255,0.5);">ECOM</em>
+      </h1>
+      <p style="font-size:28px;color:rgba(255,255,255,0.4);font-weight:400;letter-spacing:0.02em;">
+        Advanced RAG · Trust Verification · Semantic Memory
+      </p>
+    </div>
+
+    <!-- Divider -->
+    <div class="anim d3" style="width:80px;height:1px;background:rgba(255,255,255,0.2);"></div>
+
+    <!-- Author -->
+    <div class="anim d4" style="text-align:center;">
+      <p style="font-family:var(--font-display);font-size:32px;color:#ffffff;font-weight:400;">Paolo Pangallo</p>
+      <p style="font-family:var(--font-mono);font-size:14px;
+        color:rgba(255,255,255,0.3);margin-top:12px;letter-spacing:0.2em;text-transform:uppercase;">
+        MATRICOLA 263594 · A.A. 2025/2026
+      </p> </br>
+
+      <p style="font-family:var(--font-display);font-size:32px;color:#ffffff;font-weight:400;">Giovanni Lodari</p>
+      <p style="font-family:var(--font-mono);font-size:14px;
+        color:rgba(255,255,255,0.3);margin-top:12px;letter-spacing:0.2em;text-transform:uppercase;">
+        MATRICOLA 263597 · A.A. 2025/2026
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer" style="background:transparent;border-top-color:rgba(255,255,255,0.08);">
+    <span class="pg" style="color:rgba(255,255,255,0.3);">01 / 23</span>
+    <span class="tl"></span>
+    <span style="color:rgba(255,255,255,0.3);">Project Overview</span>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s01');
+    var g1 = document.getElementById('s01-glow1');
+    var g2 = document.getElementById('s01-glow2');
+    var deck = document.getElementById('deck');
+    function onMove(e) {
+      if (!section.classList.contains('active')) return;
+      var rect = deck.getBoundingClientRect();
+      var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+      var cx = (e.clientX - rect.left) / sc;
+      var cy = (e.clientY - rect.top) / sc;
+      var mx = (cx / 1920 - 0.5) * 2;
+      var my = (cy / 1080 - 0.5) * 2;
+      if (window.gsap) {
+        gsap.to(g1, { x: mx * 40, y: my * 30, duration: 1.4, ease: 'power2.out' });
+        gsap.to(g2, { x: -mx * 25, y: -my * 20, duration: 1.8, ease: 'power2.out' });
+      }
+    }
+    document.addEventListener('mousemove', onMove, { passive: true });
+  })();
+  </script>
+</section></template>
+<template id="slide-1"><section id="s02">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Capitolo 01 · Visione</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:56px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Problem & Vision</div>
+      <h2 class="section">Shopping Online <em>2026</em></h2>
+      <p class="lead" style="max-width:1000px;color:var(--co-near-black);">
+        Migliaia di inserzioni irrilevanti e venditori inaffidabili saturano il mercato. 
+        <strong style="color:var(--co-black);">MCP_ECOM</strong> introduce un'architettura enterprise basata su quattro pilastri per restituire fiducia e precisione all'utente.
+      </p>
+    </div>
+
+    <!-- 4-pillar grid - Cohere Card Style -->
+    <div class="g4 anim d2">
+      <!-- RAG -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">ENGINE</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">Hybrid RAG</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          Dense + BM25 + RRF su Qdrant. Ogni risultato è supportato da evidenze reali dal knowledge base.
+        </p>
+      </div>
+      <!-- Trust -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">SECURITY</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">Trust Score</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          Feedback ratio + NLP sentiment. Punteggio oggettivo derivato da analisi testuale profonda.
+        </p>
+      </div>
+      <!-- Memory -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">ADAPTATION</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">Implicit Memory</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          Profilazione EMA (Exponential Moving Average) su budget e brand. Il sistema impara in tempo reale.
+        </p>
+      </div>
+      <!-- MCP -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">PROTOCOL</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;letter-spacing:-0.5px;">FastMCP</div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          14 tool registrati su protocollo standard. L'agente ReAct opera con precisione infrastrutturale.
+        </p>
+      </div>
+    </div>
+
+    <!-- Bottom stat bar - Cohere Enterprise Style -->
+    <div class="anim d3" style="display:flex;gap:80px;padding-top:32px;border-top:1px solid var(--co-gray-light);">
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-tools">14</span>
+        <span class="stat-label">MCP Tools</span>
+      </div>
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-feedback">300+</span>
+        <span class="stat-label">Feedback / Seller</span>
+      </div>
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-dim">384</span>
+        <span class="stat-label">Dense Dimensions</span>
+      </div>
+      <div class="stat-box" style="align-items:flex-start;">
+        <span class="stat-num" id="s02-engines">3</span>
+        <span class="stat-label">Engines</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s02');
+    var counters = [
+      { el: null, id: 's02-tools',    end: 14,  suffix: ''  },
+      { el: null, id: 's02-feedback', end: 300, suffix: '+' },
+      { el: null, id: 's02-dim',      end: 384, suffix: ''  },
+      { el: null, id: 's02-engines',  end: 3,   suffix: ''  },
+    ];
+    function run() {
+      counters.forEach(function(c) {
+        var el = document.getElementById(c.id);
+        if (!el) return;
+        var obj = { val: 0 };
+        gsap.to(obj, {
+          val: c.end, duration: 1.5, ease: 'power2.out',
+          onUpdate: function() { el.textContent = Math.round(obj.val) + c.suffix; }
+        });
+      });
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) run();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) run();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">02 / 23</span><span class="tl"></span>
+    <span>Vision & Architecture</span>
+  </div>
+</section>
+</template>
+<template id="slide-2"><section id="s03">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Data Layer · eBay Integration</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:56px;align-items:center;">
+    <!-- Left: title + table -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Official Infrastructure</div>
+        <h2 class="section">The <em>eBay</em> API</h2>
+        <p class="lead" style="max-width:640px;">Pivot strategico dallo scraping fragile Playwright alle API ufficiali eBay. Accesso a metadati strutturati e rate limits garantiti.</p>
+      </div>
+
+      <div class="anim d2">
+        <table class="dt">
+          <thead>
+            <tr>
+              <th>API MODULE</th>
+              <th>PROTOCOL</th>
+              <th>CORE CAPABILITIES</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong style="color:var(--co-black);">Browse API</strong></td>
+              <td><span class="pill blue">REST</span></td>
+              <td>Search, Item, Similar — filtri nativi su price, condition, seller</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--co-black);">Trading API</strong></td>
+              <td><span class="pill">SOAP/XML</span></td>
+              <td>Watchlist, messaggistica, identità utente e store details</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--co-black);">Sell Metadata</strong></td>
+              <td><span class="pill">REST</span></td>
+              <td>Return policies, listing structure — cache Redis integrata</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--co-black);">OAuth2 Cache</strong></td>
+              <td><span class="pill blue">AUTH</span></td>
+              <td>Double-check locking + auto-retry su collisioni di token</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Evolution note - Cohere Subtle Boxes -->
+      <div class="anim d3" style="display:flex;gap:24px;align-items:stretch;">
+        <div class="card" style="flex:1;padding:24px;border-color:var(--co-gray-cool);">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Before: Scraping</div>
+          <p style="font-size:15px;color:var(--co-near-black);line-height:1.5;">
+            Selettori CSS instabili, shadow ban e nessun accesso ai metadati strutturati del venditore.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;color:var(--co-gray-cool);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        <div class="card glass-blue" style="flex:1;padding:24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Now: Official API</div>
+          <p style="font-size:15px;color:var(--co-near-black);line-height:1.5;">
+            Rate limits documentati, Aspect Distributions e dati granulari. Playwright come fallback.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: code -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:24px;" class="anim d3">
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:12px 20px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;">ebay.py — Browse API</div>
+        <pre class="code" style="border-radius:0;border:none;margin:0;"><span class="kw">async def</span> <span class="fn">search_items</span>(parsed_query, limit=<span class="nu">20</span>):
+    query   = <span class="fn">_build_query</span>(parsed_query)
+    <span class="cm"># OAuth2 cached — double-check locking</span>
+    token   = <span class="kw">await</span> <span class="fn">_get_oauth_token</span>()
+    filters = <span class="fn">_build_filter_string</span>(constraints)
+
+    data = <span class="kw">await</span> <span class="fn">_perform_search_request</span>(
+        client, token, query,
+        filter_string=filters,
+        limit=page_size
+    )
+    items = [<span class="fn">_normalize_item</span>(i)
+             <span class="kw">for</span> i <span class="kw">in</span> data[<span class="st">"itemSummaries"</span>]]
+    <span class="kw">return</span> {
+        <span class="st">"items"</span>: items,
+        <span class="st">"aspects"</span>: aspects
+    }</pre>
+      </div>
+
+      <!-- Auth flow mini diagram -->
+      <div class="card" id="s03-flow" style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;">
+        <div class="node" id="s03-n1">Client</div>
+        <div class="arrow" id="s03-a1" style="opacity:0;">→</div>
+        <div class="node" id="s03-n2" style="border-color:var(--co-blue);color:var(--co-blue);opacity:0;">OAuth2</div>
+        <div class="arrow" id="s03-a2" style="opacity:0;">→</div>
+        <div class="node" id="s03-n3" style="opacity:0;">Cache</div>
+        <div class="arrow" id="s03-a3" style="opacity:0;">→</div>
+        <div class="node" id="s03-n4" style="opacity:0;">eBay API</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s03');
+    var els = ['s03-n1','s03-a1','s03-n2','s03-a2','s03-n3','s03-a3','s03-n4'];
+    function animate() {
+      if (!window.gsap) return;
+      els.forEach(function(id, i) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        gsap.to(el, { opacity: 1, duration: 0.25, delay: 0.2 + i * 0.15, ease: 'power2.out' });
+      });
+      // Pulse the OAuth2 node after appearing
+      var oauth = document.getElementById('s03-n2');
+      if (oauth) {
+        gsap.to(oauth, { boxShadow: '0 0 0 6px rgba(24,99,220,0)', duration: 0.6, delay: 0.7,
+          repeat: 2, yoyo: false, ease: 'power2.out' });
+      }
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) {
+        els.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el && id !== 's03-n1') el.style.opacity = '0';
+        });
+        animate();
+      }
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) animate();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">03 / 23</span><span class="tl"></span>
+    <span>Official Infrastructure</span>
+  </div>
+</section>
+</template>
+<template id="slide-3"><section id="s04">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Learning · Adaptive Intelligence</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Implicit Learning</div>
+        <h2 class="section">EMA <em>Profiling</em></h2>
+        <p class="lead" style="max-width:580px;">Media Mobile Esponenziale per l'adattamento silenzioso. Il profilo utente si evolve ad ogni interazione senza form invasivi.</p>
+      </div>
+
+      <!-- Formula hero - animated gradient border -->
+      <style>
+        @keyframes s04BorderSpin { to { --s04-angle: 360deg; } }
+        @property --s04-angle { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+        #s04-formula-wrap {
+          padding:2px; border-radius:14px;
+          background: conic-gradient(from var(--s04-angle), #0d7a5f 0%, rgba(13,122,95,0.5) 33%, #0d7a5f 66%, transparent 100%);
+          animation: s04BorderSpin 4s linear infinite;
+          transition: opacity 0.4s;
+        }
+        #s04-formula-inner { background:var(--co-snow); border-radius:12px; }
+      </style>
+      <div class="anim d2" id="s04-formula-wrap">
+      <div id="s04-formula-inner" style="padding:40px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Exponential Moving Average — α = 0.20</div>
+        <div style="font-family:var(--font-display);font-size:48px;color:var(--co-black);letter-spacing:-1px;margin-bottom:16px;">
+          new = old × <span style="color:var(--co-muted);">0.80</span> + signal × <span style="color:var(--co-blue);">0.20</span>
+        </div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          I segnali recenti influenzano il budget in modo dinamico, permettendo al sistema di seguire i trend d'acquisto dell'utente senza perdere la memoria storica.
+        </p>
+      </div></div>
+
+      <!-- 4 properties -->
+      <div class="g2 anim d3">
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">EMA Budget</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Per categoria <code style="color:var(--co-blue);">auto_cat</code> e brand <code style="color:var(--co-blue);">auto_brand</code>.</p>
+        </div>
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">Condition</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Soglia attivazione: ≥3 segnali e ≥50% share per evitare noise.</p>
+        </div>
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">Brand Affinity</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Top-10 brand aggiornati ad ogni query in modo case-insensitive.</p>
+        </div>
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">Coesistenza</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Preferenze implicite non sovrascrivono mai gli input manuali.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: code -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:12px 20px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;">user_profiling.py — Adaptive Logic</div>
+        <pre class="code" style="border-radius:0;border:none;margin:0;"><span class="kw">def</span> <span class="fn">_update_budget</span>(user, category, signal):
+    <span class="kw">if not</span> signal: <span class="kw">return</span>
+    
+    cat_key = <span class="st">f"auto_cat:{category.lower()}"</span>
+    <span class="kw">if</span> cat_key <span class="kw">in</span> budgets:
+        old = <span class="fn">float</span>(budgets[cat_key])
+        <span class="cm"># EMA calculation α=0.20</span>
+        new_val = old * <span class="nu">0.80</span> + signal * <span class="nu">0.20</span>
+    <span class="kw">else</span>:
+        new_val = signal  <span class="cm"># Cold start</span>
+        
+    budgets[cat_key] = <span class="fn">round</span>(new_val, <span class="nu">2</span>)</pre>
+      </div>
+
+      <!-- EMA visual demo — Chart.js animated -->
+      <div class="card" style="padding:32px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Budget Evolution Example</div>
+        <canvas id="s04-budget-chart" width="460" height="150"></canvas>
+      </div>
+
+      <script>
+      (function() {
+        var section = document.getElementById('s04');
+        var chart;
+        function buildChart() {
+          if (chart) { chart.destroy(); }
+          var ctx = document.getElementById('s04-budget-chart');
+          if (!ctx || !window.Chart) return;
+          chart = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: ['Signal 1','Signal 2','Signal 3','Signal 4','Signal 5'],
+              datasets: [{
+                data: [350, 430, 444, 455, 464],
+                backgroundColor: [
+                  'rgba(13,122,95,0.15)', 'rgba(13,122,95,0.3)',
+                  'rgba(13,122,95,0.5)',  'rgba(13,122,95,0.7)', '#0d7a5f'
+                ],
+                borderRadius: 6, borderSkipped: false
+              }]
+            },
+            options: {
+              animation: { duration: 1200, easing: 'easeInOutQuart' },
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  grid: { display: false },
+                  ticks: { color: '#93939f', font: { family: 'JetBrains Mono', size: 11 } }
+                },
+                y: {
+                  min: 300, max: 490,
+                  grid: { color: 'rgba(217,217,221,0.4)' },
+                  ticks: {
+                    color: '#93939f', font: { family: 'JetBrains Mono', size: 11 },
+                    callback: function(v) { return '€' + v; }
+                  }
+                }
+              }
+            }
+          });
+        }
+        var mo = new MutationObserver(function() {
+          if (section.classList.contains('active')) buildChart();
+        });
+        mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+        if (section.classList.contains('active')) buildChart();
+      })();
+      </script>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">04 / 23</span><span class="tl"></span>
+    <span>Adaptive Intelligence</span>
+  </div>
+</section>
+</template>
+<template id="slide-4"><section id="s05">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Protocol · Tool Orchestration</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:80px;align-items:center;">
+    <!-- Left: Evolution -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:40px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Model Context Protocol</div>
+        <h2 class="section">The <em>FastMCP</em> Standard</h2>
+        <p class="lead">Evoluzione da coordinamento file-based allo standard industriale per il disaccoppiamento totale dell'agente dai tool.</p>
+      </div>
+
+      <!-- Evolution timeline - Cohere Style -->
+      <div class="anim d2" style="display:flex;flex-direction:column;gap:0;">
+        <!-- Step 1 -->
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:var(--co-gray-cool);margin-top:8px;"></div>
+            <div style="width:1px;height:60px;background:var(--co-gray-light);"></div>
+          </div>
+          <div style="padding-bottom:32px;">
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-muted);margin-bottom:8px;">Planner / Worker <span style="font-size:14px;font-family:var(--font-body);color:var(--co-muted);opacity:0.6;">(Legacy)</span></div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;">Scambio di report via markdown. Lento, difficile da coordinare e non scalabile.</p>
+          </div>
+        </div>
+        <!-- Step 2 -->
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:var(--co-gray-cool);margin-top:8px;"></div>
+            <div style="width:1px;height:60px;background:var(--co-gray-light);"></div>
+          </div>
+          <div style="padding-bottom:32px;">
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-muted);margin-bottom:8px;">LangGraph <span style="font-size:14px;font-family:var(--font-body);color:var(--co-muted);opacity:0.6;">(Experimental)</span></div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;">Flusso a grafo, ma ancora troppo rigido. Colli di bottiglia nell'orchestrazione multi-tool.</p>
+          </div>
+        </div>
+        <!-- Step 3 -->
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;">
+            <div style="width:16px;height:16px;border-radius:50%;background:var(--co-blue);margin-top:6px;box-shadow:0 0 0 4px rgba(13,122,95,0.1);"></div>
+          </div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:8px;">FastMCP Protocol <span style="font-size:14px;font-family:var(--font-body);color:var(--co-blue);font-weight:600;">(Production)</span></div>
+            <p style="font-size:16px;color:var(--co-near-black);line-height:1.5;">Disaccoppiamento totale. Tool come risorse universali. Scalabilità illimitata e sincronizzazione prompt real-time.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Architecture - clickable nodes -->
+    <div class="anim d3" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:16px;position:relative;">
+
+      <div id="s05-node-user" class="card" style="width:340px;text-align:center;cursor:pointer;transition:box-shadow 0.2s,transform 0.2s;">
+        <div class="eyebrow" style="margin-bottom:8px;font-size:12px;">Interface</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);">End User</div>
+        <div style="font-size:11px;color:var(--co-blue);margin-top:6px;font-family:var(--font-mono);opacity:0.7;">click for details ↗</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div id="s05-node-agent" class="card glass-blue" style="width:400px;text-align:center;border-color:var(--co-blue);cursor:pointer;transition:box-shadow 0.2s,transform 0.2s;">
+        <div class="eyebrow" style="margin-bottom:8px;color:var(--co-blue);font-size:12px;">Core Logic</div>
+        <div style="font-family:var(--font-display);font-size:32px;color:var(--co-black);margin-bottom:12px;">ReAct Agent</div>
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <span class="pill blue">Minimax 2.7</span>
+          <span class="pill">Ollama</span>
+        </div>
+        <div style="font-size:11px;color:var(--co-blue);margin-top:8px;font-family:var(--font-mono);opacity:0.7;">click for details ↗</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div id="s05-node-router" class="card" style="width:400px;text-align:center;background:var(--co-snow);cursor:pointer;transition:box-shadow 0.2s,transform 0.2s;">
+        <div class="eyebrow" style="margin-bottom:8px;font-size:12px;">Orchestration</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);">FastMCP Router</div>
+        <div style="font-size:14px;color:var(--co-muted);margin-top:8px;">14 Registered Tools · Declarative Schema</div>
+        <div style="font-size:11px;color:var(--co-blue);margin-top:6px;font-family:var(--font-mono);opacity:0.7;">click for details ↗</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div id="s05-node-tools" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:440px;cursor:pointer;">
+        <span class="pill">search_items</span>
+        <span class="pill">analyze_trust</span>
+        <span class="pill">market_trends</span>
+        <span class="pill">describe_ui</span>
+        <span class="pill">+9 tools</span>
+      </div>
+
+      <!-- Detail overlay -->
+      <div id="s05-overlay" style="display:none;position:absolute;inset:0;
+        background:rgba(255,255,255,0.97);border-radius:16px;border:1px solid var(--co-gray-cool);
+        padding:32px;z-index:10;backdrop-filter:blur(4px);">
+        <button id="s05-close" style="position:absolute;top:16px;right:16px;background:var(--co-snow);
+          border:1px solid var(--co-gray-cool);border-radius:8px;padding:6px 14px;
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);cursor:pointer;">✕ close</button>
+        <div id="s05-detail-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var details = {
+      user: {
+        title: 'End User Interface',
+        color: 'var(--co-black)',
+        items: [
+          ['Chat UI', 'Interfaccia web con SSE streaming — risposte token-by-token in real-time'],
+          ['Drag & Drop', 'Upload immagini per ricerca visuale multimodale'],
+          ['Ctrl+V', 'Paste diretto di screenshot — analisi immediata via vision LLM'],
+          ['History', 'Thread persistente con memoria semantica delle interazioni passate']
+        ]
+      },
+      agent: {
+        title: 'ReAct Agent — Loop Ragionamento',
+        color: 'var(--co-blue)',
+        items: [
+          ['Planner', 'Classifica intent e seleziona tool — app/agent/planner.py'],
+          ['Executor', 'Chiama MCP via HTTP, applica cache Redis, costruisce Observation'],
+          ['Loop', 'Max 5 step · terminal state detection · fallback automatico'],
+          ['LLM', 'Minimax 2.7 (cloud) → Gemini 1.5 Flash (fallback)']
+        ]
+      },
+      router: {
+        title: 'FastMCP Router — /mcp/standard + /mcp/playwright',
+        color: 'var(--co-black)',
+        items: [
+          ['Standard', '12 tool core: search, analyze_seller, wishlist, get_item_details...'],
+          ['Playwright', '2 tool browser: contact_seller, playwright_search — automazione eBay'],
+          ['Schema', 'Declarative JSON — l\'agente scopre i tool a runtime via /list_tools'],
+          ['Cache', 'Redis con TTL stratificati: 2min executor / 5min general / 24h history']
+        ]
+      },
+      tools: {
+        title: 'Tool Ecosystem — 14 Tool Registrati',
+        color: 'var(--co-blue)',
+        items: [
+          ['search_products', 'Hybrid RAG: Dense + BM25 + RRF su Qdrant'],
+          ['analyze_seller', 'BERT sentiment + eBay rating → trust score blend 60/40'],
+          ['market_trends', 'Google Trends API + competitor price analysis'],
+          ['contact_seller', 'Playwright automation — compila form eBay in autonomia']
+        ]
+      }
+    };
+
+    function renderDetail(key) {
+      var d = details[key];
+      if (!d) return;
+      var html = '<div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Detail View</div>';
+      html += '<div style="font-family:var(--font-display);font-size:28px;color:' + d.color + ';margin-bottom:24px;">' + d.title + '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+      d.items.forEach(function(item) {
+        html += '<div style="display:flex;gap:16px;align-items:flex-start;">';
+        html += '<span style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);min-width:140px;padding-top:2px;">' + item[0] + '</span>';
+        html += '<span style="font-size:14px;color:var(--co-near-black);line-height:1.5;">' + item[1] + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+      document.getElementById('s05-detail-content').innerHTML = html;
+    }
+
+    function openOverlay(key) {
+      renderDetail(key);
+      var ov = document.getElementById('s05-overlay');
+      ov.style.display = 'block';
+      if (window.gsap) {
+        gsap.fromTo(ov, { opacity:0, scale:0.96 }, { opacity:1, scale:1, duration:0.25, ease:'power2.out' });
+      }
+    }
+
+    function closeOverlay() {
+      var ov = document.getElementById('s05-overlay');
+      if (window.gsap) {
+        gsap.to(ov, { opacity:0, scale:0.96, duration:0.2, ease:'power2.in',
+          onComplete: function() { ov.style.display = 'none'; } });
+      } else {
+        ov.style.display = 'none';
+      }
+    }
+
+    document.getElementById('s05-node-user').addEventListener('click', function() { openOverlay('user'); });
+    document.getElementById('s05-node-agent').addEventListener('click', function() { openOverlay('agent'); });
+    document.getElementById('s05-node-router').addEventListener('click', function() { openOverlay('router'); });
+    document.getElementById('s05-node-tools').addEventListener('click', function() { openOverlay('tools'); });
+    document.getElementById('s05-close').addEventListener('click', closeOverlay);
+
+    // Hover lift effect
+    ['s05-node-user','s05-node-agent','s05-node-router'].forEach(function(id) {
+      var el = document.getElementById(id);
+      el.addEventListener('mouseenter', function() {
+        if (window.gsap) gsap.to(el, { y:-4, boxShadow:'0 8px 24px rgba(13,122,95,0.15)', duration:0.25, ease:'power2.out' });
+      });
+      el.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(el, { y:0, boxShadow:'', duration:0.35, ease:'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">05 / 23</span><span class="tl"></span>
+    <span>Orchestration Strategy</span>
+  </div>
+</section>
+</template>
+<template id="slide-5"><section id="s06">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Reasoning · LLM Evolution</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Model Strategy</div>
+      <h2 class="section">The <em>LLM</em> Roadmap</h2>
+      <p class="lead">Ricerca dell'equilibrio tra privacy/controllo locale e potenza reasoning cloud. Tre iterazioni verso il compromesso ideale.</p>
+    </div>
+
+    <!-- Horizontal Timeline - Cohere Style -->
+    <div class="anim d2" style="position:relative;">
+      <!-- Main timeline bar -->
+      <div style="position:absolute;top:20px;left:0;right:0;height:1px;background:var(--co-gray-light);z-index:0;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;position:relative;z-index:1;">
+        <!-- Phase 1 -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--co-white);border:1px solid var(--co-gray-cool);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--co-muted);">01</div>
+          <div class="card" style="border-color:var(--co-gray-cool);opacity:0.8;">
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;margin-bottom:12px;">Local Only</div>
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Llama 3.1 8B</div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;margin-bottom:20px;">Privacy totale, ma latenza elevata e reasoning limitato su hardware consumer.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;border-top:1px solid var(--co-gray-light);padding-top:16px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Latency</span><span style="color:var(--co-black);">High</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Reasoning</span><span style="color:var(--co-black);">Basic</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 2 -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--co-white);border:1px solid var(--co-gray-cool);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--co-muted);">02</div>
+          <div class="card" style="border-color:var(--co-gray-cool);opacity:0.8;">
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;margin-bottom:12px;">Cloud API</div>
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Gemini 1.5 Flash</div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;margin-bottom:20px;">Reasoning superiore, ma infrastruttura rigida e costi non ottimali per l'agente.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;border-top:1px solid var(--co-gray-light);padding-top:16px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Latency</span><span style="color:var(--co-black);">Medium</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Flexibility</span><span style="color:var(--co-black);">Low</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 3 -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--co-blue);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--co-white);box-shadow:0 0 0 6px rgba(13,122,95,0.1);">03</div>
+          <div class="card glass-blue" style="border-color:var(--co-blue);background:var(--co-white);">
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);text-transform:uppercase;margin-bottom:12px;">Adopted Architecture</div>
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Ollama · Minimax 2.7</div>
+            <p style="font-size:15px;color:var(--co-near-black);line-height:1.5;margin-bottom:20px;">Reasoning classe 100B+ con latenza minima tramite streaming SSE "Zero-Lag".</p>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;border-top:1px solid rgba(13,122,95,0.1);padding-top:16px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Throughput</span><span style="color:var(--co-blue);font-weight:600;">60+ tok/s</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Reasoning</span><span style="color:var(--co-blue);font-weight:600;">Expert</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">06 / 23</span><span class="tl"></span>
+    <span>LLM Evolution</span>
+  </div>
+</section>
+</template>
+<template id="slide-6"><section id="s07">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Agentic · Prompt Framework</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">System Architecture</div>
+      <h2 class="section">Prompt <em>Engineering</em></h2>
+      <p class="lead">Un framework multi-tecnica per eliminare allucinazioni e garantire output deterministici. Quattro strati logici in un unico system prompt.</p>
+    </div>
+
+    <div class="g4 anim d2">
+      <!-- Role-based -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Persona</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Identity</div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;margin-bottom:20px;">
+          Definisce perimetro e tono: <em>"ebayGPT, cervello strategico..."</em> Riduce allucinazioni out-of-scope.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);opacity:0.6;">Scope Enforcement</div>
+      </div>
+
+      <!-- CoT -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Logic</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Chain of Thought</div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;margin-bottom:20px;">
+          Obbligo di ragionare nel campo <code style="color:var(--co-blue);">thought</code> prima di agire. Step-by-step obbligatorio.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);opacity:0.6;">Reasoning Trace</div>
+      </div>
+
+      <!-- ReAct -->
+      <div class="card glass-blue">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Pattern</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">ReAct Loop</div>
+        <p style="font-size:15px;color:var(--co-near-black);line-height:1.6;margin-bottom:20px;">
+          Ciclo iterativo per adattarsi ai tool. Thought → Action → Obs. Orchestrazione multi-tool dinamica.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);">Iterative Feedback</div>
+      </div>
+
+      <!-- Structured Output -->
+      <div class="card">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          letter-spacing:0.15em;text-transform:uppercase;margin-bottom:12px;">Delivery</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">JSON Schema</div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;margin-bottom:20px;">
+          Vincolo assoluto di risposta in formato JSON per integrazione automatica deterministica col backend.
+        </p>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);opacity:0.6;">Strict JSON Mode</div>
+      </div>
+    </div>
+
+    <!-- Bottom flow bar - Cohere Enterprise style -->
+    <div class="anim d3 card" style="display:flex;align-items:center;gap:24px;padding:24px 32px;background:var(--co-snow);">
+      <span style="font-size:14px;font-weight:600;color:var(--co-black);">PIPELINE FLOW</span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="pill blue">Role</span>
+        <div class="arrow">→</div>
+        <span class="pill">CoT</span>
+        <div class="arrow">→</div>
+        <span class="pill">ReAct</span>
+        <div class="arrow">→</div>
+        <span class="pill">Structured JSON</span>
+      </div>
+      <span style="margin-left:auto;font-size:14px;color:var(--co-muted);">Risultato: Automazione verificabile e deterministica.</span>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s07');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]);
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top  - rect.height/ 2) / sc * 0.04;
+        gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">07 / 23</span><span class="tl"></span>
+    <span>Prompt Framework</span>
+  </div>
+</section>
+</template>
+<template id="slide-7"><section id="s08">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Parsing · Semantic Understanding</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Pipeline</div>
+        <h2 class="section">LLM-First <em>Parser</em></h2>
+        <p class="lead" style="max-width:560px;">Oltre le regex: il parsing semantico delega l'intera comprensione a un modello con output JSON validato e cachato.</p>
+      </div>
+
+      <!-- JSON Schema visual - Cohere Dark Code style -->
+      <div class="anim d2 card" style="background:var(--co-deep-dark);border:none;padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Strict Schema Output</div>
+        <div style="font-family:var(--font-mono);font-size:14px;line-height:1.8;color:#e5e7eb;">
+          {<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"product"</span>: <span style="color:#4ade80;">"iPhone 15 Pro Max"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"brands"</span>: [<span style="color:#4ade80;">"Apple"</span>],<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"constraints"</span>: {<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c084fc;">"price"</span>: {<span style="color:#c084fc;">"max"</span>: <span style="color:#fbbf24;">1100</span>},<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c084fc;">"condition"</span>: <span style="color:#4ade80;">"used"</span><br>
+          &nbsp;&nbsp;},<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"type"</span>: <span style="color:#4ade80;">"MainSearch"</span><br>
+          }
+        </div>
+      </div>
+
+      <!-- Fuzzy brand matching -->
+      <div class="anim d3 card" style="display:flex;align-items:center;gap:20px;padding:24px;">
+        <div class="pill" style="border-color:var(--co-gray-cool);background:var(--co-snow);color:var(--co-muted);">"adidaz"</div>
+        <div class="arrow">→</div>
+        <div class="pill blue">"Adidas"</div>
+        <div style="font-size:14px;color:var(--co-muted);margin-left:auto;">Correzione pre-LLM con <code style="color:var(--co-blue);">rapidfuzz</code></div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d2">
+      <!-- Confidence score breakdown -->
+      <div class="card" style="padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:24px;">Confidence Metric Breakdown</div>
+        <div style="display:flex;flex-direction:column;gap:20px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;">
+              <span style="color:var(--co-muted);">Semantic Brand Detection</span>
+              <span style="font-weight:600;color:var(--co-black);">+0.30</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s08-bar-brand" style="height:100%;width:30%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;">
+              <span style="color:var(--co-muted);">Numeric Constraints</span>
+              <span style="font-weight:600;color:var(--co-black);">+0.30</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s08-bar-num" style="height:100%;width:30%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;">
+              <span style="color:var(--co-muted);">Product Identification</span>
+              <span style="font-weight:600;color:var(--co-black);">+0.40</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s08-bar-prod" style="height:100%;width:40%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:24px;display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:15px;color:var(--co-muted);">LLM Parser Precision</span>
+            <span class="stat-num" id="s08-precision" style="font-size:48px;">0.95</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Redis cache -->
+      <div class="card glass-blue" style="display:flex;gap:16px;align-items:center;">
+        <div style="width:24px;height:24px;flex-shrink:0;color:var(--co-blue);"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h8l-1 8 10-12h-8z"/></svg></div>
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:600;color:var(--co-black);margin-bottom:4px;">Distributed Cache — Redis</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.5;">Hit = zero latenza LLM per query ripetute. TTL dinamico basato su query context.</p>
+        </div>
+      </div>
+
+      <!-- Live demo widget -->
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:10px 16px;background:var(--co-deep-dark);display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex;gap:5px;">
+            <div style="width:9px;height:9px;border-radius:50%;background:#ff5f57;"></div>
+            <div style="width:9px;height:9px;border-radius:50%;background:#febc2e;"></div>
+            <div style="width:9px;height:9px;border-radius:50%;background:#28c840;"></div>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,0.4);flex:1;">Live Demo — Parser</span>
+          <span id="s08-status" style="font-family:var(--font-mono);font-size:10px;color:rgba(255,255,255,0.3);">●  idle</span>
+        </div>
+        <div style="background:var(--co-deep-dark);padding:12px 16px;display:flex;gap:8px;">
+          <input id="s08-query" type="text" value="iPhone 15 Pro Max usato meno di 900 euro"
+            style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:6px;padding:6px 10px;font-family:var(--font-mono);font-size:12px;
+            color:#e5e7eb;outline:none;" />
+          <button id="s08-run" style="background:#0d7a5f;border:none;border-radius:6px;
+            padding:6px 14px;font-family:var(--font-mono);font-size:12px;color:#fff;cursor:pointer;">▶ Run</button>
+        </div>
+        <div id="s08-output" style="background:var(--co-deep-dark);padding:0 16px 12px;
+          font-family:var(--font-mono);font-size:11px;color:#a3e635;line-height:1.7;
+          min-height:56px;max-height:80px;overflow-y:auto;white-space:pre-wrap;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s08');
+    if (!section) return;
+    var bars = [
+      { id: 's08-bar-brand', delay: 0   },
+      { id: 's08-bar-num',   delay: 0.12 },
+      { id: 's08-bar-prod',  delay: 0.24 },
+    ];
+    function run() {
+      if (!window.gsap) return;
+      bars.forEach(function(b) {
+        var el = document.getElementById(b.id);
+        if (!el) return;
+        gsap.fromTo(el,
+          { scaleX: 0 },
+          { scaleX: 1, duration: 0.7, ease: 'power3.out', delay: b.delay,
+            transformOrigin: 'left center' }
+        );
+      });
+      var precEl = document.getElementById('s08-precision');
+      if (precEl) {
+        var obj = { val: 0 };
+        gsap.to(obj, { val: 0.95, duration: 1.4, ease: 'power2.out', delay: 0.3,
+          onUpdate: function() { precEl.textContent = obj.val.toFixed(2); }
+        });
+      }
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) run();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) run();
+
+    // Live demo
+    var es = null;
+    var runBtn = document.getElementById('s08-run');
+    var output = document.getElementById('s08-output');
+    var status = document.getElementById('s08-status');
+    if (runBtn) {
+      runBtn.addEventListener('click', function() {
+        if (es) { es.close(); es = null; }
+        var q = (document.getElementById('s08-query').value || '').trim();
+        if (!q) return;
+        output.textContent = '';
+        status.textContent = '●  streaming…';
+        status.style.color = '#4ade80';
+        runBtn.disabled = true;
+        var url = 'http://localhost:8050/agent/stream?query=' + encodeURIComponent(q);
+        es = new EventSource(url);
+        es.onmessage = function(e) {
+          try {
+            var d = JSON.parse(e.data);
+            var line = d.content || d.text || d.delta || JSON.stringify(d);
+            output.textContent += line;
+            output.scrollTop = output.scrollHeight;
+          } catch(_) {
+            output.textContent += e.data + '\n';
+            output.scrollTop = output.scrollHeight;
+          }
+        };
+        es.onerror = function() {
+          es.close(); es = null;
+          status.textContent = '●  done';
+          status.style.color = 'rgba(255,255,255,0.3)';
+          runBtn.disabled = false;
+        };
+        es.addEventListener('done', function() {
+          es.close(); es = null;
+          status.textContent = '●  done';
+          status.style.color = 'rgba(255,255,255,0.3)';
+          runBtn.disabled = false;
+        });
+      });
+    }
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">08 / 23</span><span class="tl"></span>
+    <span>Semantic Parser</span>
+  </div>
+</section>
+</template>
+<template id="slide-8"><section id="s09">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Processing · Data Structuring</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Pipeline</div>
+        <h2 class="section">Batch <em>NER</em></h2>
+        <p class="lead" style="max-width:580px;">I titoli eBay sono stringhe non strutturate. Named Entity Recognition via LLM Batch estrae brand e specs in un solo call atomico.</p>
+      </div>
+
+      <!-- Pipeline flow - Cohere Style -->
+      <div class="anim d2 card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:20px 24px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);">
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Input — Raw Titles</div>
+          <div style="font-family:var(--font-mono);font-size:14px;color:var(--co-near-black);opacity:0.8;">
+            "Apple iPhone 13 Pro Max 256GB Blu Mezzanotte - Usato"<br>
+            "Sony WH-1000XM5 Cuffie Wireless Noise Cancelling NUOVO"
+          </div>
+        </div>
+        <div style="padding:16px 24px;background:var(--co-blue);color:var(--co-white);display:flex;align-items:center;gap:16px;">
+          <div style="width:24px;height:24px;flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><circle cx="9.5" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9.5 17.5h5"/></svg></div>
+          <div style="font-family:var(--font-display);font-size:20px;">LLM Batch Processing</div>
+          <div style="margin-left:auto;font-family:var(--font-mono);font-size:12px;opacity:0.8;">OLLAMA INFRASTRUCTURE</div>
+        </div>
+        <div style="padding:24px;background:var(--co-deep-dark);color:#e5e7eb;">
+          <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Output — Structured Entities</div>
+          <div style="font-family:var(--font-mono);font-size:14px;color:#4ade80;">
+            { "brand": "Apple", "model": "iPhone 13 Pro Max", "specs": { "storage": "256GB" } }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div class="g2">
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">BRAND</div>
+          <div style="font-family:var(--font-display);font-size:20px;">Normalized</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">MODEL</div>
+          <div style="font-family:var(--font-display);font-size:20px;">Cleaned</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">SPECS</div>
+          <div style="font-family:var(--font-display);font-size:20px;">KV Dictionary</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">CATEGORY</div>
+          <div style="font-family:var(--font-display);font-size:20px;">Classification</div>
+        </div>
+      </div>
+
+      <!-- Integration note -->
+      <div class="card glass-blue" style="padding:32px;">
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Pipeline Integration</div>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:15px;color:var(--co-near-black);">
+          <div style="display:flex;gap:12px;">
+            <div style="color:var(--co-blue);">✓</div>
+            <span>NER iniettato in <code style="color:var(--co-blue);">item_specifics</code> prima del reranker.</span>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="color:var(--co-blue);">✓</div>
+            <span>Cross-Encoder e LLM Judge operano su dati già strutturati.</span>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="color:var(--co-blue);">✓</div>
+            <span>Minimizzazione latenza tramite batching multi-titolo.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div class="stat-box" style="align-items:flex-start;">
+          <span class="stat-num">1</span>
+          <span class="stat-label">LLM Call / Batch</span>
+        </div>
+        <div class="stat-box" style="align-items:flex-start;">
+          <span class="stat-num">N</span>
+          <span class="stat-label">Processed Titles</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">09 / 23</span><span class="tl"></span>
+    <span>Entity Structuring</span>
+  </div>
+</section>
+</template>
+<template id="slide-9"><section id="s10">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Memory · Session Context</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Persistence Architecture</div>
+        <h2 class="section">Stateful <em>Anaphora</em></h2>
+        <p class="lead" style="max-width:580px;">Un assistente senza memoria è limitato. Il Contextual Tracking via Redis risolve pronomi e riferimenti cross-sessione.</p>
+      </div>
+
+      <!-- Before/After dialog - Cohere Clean Style -->
+      <div class="anim d2 card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 24px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;">Multi-turn Conversation</div>
+
+        <div style="padding:24px;display:flex;flex-direction:column;gap:24px;">
+          <!-- Turn 1 -->
+          <div>
+            <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">USER</div>
+            <div style="font-size:16px;color:var(--co-black);font-weight:500;">"Cercami un iPhone 15 Pro sotto i 1000€"</div>
+          </div>
+          <div style="padding:12px 16px;background:var(--co-snow);border-radius:12px;border:1px solid var(--co-gray-cool);">
+            <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);margin-bottom:4px;">SYSTEM → Redis Push (TTL 24h)</div>
+            <div style="font-size:14px;color:var(--co-muted);">Query stored in session state.</div>
+          </div>
+
+          <!-- Turn 2 -->
+          <div>
+            <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">USER</div>
+            <div style="font-size:16px;color:var(--co-black);font-weight:500;">"<span style="color:var(--co-blue);">Cercalo</span> rosso e con 256GB"</div>
+          </div>
+          <div style="padding:20px;background:var(--co-deep-dark);border-radius:12px;color:#e5e7eb;">
+            <div style="font-size:12px;font-family:var(--font-mono);color:rgba(255,255,255,0.4);margin-bottom:12px;">LLM → RESOLVED CONTEXT</div>
+            <div style="font-family:var(--font-mono);font-size:14px;line-height:1.6;">
+              product: <span style="color:#4ade80;">"iPhone 15 Pro"</span><br>
+              constraints: { "color": "red", "storage": "256GB", "price_max": 1000 }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: architecture -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:4px;">Stateful Pipeline</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="text-align:center;padding:16px;">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Redis State Store</div>
+          <div style="font-size:12px;color:var(--co-muted);font-family:var(--font-mono);margin-top:4px;">session_id | user_id</div>
+        </div>
+        <div class="arrow" style="margin:0 auto;">↓</div>
+        <div class="card glass-blue" style="text-align:center;padding:16px;border-color:var(--co-blue);">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Context Injection</div>
+          <div style="font-size:12px;color:var(--co-muted);margin-top:4px;">Recent history → LLM Prompt</div>
+        </div>
+        <div class="arrow" style="margin:0 auto;">↓</div>
+        <div class="card" style="text-align:center;padding:16px;">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Pronoun Resolution</div>
+          <div style="font-size:12px;color:var(--co-muted);margin-top:4px;">Anaphora mapping</div>
+        </div>
+      </div>
+
+      <!-- Scope differentiation -->
+      <div class="card" style="padding:24px;background:var(--co-snow);">
+        <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);margin-bottom:16px;">Dual Scope Tracking</div>
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;padding:12px;background:var(--co-white);border-radius:12px;border:1px solid var(--co-gray-cool);">
+            <div style="font-size:13px;font-weight:600;color:var(--co-black);margin-bottom:4px;">Session</div>
+            <div style="font-size:12px;color:var(--co-muted);">Anonymous tracking</div>
+          </div>
+          <div style="flex:1;padding:12px;background:var(--co-white);border-radius:12px;border:1px solid var(--co-gray-cool);">
+            <div style="font-size:13px;font-weight:600;color:var(--co-blue);margin-bottom:4px;">User</div>
+            <div style="font-size:12px;color:var(--co-muted);">Persistent history</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">10 / 23</span><span class="tl"></span>
+    <span>Stateful Anaphora</span>
+  </div>
+</section>
+</template>
+<template id="slide-10"><section id="s11">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Retrieval · Recall Optimization</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Search Pipeline</div>
+      <h2 class="section">Query <em>Expansion</em></h2>
+      <p class="lead">Query brevi producono recall basso su BM25. L'LLM arricchisce la query con sinonimi e termini correlati solo per il RAG interno.</p>
+    </div>
+
+    <!-- Before/After hero - Cohere Clean Style -->
+    <div class="anim d2 card" style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0;overflow:hidden;">
+      <!-- Before -->
+      <div style="padding:40px;background:var(--co-snow);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Original Query</div>
+        <div style="font-family:var(--font-display);font-size:32px;color:var(--co-black);margin-bottom:16px;">
+          "compara iphone 15 max"
+        </div>
+        <div style="display:flex;gap:8px;">
+          <span class="pill">3 Tokens</span>
+          <span class="pill" style="color:var(--co-muted);">Low Recall</span>
+        </div>
+      </div>
+      <!-- Divider / Action -->
+      <div style="background:var(--co-blue);padding:40px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-white);text-transform:uppercase;writing-mode:vertical-lr;transform:rotate(180deg);">LLM EXPAND</div>
+        <div style="color:var(--co-white);font-size:24px;">→</div>
+      </div>
+      <!-- After -->
+      <div style="padding:40px;background:var(--co-white);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Expanded Query → Qdrant</div>
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);margin-bottom:16px;">
+          "Apple iPhone 15 Pro Max smartphone comparison"
+        </div>
+        <div style="display:flex;gap:8px;">
+          <span class="pill blue">Hybrid Boost</span>
+          <span class="pill blue">N-Gram Coverage</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom properties -->
+    <div class="g4 anim d3">
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);text-transform:uppercase;margin-bottom:8px;">LLM Strategy</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Brand, categorie e sinonimi. Output limitato a 10 parole per precisione.</p>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Isolation</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Esclusivamente per Qdrant (RAG). eBay usa i filtri strutturati originali.</p>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Performance</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;"><code style="color:var(--co-blue);">asyncio.gather</code> — latenza aggiuntiva nulla sul critical path.</p>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Resilience</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Fallback automatico alla query originale in caso di timeout o errori LLM.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s11');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.g4 .card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top - rect.height / 2) / sc * 0.04;
+        if (window.gsap) gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">11 / 23</span><span class="tl"></span>
+    <span>Recall Optimization</span>
+  </div>
+</section>
+</template>
+<template id="slide-11"><section id="s12">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Trust & Verification · analyze_seller</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left: donut chart -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Seller Intelligence</div>
+        <h2 class="section">The <em>Trust Tool</em></h2>
+        <p class="lead">Il rating a stelle eBay è rudimentale. <code style="color:var(--co-blue);">analyze_seller</code> produce un Trust Score composito multidimensionale.</p>
+      </div>
+
+      <!-- Chart container - Cohere Style -->
+      <div class="anim d2 card" style="display:flex;align-items:center;gap:40px;padding:40px;">
+        <div style="position:relative;width:240px;height:240px;flex-shrink:0;">
+          <canvas id="trust-chart" width="240" height="240"></canvas>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;
+            align-items:center;justify-content:center;pointer-events:none;">
+            <div class="stat-num" style="font-size:64px;margin-bottom:-8px;" id="trust-score">87</div>
+            <div style="font-size:14px;font-family:var(--font-mono);color:var(--co-muted);
+              text-transform:uppercase;letter-spacing:0.15em;">INDEX / 100</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:20px;">
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;">
+              <span style="font-weight:600;color:var(--co-black);">Feedback Ratio</span>
+              <span style="color:var(--co-blue);font-weight:700;">45%</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s12-bar-fb" style="height:100%;width:45%;background:var(--co-blue);border-radius:2px;"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;">
+              <span style="font-weight:600;color:var(--co-black);">NLP Sentiment</span>
+              <span style="color:var(--co-blue);font-weight:700;">25%</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s12-bar-nlp" style="height:100%;width:25%;background:var(--co-blue);opacity:0.7;border-radius:2px;"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;">
+              <span style="font-weight:600;color:var(--co-black);">Recency Factor</span>
+              <span style="color:var(--co-blue);font-weight:700;">20%</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s12-bar-rec" style="height:100%;width:20%;background:var(--co-blue);opacity:0.5;border-radius:2px;"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;">
+              <span style="font-weight:600;color:var(--co-black);">Volume Conf.</span>
+              <span style="color:var(--co-blue);font-weight:700;">10%</span>
+            </div>
+            <div style="height:4px;background:var(--co-gray-light);border-radius:2px;">
+              <div id="s12-bar-vol" style="height:100%;width:10%;background:var(--co-blue);opacity:0.3;border-radius:2px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: features -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:24px;" class="anim d3">
+      <div class="card" style="padding:24px;border-color:var(--co-gray-cool);">
+        <div style="font-size:13px;font-family:var(--font-mono);font-weight:700;color:var(--co-blue);text-transform:uppercase;margin-bottom:8px;">Trading API GetFeedback</div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Analisi parallela di 500+ feedback tramite <code style="color:var(--co-blue);">asyncio.gather</code>. Mapping: Positive(5) → Neutral(3) → Negative(1).</p>
+      </div>
+
+      <div class="card glass-blue" style="padding:24px;">
+        <div style="font-size:13px;font-family:var(--font-mono);font-weight:700;color:var(--co-black);text-transform:uppercase;margin-bottom:8px;">AI Verdict</div>
+        <p style="font-size:14px;color:var(--co-near-black);line-height:1.5;margin-bottom:12px;">LLM sintetizza 150+ commenti reali in un giudizio analitico esplicito su rischi e pregi.</p>
+        <div style="padding:16px;background:var(--co-white);border-radius:12px;font-size:13px;color:var(--co-muted);font-style:italic;">
+          "Venditore affidabile con ottime valutazioni. Alcune segnalazioni di spedizioni lente. Comunicazione positiva."
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">5m</span>
+          <span class="stat-label">Cache TTL</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">500</span>
+          <span class="stat-label">Max FB</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">150</span>
+          <span class="stat-label">LLM Sample</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">12 / 23</span><span class="tl"></span>
+    <span>Seller Verification</span>
+  </div>
+
+  <script>
+  (function() {
+    var chart = null;
+    var section = document.getElementById('s12');
+    if (!section) return;
+
+    var bars = [
+      { id: 's12-bar-fb',  delay: 0    },
+      { id: 's12-bar-nlp', delay: 0.1  },
+      { id: 's12-bar-rec', delay: 0.2  },
+      { id: 's12-bar-vol', delay: 0.3  },
+    ];
+
+    function run() {
+      // Doughnut chart
+      if (chart) { chart.destroy(); chart = null; }
+      var canvas = document.getElementById('trust-chart');
+      if (canvas && window.Chart) {
+        chart = new Chart(canvas.getContext('2d'), {
+          type: 'doughnut',
+          data: {
+            datasets: [{
+              data: [45, 25, 20, 10],
+              backgroundColor: ['#0d7a5f','rgba(13,122,95,0.7)','rgba(13,122,95,0.5)','rgba(13,122,95,0.3)'],
+              borderWidth: 0, hoverOffset: 6
+            }]
+          },
+          options: {
+            cutout: '72%', responsive: false,
+            animation: { duration: 1000, easing: 'easeInOutQuart' },
+            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+          }
+        });
+      }
+
+      // Counter trust index 87
+      var scoreEl = document.getElementById('trust-score');
+      if (scoreEl && window.gsap) {
+        var obj = { val: 0 };
+        gsap.to(obj, { val: 87, duration: 1.5, ease: 'power2.out',
+          onUpdate: function() { scoreEl.textContent = Math.round(obj.val); }
+        });
+      }
+
+      // Animate weight bars with stagger
+      if (window.gsap) {
+        bars.forEach(function(b) {
+          var el = document.getElementById(b.id);
+          if (!el) return;
+          gsap.fromTo(el,
+            { scaleX: 0 },
+            { scaleX: 1, duration: 0.7, ease: 'power3.out', delay: b.delay,
+              transformOrigin: 'left center' }
+          );
+        });
+      }
+    }
+
+    var observer = new MutationObserver(function() {
+      if (section.classList.contains('active')) run();
+    });
+    observer.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) run();
+  })();
+  </script>
+</section>
+</template>
+<template id="slide-12"><section id="s13">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Insights · get_market_trends</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Market Intelligence</div>
+        <h2 class="section">Global <em>Benchmarks</em></h2>
+        <p class="lead">Oltre eBay: integrazione di benchmark Google Shopping + Trends per una visione di mercato a 360°.</p>
+      </div>
+
+      <!-- Price distribution chart - Cohere Style -->
+      <div class="anim d2 card" style="padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:24px;">Price Distribution — iPhone 15 Pro Max</div>
+        <canvas id="price-chart" height="130"></canvas>
+        
+        <!-- Stats row -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:24px;
+          border-top:1px solid var(--co-gray-light);padding-top:20px;">
+          <div style="text-align:center;">
+            <div id="s13-min" style="font-size:20px;font-weight:700;color:var(--co-black);">€389</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">MIN</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-avg" style="font-size:20px;font-weight:700;color:var(--co-blue);">€412</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">AVG</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-med" style="font-size:20px;font-weight:700;color:var(--co-black);">€408</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">MED</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-dev" style="font-size:20px;font-weight:700;color:var(--co-muted);">±€24</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">DEV</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-max" style="font-size:20px;font-weight:700;color:var(--co-black);">€539</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">MAX</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <!-- Verdetto badge - Cohere Actionable style -->
+      <div class="card glass-blue" style="border-color:var(--co-blue);padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Market Verdict</div>
+        <p style="font-size:16px;color:var(--co-near-black);line-height:1.6;">
+          <strong>Opportunità eccellente (87/100).</strong> Il prezzo medio è vicino al minimo storico. La domanda è in forte crescita: momento ideale per l'acquisto.
+        </p>
+      </div>
+
+      <!-- Trend classification -->
+      <div class="card" style="padding:24px;background:var(--co-snow);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Trend Classification</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--co-blue);"></div>
+            <span style="color:var(--co-near-black);">Breakout > +30%</span>
+            <span class="pill blue" style="margin-left:auto;">CRITICAL</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--co-blue);opacity:0.6;"></div>
+            <span style="color:var(--co-near-black);">Rising +10% ÷ +30%</span>
+            <span class="pill" style="margin-left:auto;">UPWARD</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--co-gray-cool);"></div>
+            <span style="color:var(--co-near-black);">Stable ±10%</span>
+            <span class="pill" style="margin-left:auto;">STABLE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parallel execution note -->
+      <div class="card" style="padding:24px;border-color:var(--co-gray-cool);">
+        <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:12px;">Parallel Engine</div>
+        <pre class="code" style="font-size:12px;background:transparent;border:none;padding:0;margin:0;">asyncio.gather(
+    fetch_google_shopping(),
+    fetch_google_trends(),
+    fetch_historical_data()
+)</pre>
+        <p style="font-size:13px;color:var(--co-muted);margin-top:12px;">Tre chiamate API atomiche eseguite in parallelo per minimizzare la latenza dello strumento.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">13 / 23</span><span class="tl"></span>
+    <span>Market Intelligence</span>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s13');
+    var counters = [
+      { id: 's13-min', end: 389, prefix: '€', suffix: '' },
+      { id: 's13-avg', end: 412, prefix: '€', suffix: '' },
+      { id: 's13-med', end: 408, prefix: '€', suffix: '' },
+      { id: 's13-dev', end: 24,  prefix: '±€', suffix: '' },
+      { id: 's13-max', end: 539, prefix: '€', suffix: '' },
+    ];
+    function runCounters() {
+      if (!window.gsap) return;
+      counters.forEach(function(c, i) {
+        var el = document.getElementById(c.id);
+        if (!el) return;
+        var obj = { val: 0 };
+        gsap.to(obj, { val: c.end, duration: 1.2, ease: 'power2.out', delay: i * 0.1,
+          onUpdate: function() { el.textContent = c.prefix + Math.round(obj.val) + c.suffix; }
+        });
+      });
+    }
+    var mo2 = new MutationObserver(function() {
+      if (section.classList.contains('active')) runCounters();
+    });
+    mo2.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) runCounters();
+  })();
+  </script>
+
+  <script>
+  (function() {
+    var chart = null;
+    var section = document.getElementById('s13');
+    if (!section) return;
+    var observer = new MutationObserver(function() {
+      if (!section.classList.contains('active')) return;
+      if (chart) { chart.destroy(); chart = null; }
+      var canvas = document.getElementById('price-chart');
+      if (!canvas || !window.Chart) return;
+      var labels = ['< €370','€370–390','€390–410','€410–430','€430–460','€460–500','> €500'];
+      var values = [2, 8, 28, 35, 18, 6, 3];
+      chart = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: values.map((v, i) => i === 3 ? '#0d7a5f' : 'rgba(13,122,95,0.15)'),
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          animation: { duration: 900, easing: 'easeOutQuart' },
+          plugins: { legend: { display: false }, tooltip: { enabled: false }},
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: 'Outfit', size: 10 }, color: '#6a7181' } },
+            y: { display: false }
+          }
+        }
+      });
+    });
+    observer.observe(section, { attributes: true, attributeFilter: ['class'] });
+  })();
+  </script>
+</section>
+</template>
+<template id="slide-13"><section id="s14">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Vision · describe_image</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Multimodal Processing</div>
+        <h2 class="section">The <em>Vision</em> Tool</h2>
+        <p class="lead">Descrivere un prodotto a parole è spesso limitante. L'utente carica una foto — il sistema estrae i descrittori per la ricerca eBay.</p>
+      </div>
+
+      <!-- Image placeholder - Cohere Style -->
+      <div class="anim d2 card" style="width:100%;aspect-ratio:16/10;background:var(--co-snow);
+        border:2px dashed var(--co-gray-cool);display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:16px;color:var(--co-muted);">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="m21 15-5-5L5 21"/>
+        </svg>
+        <div style="font-family:var(--font-mono);font-size:12px;letter-spacing:0.15em;text-align:center;">
+          [IMAGE INPUT STREAM]<br>
+          <span style="font-size:10px;opacity:0.6;">base64 encoded · data:image/png</span>
+        </div>
+      </div>
+
+      <!-- Model info -->
+      <div class="anim d3 card glass-blue" style="display:flex;gap:20px;align-items:center;padding:24px;">
+        <div class="stat-num" style="font-size:32px;">235B</div>
+        <div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Qwen3-VL Infrastructure</div>
+          <div style="font-size:14px;color:var(--co-muted);">Ollama Cloud · Unified AsyncClient · Image-to-Tokens</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: output + pipeline -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <!-- JSON output - Cohere Dark -->
+      <div class="card" style="background:var(--co-deep-dark);border:none;padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Multimodal Reasoning Output</div>
+        <div style="font-family:var(--font-mono);font-size:14px;line-height:1.8;color:#e5e7eb;">
+          {<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"description"</span>: <span style="color:#4ade80;">"Minimalist white leather sneaker"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"tags"</span>: [<span style="color:#4ade80;">"luxury"</span>, <span style="color:#4ade80;">"clean"</span>, <span style="color:#4ade80;">"minimal"</span>],<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"brand_guess"</span>: <span style="color:#4ade80;">"Common Projects"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"confidence"</span>: <span style="color:#fbbf24;">0.87</span><br>
+          }
+        </div>
+      </div>
+
+      <!-- Pipeline Integration - Vertical Steps -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="padding:16px 20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="font-size:20px;">1</div>
+          <div style="font-size:14px;font-weight:600;color:var(--co-black);">Image Upload & Normalization</div>
+        </div>
+        <div class="card" style="padding:16px 20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="font-size:20px;">2</div>
+          <div style="font-size:14px;font-weight:600;color:var(--co-black);">Qwen3-VL Vision Inference</div>
+        </div>
+        <div class="card glass-blue" style="padding:16px 20px;display:flex;align-items:center;gap:16px;border-color:var(--co-blue);">
+          <div style="font-size:20px;">3</div>
+          <div style="font-size:14px;font-weight:600;color:var(--co-black);">Search Pipeline Injection</div>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div style="font-size:13px;color:var(--co-muted);line-height:1.6;border-top:1px solid var(--co-gray-light);padding-top:20px;">
+        Supporta formati multi-standard (PNG, JPEG, WEBP) con pulizia automatica dell'header Base64 prima dell'elaborazione.
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">14 / 23</span><span class="tl"></span>
+    <span>Multimodal Intelligence</span>
+  </div>
+</section>
+</template>
+<template id="slide-14"><section id="s16">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Ecosystem · Capabilities</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Modular Architecture</div>
+      <h2 class="section">The <em>MCP</em> Toolkit</h2>
+      <p class="lead">14 tool registrati via FastMCP. L'agente ReAct li concatena autonomamente nel loop Thought → Action → Observation.</p>
+    </div>
+
+    <!-- Tool Grid - Cohere Style -->
+    <div class="anim d2" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">search_products</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Ricerca eBay con filtri semantici. Motore principale della pipeline RAG + API.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 4.4 3.4 8.5 8 9.5 4.6-1 8-5.1 8-9.5V7z"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">analyze_seller</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Trust Score composito, sentiment NLP su feedback reali e profilo venditore.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v18M4 21h16M6 12l-3 6h6zM18 12l-3 6h6zM6 8l6-4 6 4"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">compare_products</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Scoring matrix multi-prodotto (prezzo, trust, rilevanza) → vincitore logico.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">get_market_trends</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Benchmark Google Shopping + Trends. Verdetto dinamico "compra ora o aspetta".</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:5px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">describe_image</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Vision multimodale Qwen3-VL. Foto → brand + tag + condizione → ricerca.</p>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--co-blue);display:flex;align-items:center;justify-content:center;color:#fff;padding:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><polyline points="9 10 12 13 15 10"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--co-blue);">ebay_scrape</div>
+        </div>
+        <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Fallback Playwright: navigazione browser reale quando le API sono limitate.</p>
+      </div>
+    </div>
+
+    <!-- Secondary tools -->
+    <div class="anim d3 card" style="display:flex;align-items:center;gap:20px;padding:20px 32px;background:var(--co-snow);">
+      <span style="font-size:14px;font-weight:600;color:var(--co-black);">+ 8 TOOLS</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="pill">wishlist</span>
+        <span class="pill">chat</span>
+        <span class="pill">metadata</span>
+        <span class="pill">deals</span>
+        <span class="pill">contact</span>
+        <span class="pill">shipping</span>
+        <span class="pill">profile</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s16');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card:not(.anim)').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]);
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top  - rect.height/ 2) / sc * 0.04;
+        gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">15 / 23</span><span class="tl"></span>
+    <span>Ecosistema Toolkit</span>
+  </div>
+</section>
+</template>
+<template id="slide-15"><section id="s17">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Persistence · Polyglot Storage</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Infrastructure Layer</div>
+      <h2 class="section">The 3 <em>Storage</em> Pillars</h2>
+      <p class="lead">Tre esigenze radicalmente diverse — nessun singolo database può soddisfarle. Stack poliglotta a tre livelli scelto per la natura del dato.</p>
+    </div>
+
+    <div class="g3 anim d2" style="gap:24px;">
+      <!-- PostgreSQL -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--co-snow);display:flex;align-items:center;justify-content:center;color:var(--co-muted);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">PostgreSQL</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;">The Truth Layer</div>
+            </div>
+          </div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.6;margin-bottom:24px;">Il registro permanente. Garantisce integrità ACID per utenti e transazioni. Fonte di verità a lungo termine.</p>
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:20px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;"><span style="color:var(--co-muted);">User Profiles</span><span style="color:var(--co-black);font-weight:600;">ACID</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--co-muted);">Order History</span><span style="color:var(--co-black);font-weight:600;">Permanent</span></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill">Relational</span>
+            <span class="pill">SQL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Redis -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--co-snow);display:flex;align-items:center;justify-content:center;color:var(--co-muted);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h8l-1 8 10-12h-8z"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">Redis</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;">The Hot Layer</div>
+            </div>
+          </div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.6;margin-bottom:24px;">Memoria di lavoro. Cache per query e sessioni. Risposta in microsecondi per un'esperienza lag-free.</p>
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:20px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;"><span style="color:var(--co-muted);">Session State</span><span style="color:var(--co-black);font-weight:600;">24h TTL</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--co-muted);">Parse Cache</span><span style="color:var(--co-black);font-weight:600;">1h TTL</span></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill">In-Memory</span>
+            <span class="pill">Fast KV</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Qdrant -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--co-snow);display:flex;align-items:center;justify-content:center;color:var(--co-muted);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 3v4M15 3v4M3 9h4M3 15h4M21 9h-4M21 15h-4M9 21v-4M15 21v-4"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">Qdrant</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;">The Semantic Layer</div>
+            </div>
+          </div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.6;margin-bottom:24px;">Cervello semantico. Indicizza prodotti e feedback come vettori. Cuore del RAG ibrido (Dense + Sparse).</p>
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:20px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;"><span style="color:var(--co-muted);">Embeddings</span><span style="color:var(--co-black);font-weight:600;">384-dim</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--co-muted);">Retrieval</span><span style="color:var(--co-black);font-weight:600;">Hybrid</span></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill">Vector DB</span>
+            <span class="pill">RAG Core</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s17');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]);
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top  - rect.height/ 2) / sc * 0.04;
+        gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">16 / 23</span><span class="tl"></span>
+    <span>Storage Architecture</span>
+  </div>
+</section>
+</template>
+<template id="slide-16"><section id="s18">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Retrieval · Hybrid Search</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Engine</div>
+        <h2 class="section">Hybrid <em>RAG</em> & RRF</h2>
+        <p class="lead" style="max-width:580px;">Dense fallisce sulla terminologia specifica, Sparse sulle query concettuali. Reciprocal Rank Fusion nativo su Qdrant unisce il meglio di entrambi.</p>
+      </div>
+
+      <!-- RRF formula - Cohere Signature Card -->
+      <div class="anim d2 card" style="background:var(--co-snow);border-color:var(--co-gray-cool);padding:40px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Reciprocal Rank Fusion</div>
+        <div style="font-family:var(--font-display);font-size:40px;color:var(--co-black);letter-spacing:-1px;margin-bottom:16px;">
+          RRF(d) = <span style="color:var(--co-blue);">Σ</span> <span style="color:var(--co-muted);">1 / (rank<sub>i</sub>(d) + 60)</span>
+        </div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;">
+          Non richiede normalizzazione. Premia i documenti ben classificati in <em>entrambe</em> le liste. K=60 è il parametro standard industriale per la massima precisione.
+        </p>
+      </div>
+
+      <!-- Dense vs Sparse comparison -->
+      <div class="anim d3" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div class="card" style="padding:24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);text-transform:uppercase;margin-bottom:12px;">Dense Retrieval</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:8px;">all-MiniLM-L6-v2</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.5;">384 dim · cosine distance. @lru_cache per performance estreme.</p>
+        </div>
+        <div class="card" style="padding:24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:12px;">Sparse Retrieval</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:8px;">BM25 Okapi</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.5;">Term matching puro. IDF modifier per penalizzare i termini generici.</p>
+        </div>
+      </div>
+      <!-- KaTeX RRF formula -->
+      <div class="anim d4 card" style="padding:28px;background:var(--co-deep-dark);border:none;">
+        <div style="font-size:11px;font-family:var(--font-mono);color:rgba(255,255,255,0.4);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Formula — Reciprocal Rank Fusion</div>
+        <div id="s18-katex-formula" style="font-size:22px;text-align:center;padding:8px 0;"></div>
+        <div style="font-size:12px;font-family:var(--font-mono);color:rgba(255,255,255,0.4);margin-top:14px;text-align:center;">K = 60 · parametro industriale · normalizzazione non richiesta</div>
+      </div>
+    </div>
+
+    <!-- Right: architecture diagram -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:12px;align-items:stretch;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px;">Qdrant Native RRF Flow</div>
+
+      <!-- Query -->
+      <div class="card glass-blue" style="text-align:center;padding:16px;">
+        <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Expanded Query</div>
+        <div style="font-size:12px;color:var(--co-blue);margin-top:4px;font-family:var(--font-mono);">Semantic + Keyword context</div>
+      </div>
+      
+      <div class="arrow" style="margin:0 auto;">↓</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card" style="text-align:center;padding:16px;background:var(--co-snow);">
+          <div style="font-size:14px;font-weight:700;color:var(--co-black);">Dense Prefetch</div>
+          <div style="font-size:11px;color:var(--co-muted);margin-top:4px;">Vector Search</div>
+        </div>
+        <div class="card" style="text-align:center;padding:16px;background:var(--co-snow);">
+          <div style="font-size:14px;font-weight:700;color:var(--co-black);">Sparse Prefetch</div>
+          <div style="font-size:11px;color:var(--co-muted);margin-top:4px;">BM25 Search</div>
+        </div>
+      </div>
+
+      <div class="arrow" style="margin:0 auto;">↓</div>
+
+      <div class="card" style="text-align:center;padding:24px;border-color:var(--co-blue);background:var(--co-white);">
+        <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">Native RRF Fusion</div>
+        <div style="font-size:12px;color:var(--co-blue);margin-top:4px;font-family:var(--font-mono);">ZERO Python Overhead</div>
+      </div>
+
+      <div class="arrow" style="margin:0 auto;">↓</div>
+
+      <div class="card" style="text-align:center;padding:16px;background:var(--co-snow);">
+        <div style="font-size:14px;font-weight:700;color:var(--co-black);">Top-K Ranked Results</div>
+      </div>
+
+      <!-- Code snippet - Cohere Dark -->
+      <div style="background:var(--co-deep-dark);border-radius:14px;padding:24px;
+        font-family:var(--font-mono);font-size:12px;line-height:1.75;color:#e5e7eb;margin-top:12px;">
+        <span style="color:#c084fc;">client.query_points</span>(<br>
+        &nbsp;&nbsp;prefetch=[dense_p, sparse_p],<br>
+        &nbsp;&nbsp;query=<span style="color:#c084fc;">FusionQuery</span>(<span style="color:#4ade80;">Fusion.RRF</span>)<br>
+        )
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s18');
+    var rendered = false;
+    function renderFormula() {
+      if (rendered) return;
+      var el = document.getElementById('s18-katex-formula');
+      if (!el || !window.katex) return;
+      katex.render(
+        '\\text{RRF}(d) = \\displaystyle\\sum_{i=1}^{n} \\frac{1}{\\text{rank}_i(d) + 60}',
+        el,
+        { throwOnError: false, displayMode: true, output: 'html' }
+      );
+      el.style.color = '#e5e7eb';
+      rendered = true;
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) renderFormula();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) renderFormula();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">17 / 23</span><span class="tl"></span>
+    <span>Hybrid RAG Architecture</span>
+  </div>
+</section>
+</template>
+<template id="slide-17"><section id="s20">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Ranking · NLP Processing</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Trust Verification</div>
+        <h2 class="section">BERT <em>Sentiment</em></h2>
+        <p class="lead" style="max-width:560px;">I feedback dei venditori contengono sfumature che un semplice conteggio di stelle non può catturare. Un classificatore Transformer legge la soddisfazione reale.</p>
+      </div>
+
+      <!-- Pipeline flow - Cohere Style -->
+      <div style="display:flex;flex-direction:column;gap:12px;" class="anim d2">
+        <div class="card" style="padding:20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="width:20px;height:20px;flex-shrink:0;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--co-black);">Raw Feedback Data</div>
+            <div style="font-size:12px;color:var(--co-muted);">"Ottimo prodotto ma spedizione lenta"</div>
+          </div>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card glass-blue" style="padding:20px;display:flex;align-items:center;gap:16px;border-color:var(--co-blue);">
+          <div style="width:20px;height:20px;flex-shrink:0;color:var(--co-blue);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><circle cx="9.5" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9.5 17.5h5"/></svg></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--co-black);">BERT Transformer Model</div>
+            <div style="font-size:12px;color:var(--co-muted);">Distingue ironia e contesto oltre le keyword</div>
+          </div>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card" style="padding:20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="width:20px;height:20px;flex-shrink:0;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--co-black);">Final Trust Score Blend</div>
+            <div style="font-size:12px;color:var(--co-muted);">60% eBay Rating + 40% BERT Sentiment</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blend formula + doughnut -->
+      <div class="anim d3 card" style="padding:32px;background:var(--co-snow);display:flex;align-items:center;gap:32px;">
+        <div style="flex:1;">
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Blend Algorithm</div>
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--co-black);">
+            score = <span style="color:var(--co-blue);">0.60</span> × eBay + <span style="color:var(--co-blue);opacity:0.6;">0.40</span> × BERT
+          </div>
+        </div>
+        <canvas id="s20-blend-chart" width="130" height="130" style="flex-shrink:0;"></canvas>
+      </div>
+    </div>
+
+    <!-- Right: examples -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:24px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:4px;">BERT Insight Analysis</div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:14px;color:var(--co-near-black);margin-bottom:12px;font-style:italic;">"Arrivato in ritardo come al solito, ma prodotto ok"</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <span style="color:var(--co-muted);">eBay: ⭐⭐⭐⭐⭐</span>
+          <span class="pill" style="color:var(--co-blue);">BERT: ⭐⭐⭐</span>
+        </div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:14px;color:var(--co-near-black);margin-bottom:12px;font-style:italic;">"Perfetto in tutto, venditore fantastico, super consigliato!"</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <span style="color:var(--co-muted);">eBay: ⭐⭐⭐⭐⭐</span>
+          <span class="pill blue">BERT: ⭐⭐⭐⭐⭐</span>
+        </div>
+      </div>
+
+      <div class="card" style="padding:20px;border-color:rgba(226,117,136,0.2);">
+        <div style="font-size:14px;color:var(--co-near-black);margin-bottom:12px;font-style:italic;">"Pessima esperienza. Oggetto non corrispondente alla descrizione"</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <span style="color:var(--co-muted);">eBay: ⭐</span>
+          <span class="pill" style="color:red;opacity:0.6;">BERT: ⭐</span>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">5</span>
+          <span class="stat-label">Levels of Class.</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" style="font-size:32px;">Redis</span>
+          <span class="stat-label">Batch Cache</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s20');
+    var chart;
+    function buildChart() {
+      if (chart) { chart.destroy(); }
+      var ctx = document.getElementById('s20-blend-chart');
+      if (!ctx || !window.Chart) return;
+      chart = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: ['eBay Rating', 'BERT Sentiment'],
+          datasets: [{
+            data: [60, 40],
+            backgroundColor: ['#0d7a5f', 'rgba(13,122,95,0.45)'],
+            borderWidth: 0, hoverOffset: 4
+          }]
+        },
+        options: {
+          cutout: '68%',
+          responsive: false,
+          animation: { duration: 1000, easing: 'easeInOutQuart' },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#93939f', font: { size: 10, family: 'JetBrains Mono' }, boxWidth: 10, padding: 8 }
+            }
+          }
+        }
+      });
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) buildChart();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) buildChart();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">18 / 23</span><span class="tl"></span>
+    <span>Sentiment Processing</span>
+  </div>
+</section>
+</template>
+<template id="slide-18"><section id="s21">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Ranking · Dataset Generation</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Optimization</div>
+        <h2 class="section">LTR <em>Simulation</em></h2>
+        <p class="lead" style="max-width:560px;">L'addestramento Learning-to-Rank richiede dati costosi. Soluzione: Ecosystem Simulation con 15 Personas LLM per la generazione di dataset sintetici.</p>
+      </div>
+
+      <!-- Approach - Cohere Style -->
+      <div class="anim d2 card glass-blue" style="padding:32px;border-color:var(--co-blue);">
+        <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);margin-bottom:20px;">The Ecosystem Simulation</div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;gap:16px;font-size:15px;color:var(--co-near-black);">
+            <div style="color:var(--co-blue);font-weight:700;">01</div>
+            <span>15 agenti LLM simulano segmenti di mercato con bias specifici.</span>
+          </div>
+          <div style="display:flex;gap:16px;font-size:15px;color:var(--co-near-black);">
+            <div style="color:var(--co-blue);font-weight:700;">02</div>
+            <span>Ogni Persona valuta i risultati e genera matrici di rilevanza sintetiche.</span>
+          </div>
+          <div style="display:flex;gap:16px;font-size:15px;color:var(--co-near-black);">
+            <div style="color:var(--co-blue);font-weight:700;">03</div>
+            <span>Dataset per addestrare i pesi del reranker LTR offline.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Personas grid -->
+      <div class="anim d3" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+        <div class="card" style="padding:16px;text-align:center;background:var(--co-snow);">
+          <div style="width:24px;height:24px;margin:0 auto 8px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M5 20c0-3.31 3.13-6 7-6s7 2.69 7 6"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--co-muted);">TECH</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;background:var(--co-snow);">
+          <div style="width:24px;height:24px;margin:0 auto 8px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--co-muted);">DESIGN</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;background:var(--co-snow);">
+          <div style="width:24px;height:24px;margin:0 auto 8px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--co-muted);">BARGAIN</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;background:var(--co-snow);">
+          <div style="width:24px;height:24px;margin:0 auto 8px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--co-muted);">VINTAGE</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;background:var(--co-snow);">
+          <div style="font-size:24px;margin-bottom:8px;">+11</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--co-muted);">OTHERS</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: outcome -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <!-- Outcome: Abandoned -->
+      <div class="card" style="border-color:rgba(226,117,136,0.2);background:var(--co-snow);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Esito — Abbandonata</div>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:var(--co-muted);">
+          <div style="display:flex;gap:12px;">
+            <div style="color:red;opacity:0.5;">×</div>
+            <span>Personas convergevano su risposte simili (loss of diversity).</span>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="color:red;opacity:0.5;">×</div>
+            <span>Consumo massivo di token insostenibile per iterazione rapida.</span>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="color:red;opacity:0.5;">×</div>
+            <span>Dataset generato incompleto per un addestramento nDCG affidabile.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pivot -->
+      <div class="card" style="background:var(--co-white);display:flex;align-items:center;gap:20px;padding:24px;">
+        <div style="width:24px;height:24px;flex-shrink:0;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-4.02"/></svg></div>
+        <div style="flex:1;">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Strategic Pivot</div>
+          <p style="font-size:14px;color:var(--co-muted);">Massive LTR → <span style="color:var(--co-blue);font-weight:600;">LLM as a Judge</span> on-the-fly.</p>
+        </div>
+      </div>
+
+      <!-- Current State -->
+      <div class="card glass-blue" style="padding:24px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Stato Attuale</div>
+        <div style="font-family:var(--font-mono);font-size:13px;color:var(--co-near-black);line-height:1.6;">
+          <code style="color:var(--co-blue);">ltr_trainer.py</code> implementato.<br>
+          Reranker usa <code style="color:var(--co-blue);">SCORING_WEIGHTS</code> statici.<br>
+          Roadmap: Feedback implicito (Click-through).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s21');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.05;
+        var y = (e.clientY - rect.top - rect.height / 2) / sc * 0.05;
+        if (window.gsap) gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">19 / 23</span><span class="tl"></span>
+    <span>LTR Simulation Strategy</span>
+  </div>
+</section>
+</template>
+<template id="slide-19"><section id="s22">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Ranking · Quality Assurance</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Refined Ranking</div>
+        <h2 class="section">LLM <em>Judge</em></h2>
+        <p class="lead" style="max-width:580px;">Dal fallimento della simulazione massiva emerge un paradigma più agile: <span style="color:var(--co-blue);font-weight:600;">LLM as a Judge</span>. Filtraggio qualitativo on-the-fly sui top-results.</p>
+      </div>
+
+      <!-- Before/After Comparison - Cohere Style -->
+      <div class="anim d2 card" style="display:grid;grid-template-columns:1fr 1fr;padding:0;overflow:hidden;">
+        <div style="padding:32px;background:var(--co-snow);">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;margin-bottom:16px;">Old: Massive LTR</div>
+          <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:var(--co-muted);">
+            <div>× Pre-training costoso</div>
+            <div>× Dataset autoreferenziale</div>
+            <div>× Rigità strutturale</div>
+          </div>
+        </div>
+        <div style="padding:32px;background:var(--co-white);border-left:1px solid var(--co-gray-light);">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-blue);text-transform:uppercase;margin-bottom:16px;">New: LLM as a Judge</div>
+          <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:var(--co-near-black);">
+            <div>✓ Zero pre-training data</div>
+            <div>✓ Deep-Check post-retrieval</div>
+            <div>✓ Logica VfM umana</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arbiter grid -->
+      <div class="anim d3" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card" style="padding:20px;background:var(--co-snow);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Brand Integrity</div>
+          <p style="font-size:12px;color:var(--co-muted);">Filtra mismatch nonostante alta similarità vettoriale.</p>
+        </div>
+        <div class="card" style="padding:20px;background:var(--co-snow);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Category Lock</div>
+          <p style="font-size:12px;color:var(--co-muted);">Esclude accessori quando richiesto l'hardware.</p>
+        </div>
+        <div class="card" style="padding:20px;background:var(--co-snow);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Constraint Check</div>
+          <p style="font-size:12px;color:var(--co-muted);">Rispetta esclusioni ("no Samsung", "non usato").</p>
+        </div>
+        <div class="card" style="padding:20px;background:var(--co-snow);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Value Verdict</div>
+          <p style="font-size:12px;color:var(--co-muted);">Scoring basato su rapporto qualità-prezzo.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: judge flow -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:12px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px;">Arbitration Workflow</div>
+
+      <div class="card" style="padding:16px;background:var(--co-snow);">
+        <div style="font-size:14px;font-weight:700;color:var(--co-black);">Post-RAG Candidates</div>
+        <div style="font-size:11px;color:var(--co-muted);margin-top:4px;">Top-10 candidates from Qdrant</div>
+      </div>
+      <div class="arrow" style="margin:0 auto;">↓</div>
+      <div class="card glass-blue" style="padding:24px;border-color:var(--co-blue);text-align:center;">
+        <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">LLM Reasoning Layer</div>
+        <div style="font-size:12px;color:var(--co-blue);margin-top:4px;font-family:var(--font-mono);">Minimax 2.7 · Fast Inference</div>
+      </div>
+      <div class="arrow" style="margin:0 auto;">↓</div>
+      <div class="card" style="padding:16px;background:var(--co-snow);">
+        <div style="font-size:14px;font-weight:700;color:var(--co-black);">Re-ranked Final Output</div>
+        <div style="font-size:11px;color:var(--co-muted);margin-top:4px;">Validated against intent & constraints</div>
+      </div>
+
+      <!-- Efficiency callout -->
+      <div class="card" style="margin-top:32px;padding:32px;background:var(--co-deep-dark);color:var(--co-white);">
+        <div style="font-family:var(--font-display);font-size:24px;margin-bottom:8px;">Zero Overhead</div>
+        <p style="font-size:14px;color:rgba(255,255,255,0.6);">Processo eseguito parallelamente alla sintesi finale della risposta. Nessun lag percepito dall'utente.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s22');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.035;
+        var y = (e.clientY - rect.top - rect.height / 2) / sc * 0.035;
+        if (window.gsap) gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">20 / 23</span><span class="tl"></span>
+    <span>LLM Judge Strategy</span>
+  </div>
+</section>
+</template>
+<template id="slide-20"><section id="s23">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Evaluation · Performance Metrics</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Quality</div>
+        <h2 class="section">IR <em>Metrics</em></h2>
+        <p class="lead" style="max-width:560px;">Le metriche classiche vengono declassate da "KPI assoluto" a "telemetria interna". Il nuovo Gold Standard è l'unione tra LLM Judge e Human Feedback.</p>
+      </div>
+
+      <!-- Metrics table - Cohere Style -->
+      <div class="anim d2 card" style="padding:0;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;text-align:left;">
+          <thead>
+            <tr style="background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);">
+              <th style="padding:16px 24px;font-family:var(--font-mono);font-size:11px;color:var(--co-muted);">METRIC</th>
+              <th style="padding:16px 24px;font-family:var(--font-mono);font-size:11px;color:var(--co-muted);">STATUS</th>
+              <th style="padding:16px 24px;font-family:var(--font-mono);font-size:11px;color:var(--co-muted);">ROLE</th>
+            </tr>
+          </thead>
+          <tbody style="font-size:14px;">
+            <tr style="border-bottom:1px solid var(--co-gray-light);">
+              <td style="padding:20px 24px;"><strong>nDCG@K</strong></td>
+              <td style="padding:20px 24px;"><span class="pill">Telemetry</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Internal A/B testing only.</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--co-gray-light);">
+              <td style="padding:20px 24px;"><strong>Precision@K</strong></td>
+              <td style="padding:20px 24px;"><span class="pill">Telemetry</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Development monitoring.</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--co-gray-light);">
+              <td style="padding:20px 24px;"><strong>LLM Judge Score</strong></td>
+              <td style="padding:20px 24px;"><span class="pill blue">Production ✓</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Real-time qualitative check.</td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px;"><strong>Human Feedback</strong></td>
+              <td style="padding:20px 24px;"><span class="pill blue">Gold Standard</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Expert manual evaluation.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px;">Evaluation Paradigm Shift</div>
+
+      <!-- Narrative flow -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="padding:20px;background:var(--co-snow);border-color:rgba(226,117,136,0.2);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Past: Synthetic Ground Truth</div>
+          <p style="font-size:12px;color:var(--co-muted);line-height:1.5;">Dataset incompleto. Metriche nDCG diventano autoreferenziali e non affidabili.</p>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card glass-blue" style="padding:20px;border-color:var(--co-blue);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Present: Strategic Pivot</div>
+          <p style="font-size:12px;color:var(--co-near-black);line-height:1.5;">Metriche IR declassate a telemetria interna per monitoraggio versioning.</p>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card" style="padding:20px;background:var(--co-snow);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Future: Human-in-the-loop</div>
+          <p style="font-size:12px;color:var(--co-muted);line-height:1.5;">Valutazione qualitativa costante garantisce la precisione finale del sistema.</p>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+        <div class="stat-box" style="padding:16px;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:red;opacity:0.6;">DROP</span>
+          <span style="font-size:13px;font-weight:700;color:var(--co-black);">nDCG</span>
+        </div>
+        <div class="stat-box" style="padding:16px;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--co-blue);">TELE</span>
+          <span style="font-size:13px;font-weight:700;color:var(--co-black);">Precision</span>
+        </div>
+        <div class="stat-box" style="padding:16px;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--co-blue);">GOLD</span>
+          <span style="font-size:13px;font-weight:700;color:var(--co-black);">Human</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">21 / 23</span><span class="tl"></span>
+    <span>Evaluation Logic</span>
+  </div>
+</section>
+</template>
+<template id="slide-21"><section id="s24">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Conclusions · Future Roadmap</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Next Steps</div>
+      <h2 class="section">Boundaries & <em>Evolution</em></h2>
+      <p class="lead">Ogni sistema ha confini definiti. Identificare i limiti è il primo passo per l'evoluzione tecnologica del progetto.</p>
+    </div>
+
+    <div class="g4 anim d2" style="gap:24px;">
+      <!-- Area 1 -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:28px;">
+          <div style="width:32px;height:32px;margin-bottom:16px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Scope Expansion</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:12px;">Multi-Marketplace</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.6;margin-bottom:16px;">Estensione oltre <code style="color:var(--co-blue);">EBAY_IT</code> verso i mercati DE, FR e UK con localizzazione dei modelli NLP.</p>
+          <span class="pill">Cross-border</span>
+        </div>
+      </div>
+
+      <!-- Area 2 -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:28px;">
+          <div style="width:32px;height:32px;margin-bottom:16px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">UX Innovation</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:12px;">Whisper STT</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.6;margin-bottom:16px;">Integrazione di input vocale tramite Whisper per ricerche naturali hands-free.</p>
+          <span class="pill">Voice-first</span>
+        </div>
+      </div>
+
+      <!-- Area 3 -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:28px;">
+          <div style="width:32px;height:32px;margin-bottom:16px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Autonomy</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:12px;">Agentic Checkout</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.6;margin-bottom:16px;">Flow OAuth 2.0 per permettere all'agente di completare l'acquisto in sicurezza.</p>
+          <span class="pill">OAuth ACG</span>
+        </div>
+      </div>
+
+      <!-- Area 4 -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:28px;">
+          <div style="width:32px;height:32px;margin-bottom:16px;color:var(--co-muted);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;margin-bottom:8px;">Ranking</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:12px;">LTR Training</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.6;margin-bottom:16px;">Addestramento su dati reali (Click-through) per un ranking adattivo basato su segnali utente.</p>
+          <span class="pill">Dynamic Ranking</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s24');
+    var deck = document.getElementById('deck');
+    // Animate color bars on enter
+    function animateBars() {
+      if (!window.gsap) return;
+      section.querySelectorAll('.card > div[style*="height:4px"]').forEach(function(bar, i) {
+        gsap.fromTo(bar, { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: 'power3.out',
+          delay: 0.1 + i * 0.12, transformOrigin: 'left center' });
+      });
+    }
+    // Hover lift on each roadmap card
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mouseenter', function() {
+        if (window.gsap) gsap.to(card, { y: -6, boxShadow: '0 12px 32px rgba(13,122,95,0.14)', duration: 0.25, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        if (window.gsap) gsap.to(card, { y: 0, boxShadow: '', duration: 0.4, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) animateBars();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) animateBars();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">22 / 23</span><span class="tl"></span>
+    <span>Limiti & Roadmap</span>
+  </div>
+</section>
+</template>
+<template id="slide-22"><section id="s25" class="hero" style="background:var(--co-purple);">
+  <!-- Ambient glows for parallax -->
+  <div id="s25-glow1" style="position:absolute;top:-300px;left:-300px;width:1100px;height:1100px;
+    background:radial-gradient(circle,rgba(13,122,95,0.10) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+  <div id="s25-glow2" style="position:absolute;bottom:-400px;right:-300px;width:1000px;height:1000px;
+    background:radial-gradient(circle,rgba(13,122,95,0.06) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+
+  <div class="chrome" style="background:transparent;border-bottom-color:rgba(255,255,255,0.1);">
+    <div class="brand" style="color:#fff;">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r" style="color:rgba(255,255,255,0.4);">Conclusions</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:64px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:rgba(255,255,255,0.6);margin-bottom:24px;">Grazie per l'attenzione</div>
+      <h1 style="font-size:120px;color:#fff;margin:0;line-height:1;letter-spacing:-4px;">MCP_<em>ECOM</em></h1>
+      <p class="lead" style="color:rgba(255,255,255,0.6);margin-top:24px;font-size:24px;">Un AI Shopping Assistant production-grade su eBay</p>
+    </div>
+
+    <!-- Tech Stack - Pill Cluster -->
+    <div class="anim d2" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:1000px;">
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">FastAPI</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">PostgreSQL</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Redis</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Qdrant</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Ollama Cloud</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">eBay APIs</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">FastMCP</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Qwen3-VL 235B</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">Hybrid RAG</span>
+      <span class="pill" style="background:rgba(255,255,255,0.1);color:#fff;border:none;">BERT Sentiment</span>
+    </div>
+
+    <!-- Authors -->
+    <div class="anim d3" style="display:flex;gap:120px;margin-top:24px;">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-family:var(--font-display);font-size:24px;color:#fff;font-weight:700;">Paolo Pangallo</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);text-transform:uppercase;">MAT. 263594</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-family:var(--font-display);font-size:24px;color:#fff;font-weight:700;">Giovanni Lodari</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);text-transform:uppercase;">MAT. 263597</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s25');
+    var g1 = document.getElementById('s25-glow1');
+    var g2 = document.getElementById('s25-glow2');
+    var deck = document.getElementById('deck');
+
+    // Staggered pill entrance
+    function animatePills() {
+      if (!window.gsap) return;
+      var pills = section.querySelectorAll('.pill');
+      gsap.fromTo(pills,
+        { opacity: 0, y: 20, scale: 0.85 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'power2.out', stagger: 0.06, delay: 0.4 }
+      );
+    }
+
+    // Parallax on mousemove
+    function onMove(e) {
+      if (!section.classList.contains('active')) return;
+      var rect = deck.getBoundingClientRect();
+      var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+      var mx = ((e.clientX - rect.left) / sc / 1920 - 0.5) * 2;
+      var my = ((e.clientY - rect.top) / sc / 1080 - 0.5) * 2;
+      if (window.gsap) {
+        gsap.to(g1, { x: mx * 35, y: my * 25, duration: 1.6, ease: 'power2.out' });
+        gsap.to(g2, { x: -mx * 20, y: -my * 18, duration: 2.0, ease: 'power2.out' });
+      }
+    }
+    document.addEventListener('mousemove', onMove, { passive: true });
+
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) animatePills();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) animatePills();
+  })();
+  </script>
+
+  <div class="footer" style="background:transparent;border-top-color:rgba(255,255,255,0.1);">
+    <span class="pg" style="color:rgba(255,255,255,0.4);">23 / 23</span>
+    <span class="tl"></span>
+    <span style="color:rgba(255,255,255,0.4);">Conclusioni</span>
+  </div>
+</section>
+</template>
+
+  <script>
+const TOTAL = 23;
+let current = -1;
+const sections = [];
+
+function execScripts(parent) {
+  parent.querySelectorAll('script').forEach(old => {
+    const s = document.createElement('script');
+    Array.from(old.attributes).forEach(a => s.setAttribute(a.name, a.value));
+    s.textContent = old.textContent;
+    old.parentNode.replaceChild(s, old);
+  });
+}
+
+function loadFromTemplate(index) {
+  const tpl = document.getElementById('slide-' + index);
+  if (!tpl) return null;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = tpl.innerHTML.trim();
+  const section = tmp.querySelector('section');
+  if (!section) return null;
+  section.dataset.idx = index;
+  document.getElementById('deck').appendChild(section);
+  execScripts(section);
+  return section;
+}
+
+function scaleStage() {
+  const deck = document.getElementById('deck');
+  const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  deck.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  deck.style.margin = '0';
+}
+
+function buildDots() {
+  var c = document.getElementById('nav-dots');
+  if (!c) return;
+  for (var i = 0; i < TOTAL; i++) {
+    (function(idx) {
+      var d = document.createElement('span');
+      d.className = 'dot';
+      d.addEventListener('click', function() { showSlide(idx); });
+      c.appendChild(d);
+    })(i);
+  }
+}
+
+function updateDots(index) {
+  document.querySelectorAll('#nav-dots .dot').forEach(function(d, i) {
+    d.classList.toggle('active', i === index);
+  });
+}
+
+function updateSubtitle(sec) {
+  var el = document.getElementById('slide-subtitle');
+  if (!el || !sec) return;
+  var spans = sec.querySelectorAll('.footer span');
+  var text = '';
+  for (var i = spans.length - 1; i >= 0; i--) {
+    var t = (spans[i].textContent || '').trim();
+    if (t && !/^\d/.test(t)) { text = t; break; }
+  }
+  el.textContent = text;
+}
+
+function showSlide(index) {
+  if (index < 0 || index >= sections.length || index === current) return;
+  var outSec = sections[current];
+  var inSec  = sections[index];
+  if (!inSec) return;
+
+  var dir = index > current ? 1 : -1;
+
+  if (outSec) gsap.killTweensOf(outSec);
+  gsap.killTweensOf(inSec);
+
+  if (outSec) outSec.style.display = 'block';
+
+  inSec.style.display = 'block';
+  void inSec.offsetWidth;
+  inSec.classList.add('active');
+  gsap.set(inSec, { opacity: 0, x: dir * 50 });
+
+  if (outSec && outSec !== inSec) {
+    gsap.to(outSec, {
+      opacity: 0, x: -dir * 25, duration: 0.22, ease: 'power2.in',
+      onComplete: function() {
+        outSec.classList.remove('active');
+        outSec.style.display = '';
+        gsap.set(outSec, { clearProps: 'all' });
+      }
+    });
+  }
+
+  gsap.to(inSec, {
+    opacity: 1, x: 0, duration: 0.30, ease: 'power2.out', delay: 0.05,
+    onComplete: function() {
+      gsap.set(inSec, { clearProps: 'opacity,x' });
+      inSec.style.display = '';
+    }
+  });
+
+  current = index;
+  document.getElementById('progress-fill').style.width = ((current + 1) / TOTAL) * 100 + '%';
+  history.replaceState(null, '', '#' + (current + 1));
+  updateDots(current);
+  updateSubtitle(inSec);
+}
+
+function next() { if (current < sections.length - 1) showSlide(current + 1); }
+function prev() { if (current > 0) showSlide(current - 1); }
+
+function init() {
+  scaleStage();
+  window.addEventListener('resize', scaleStage);
+  buildDots();
+  for (let i = 0; i < TOTAL; i++) {
+    sections.push(loadFromTemplate(i));
+  }
+  const hash = parseInt(window.location.hash.replace('#', ''), 10);
+  const start = (hash >= 1 && hash <= TOTAL) ? hash - 1 : 0;
+  current = start;
+  sections[start].classList.add('active');
+  document.getElementById('progress-fill').style.width = ((start + 1) / TOTAL) * 100 + '%';
+  history.replaceState(null, '', '#' + (start + 1));
+  updateDots(start);
+  updateSubtitle(sections[start]);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft'  || e.key === 'PageUp')                    { e.preventDefault(); prev(); }
+  if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+  if (e.key === 'Home') showSlide(0);
+  if (e.key === 'End')  showSlide(sections.length - 1);
+});
+
+document.getElementById('nav-prev').addEventListener('click', prev);
+document.getElementById('nav-next').addEventListener('click', next);
+
+let touchX = 0;
+document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (dx < -50) next();
+  if (dx >  50) prev();
+}, { passive: true });
+
+init();
+  </script>
+</body>
+</html>

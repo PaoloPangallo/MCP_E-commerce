@@ -1,0 +1,11 @@
+Titolo Slide: LLM-First Parser
+
+Il Problema: I sistemi rule-based basati su regex falliscono sulla lingua naturale: "cercami qualcosa di simile a quello di prima ma rosso e sotto i 200 euro" è impossibile da catturare con pattern deterministici. Ogni eccezione richiede una nuova regola, e le regole si contraddicono a vicenda.
+
+La Soluzione: Parsing Semantico LLM-First. La pipeline delega l'intera comprensione della query a un LLM con un prompt strutturato che estrae un JSON validato e normalizzato. Le regex rimangono solo come pre-processing superficiale (pulizia caratteri, fuzzy brand matching), non come motore di parsing. Il risultato è cachato su Redis per 1 ora per evitare chiamate LLM ridondanti su query identiche.
+
+Contenuto della slide:
+• Schema JSON fisso — Il prompt forza il modello a restituire un JSON con campi predefiniti: product, brands, constraints (price/condition/aspect), preferences, exclusions, target_seller, product_type (Main / Accessory / Part)
+• Fuzzy Brand Matching — Correzione pre-LLM con rapidfuzz (token_sort_ratio ≥ 92) su un vocabolario brand: "adidaz" → "Adidas" prima ancora che l'LLM veda la query
+• Confidence Score — Score calcolato strutturalmente: +0.15 base, +0.15 brands, +0.20 constraints, +0.15 product, +0.10 LLM success; confidence LLM = 0.95 vs fallback = 0.10
+• Redis Cache — Il risultato del parsing è cachato su key query_parse:{text}:{use_llm}:{context_info} con TTL 3600s; cache hit significa zero latenza LLM per query ripetute

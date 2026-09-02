@@ -290,11 +290,11 @@ def build_verdetto(shopping_data: Dict, trends_data: Dict) -> str:
         trend = trends_data["trend_direction"]
         interest = trends_data["current_interest"]
         trend_labels = {
-            "forte crescita": f"🔥 MERCATO CALDISSIMO ({interest}/100). {base} La domanda è in forte aumento: agisci ora prima che i prezzi salgano.",
-            "in crescita":    f"📈 MERCATO CALDO ({interest}/100). {base} L'interesse è in aumento, i prezzi potrebbero salire a breve.",
-            "in calo":        f"📉 DOMANDA IN CALO. {base} L'interesse sta diminuendo: potresti trovare sconti a breve.",
-            "forte calo":     f"⬇️ DOMANDA IN FORTE CALO. {base} Il mercato si sta raffreddando rapidamente: aspetta ancora per prezzi migliori.",
-            "stabile":        f"⚖️ MERCATO STABILE. {base} L'interesse è costante ({interest}/100).",
+            "forte crescita": f"Ottima offera ({interest}/100). {base} La domanda è in forte aumento: agisci ora prima che i prezzi salgano.",
+            "in crescita":    f"Non Fartela sfuggire ({interest}/100). {base} L'interesse è in aumento, i prezzi potrebbero salire a breve.",
+            "in calo":        f" DOMANDA IN CALO. {base} L'interesse sta diminuendo: potresti trovare sconti a breve.",
+            "forte calo":     f" DOMANDA IN FORTE CALO. {base} Il mercato si sta raffreddando rapidamente: aspetta ancora per prezzi migliori.",
+            "stabile":        f" MERCATO STABILE. {base} L'interesse è costante ({interest}/100).",
         }
         verdetto = trend_labels.get(trend, f"MERCATO STABILE. {base}")
     else:

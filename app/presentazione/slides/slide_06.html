@@ -1,0 +1,72 @@
+<section id="s06">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Reasoning · LLM Evolution</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Model Strategy</div>
+      <h2 class="section">The <em>LLM</em> Roadmap</h2>
+      <p class="lead">Ricerca dell'equilibrio tra privacy/controllo locale e potenza reasoning cloud. Tre iterazioni verso il compromesso ideale.</p>
+    </div>
+
+    <!-- Horizontal Timeline - Cohere Style -->
+    <div class="anim d2" style="position:relative;">
+      <!-- Main timeline bar -->
+      <div style="position:absolute;top:20px;left:0;right:0;height:1px;background:var(--co-gray-light);z-index:0;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;position:relative;z-index:1;">
+        <!-- Phase 1 -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--co-white);border:1px solid var(--co-gray-cool);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--co-muted);">01</div>
+          <div class="card" style="border-color:var(--co-gray-cool);opacity:0.8;">
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;margin-bottom:12px;">Local Only</div>
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Llama 3.1 8B</div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;margin-bottom:20px;">Privacy totale, ma latenza elevata e reasoning limitato su hardware consumer.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;border-top:1px solid var(--co-gray-light);padding-top:16px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Latency</span><span style="color:var(--co-black);">High</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Reasoning</span><span style="color:var(--co-black);">Basic</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 2 -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--co-white);border:1px solid var(--co-gray-cool);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--co-muted);">02</div>
+          <div class="card" style="border-color:var(--co-gray-cool);opacity:0.8;">
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;margin-bottom:12px;">Cloud API</div>
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Gemini 1.5 Flash</div>
+            <p style="font-size:15px;color:var(--co-muted);line-height:1.5;margin-bottom:20px;">Reasoning superiore, ma infrastruttura rigida e costi non ottimali per l'agente.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;border-top:1px solid var(--co-gray-light);padding-top:16px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Latency</span><span style="color:var(--co-black);">Medium</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Flexibility</span><span style="color:var(--co-black);">Low</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 3 -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--co-blue);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--co-white);box-shadow:0 0 0 6px rgba(13,122,95,0.1);">03</div>
+          <div class="card glass-blue" style="border-color:var(--co-blue);background:var(--co-white);">
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);text-transform:uppercase;margin-bottom:12px;">Adopted Architecture</div>
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--co-black);margin-bottom:16px;">Ollama · Minimax 2.7</div>
+            <p style="font-size:15px;color:var(--co-near-black);line-height:1.5;margin-bottom:20px;">Reasoning classe 100B+ con latenza minima tramite streaming SSE "Zero-Lag".</p>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;border-top:1px solid rgba(13,122,95,0.1);padding-top:16px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Throughput</span><span style="color:var(--co-blue);font-weight:600;">60+ tok/s</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--co-muted);">Reasoning</span><span style="color:var(--co-blue);font-weight:600;">Expert</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">06 / 23</span><span class="tl"></span>
+    <span>LLM Evolution</span>
+  </div>
+</section>

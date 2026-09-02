@@ -1,8 +1,12 @@
+from functools import lru_cache
+
 from sentence_transformers import CrossEncoder
 
-model = CrossEncoder(
-    "cross-encoder/ms-marco-MiniLM-L-6-v2"
-)
+
+@lru_cache(maxsize=1)
+def _get_model() -> CrossEncoder:
+    """Load the model only when reranking actually needs it."""
+    return CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 
 def cross_rerank(query, items):
@@ -15,7 +19,7 @@ def cross_rerank(query, items):
         for item in items
     ]
 
-    scores = model.predict(pairs)
+    scores = _get_model().predict(pairs)
 
     for item, score in zip(items, scores):
         item["_cross_score"] = float(score)

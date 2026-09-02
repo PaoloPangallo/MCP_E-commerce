@@ -1,0 +1,11 @@
+Titolo Slide: The Trust Tool
+
+Il Problema: Il rating a stelle eBay (0-100% feedback score) è una metrica rudimentale e facile da gonfiare: un venditore con 10.000 feedback positivi accumulati anni fa potrebbe essere inaffidabile oggi. Una singola percentuale non cattura il sentiment reale, la freschezza dei commenti né la fiducia nel tempo.
+
+La Soluzione: Il MCP Tool analyze_seller esegue un'analisi multidimensionale in parallelo: recupera fino a 300 feedback XML via Trading API GetFeedback, calcola un Trust Score composito (45% ratio + 25% NLP sentiment + 20% recency decay esponenziale + 10% confidence da volume), e genera un verdetto AI in italiano (max 150 commenti campionati) con indicazione esplicita dei rischi (spedizioni lente, oggetti falsi, pessima comunicazione). Tutto cachato su Redis per 5 minuti.
+
+Contenuto della slide:
+• Trading API GetFeedback (SOAP/XML) — Feedback paginati in parallelo (asyncio.gather), fino a 500 totali, con mapping CommentType → rating numerico (Positive:5, Neutral:3, Negative:1)
+• Trust Score composito — 45% feedback ratio + 25% NLP sentiment (compute_sentiment_score) + 20% recency decay (e^(-days/365)) + 10% confidence (1 - e^(-n/50)); non una stella, ma un modello
+• Metadata parallelo — asyncio.gather su GetFeedback + GetUser (registration_date, feedback_score, country) + GetStore (store_name, logo, description): un profilo venditore completo in un'unica chiamata MCP
+• AI Verdict — LLM (Ollama Cloud) sintetizza fino a 150 commenti reali in 3-4 frasi analitiche in italiano: non un riassunto generico, ma un giudizio esplicito su rischi e pregi del venditore

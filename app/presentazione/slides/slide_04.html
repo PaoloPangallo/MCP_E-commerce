@@ -1,0 +1,149 @@
+<section id="s04">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Learning · Adaptive Intelligence</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Implicit Learning</div>
+        <h2 class="section">EMA <em>Profiling</em></h2>
+        <p class="lead" style="max-width:580px;">Media Mobile Esponenziale per l'adattamento silenzioso. Il profilo utente si evolve ad ogni interazione senza form invasivi.</p>
+      </div>
+
+      <!-- Formula hero - animated gradient border -->
+      <style>
+        @keyframes s04BorderSpin { to { --s04-angle: 360deg; } }
+        @property --s04-angle { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+        #s04-formula-wrap {
+          padding:2px; border-radius:14px;
+          background: conic-gradient(from var(--s04-angle), #0d7a5f 0%, rgba(13,122,95,0.5) 33%, #0d7a5f 66%, transparent 100%);
+          animation: s04BorderSpin 4s linear infinite;
+          transition: opacity 0.4s;
+        }
+        #s04-formula-inner { background:var(--co-snow); border-radius:12px; }
+      </style>
+      <div class="anim d2" id="s04-formula-wrap">
+      <div id="s04-formula-inner" style="padding:40px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Exponential Moving Average — α = 0.20</div>
+        <div style="font-family:var(--font-display);font-size:48px;color:var(--co-black);letter-spacing:-1px;margin-bottom:16px;">
+          new = old × <span style="color:var(--co-muted);">0.80</span> + signal × <span style="color:var(--co-blue);">0.20</span>
+        </div>
+        <p style="font-size:16px;color:var(--co-muted);line-height:1.6;">
+          I segnali recenti influenzano il budget in modo dinamico, permettendo al sistema di seguire i trend d'acquisto dell'utente senza perdere la memoria storica.
+        </p>
+      </div></div>
+
+      <!-- 4 properties -->
+      <div class="g2 anim d3">
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">EMA Budget</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Per categoria <code style="color:var(--co-blue);">auto_cat</code> e brand <code style="color:var(--co-blue);">auto_brand</code>.</p>
+        </div>
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">Condition</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Soglia attivazione: ≥3 segnali e ≥50% share per evitare noise.</p>
+        </div>
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">Brand Affinity</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Top-10 brand aggiornati ad ogni query in modo case-insensitive.</p>
+        </div>
+        <div class="card" style="padding:20px 24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">Coesistenza</div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.5;">Preferenze implicite non sovrascrivono mai gli input manuali.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: code -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:12px 20px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;">user_profiling.py — Adaptive Logic</div>
+        <pre class="code" style="border-radius:0;border:none;margin:0;"><span class="kw">def</span> <span class="fn">_update_budget</span>(user, category, signal):
+    <span class="kw">if not</span> signal: <span class="kw">return</span>
+    
+    cat_key = <span class="st">f"auto_cat:{category.lower()}"</span>
+    <span class="kw">if</span> cat_key <span class="kw">in</span> budgets:
+        old = <span class="fn">float</span>(budgets[cat_key])
+        <span class="cm"># EMA calculation α=0.20</span>
+        new_val = old * <span class="nu">0.80</span> + signal * <span class="nu">0.20</span>
+    <span class="kw">else</span>:
+        new_val = signal  <span class="cm"># Cold start</span>
+        
+    budgets[cat_key] = <span class="fn">round</span>(new_val, <span class="nu">2</span>)</pre>
+      </div>
+
+      <!-- EMA visual demo — Chart.js animated -->
+      <div class="card" style="padding:32px;">
+        <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Budget Evolution Example</div>
+        <canvas id="s04-budget-chart" width="460" height="150"></canvas>
+      </div>
+
+      <script>
+      (function() {
+        var section = document.getElementById('s04');
+        var chart;
+        function buildChart() {
+          if (chart) { chart.destroy(); }
+          var ctx = document.getElementById('s04-budget-chart');
+          if (!ctx || !window.Chart) return;
+          chart = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: ['Signal 1','Signal 2','Signal 3','Signal 4','Signal 5'],
+              datasets: [{
+                data: [350, 430, 444, 455, 464],
+                backgroundColor: [
+                  'rgba(13,122,95,0.15)', 'rgba(13,122,95,0.3)',
+                  'rgba(13,122,95,0.5)',  'rgba(13,122,95,0.7)', '#0d7a5f'
+                ],
+                borderRadius: 6, borderSkipped: false
+              }]
+            },
+            options: {
+              animation: { duration: 1200, easing: 'easeInOutQuart' },
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  grid: { display: false },
+                  ticks: { color: '#93939f', font: { family: 'JetBrains Mono', size: 11 } }
+                },
+                y: {
+                  min: 300, max: 490,
+                  grid: { color: 'rgba(217,217,221,0.4)' },
+                  ticks: {
+                    color: '#93939f', font: { family: 'JetBrains Mono', size: 11 },
+                    callback: function(v) { return '€' + v; }
+                  }
+                }
+              }
+            }
+          });
+        }
+        var mo = new MutationObserver(function() {
+          if (section.classList.contains('active')) buildChart();
+        });
+        mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+        if (section.classList.contains('active')) buildChart();
+      })();
+      </script>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">04 / 23</span><span class="tl"></span>
+    <span>Adaptive Intelligence</span>
+  </div>
+</section>

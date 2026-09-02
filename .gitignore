@@ -32,6 +32,13 @@ postgres_data/
 *.db
 *.sqlite3
 
+# Playwright & Browser Profiles
+playwright_profile/
+
+# Temporary, debug & archives
+tmp/
+*.zip
+
 # Node / Frontend
 node_modules/
 dist/
@@ -43,6 +50,9 @@ dist/
 *.index
 *.dat
 *.json
+!package*.json
+!tsconfig*.json
+!tests/**/*.json
 *.info
 
 # IDEs

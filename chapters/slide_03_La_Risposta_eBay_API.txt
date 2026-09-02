@@ -1,0 +1,12 @@
+Titolo Slide: La Risposta: eBay API
+
+Il Problema: La visione dei quattro  pilastri richiede un data layer affidabile. Lo scraping massivo si è rivelato fragile: shadow ban dopo poche decine di richieste ECC.
+
+La Soluzione: Pivot strategico verso le API ufficiali eBay (Browse API + Trading API). OAuth2 Client Credentials con token caching, filtri server-side nativi (prezzo, condizione, aspect, venditore), e normalizzazione automatica dei risultati. Lo scraping Playwright rimane come fallback opzionale per casi edge, non come colonna portante.
+
+Contenuto della slide:
+• Browse API (REST) — search, getItem, getSimilarItems, getShippingCosts con filtri server-side nativi (price, condition, aspect, seller)
+• Trading API (SOAP/XML) — Watchlist (AddToWatchList / RemoveFromWatchList / GetMyeBayBuying), messaggistica (AddMemberMessageAAQToSeller), identità utente (GetUser, GetStore, GetFeedback)
+• Sell Metadata API — Return policies, item condition policies, listing structure per categoria; risultati cachati su Redis (1 giorno per categoria, 7 giorni globale)
+• OAuth2 con Token Cache — Double-check locking + auto-retry su 401; Trading usa Auth'n'Auth token (EBAY_USER_TOKEN) separato dalle client credentials
+

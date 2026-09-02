@@ -1,0 +1,11 @@
+Titolo Slide: Limiti & Roadmap
+
+Il Problema: Ogni sistema ha confini. Conoscerli è parte del rigore scientifico.
+
+La Soluzione: Riconoscere i limiti attuali e tracciare la direzione evolutiva del progetto.
+
+Contenuto della slide:
+• Scope IT — Il sistema è ottimizzato per eBay Italia (EBAY_MARKETPLACE_ID=EBAY_IT, lingua it-IT): estensione multi-marketplace (DE, ES, FR) richiederebbe adattamento del parser, delle condition synonyms e dei modelli NLP sentiment
+• Voice Interface — Nessun ingresso vocale: l'utente interagisce solo via testo. Integrazione STT (es. Whisper) come pre-processor alla pipeline di parsing è tecnicamente diretta ma non implementata
+• Agentic Auto-buy — Il sistema analizza, confronta e raccomanda, ma non esegue acquisti autonomi. L'integrazione con eBay OAuth user flow (Authorization Code Grant) per order placement è il naturale step successivo verso un agente completamente autonomo
+• LTR Training Data — Il modulo ltr_trainer.py è implementato ma il modello non è ancora addestrato su dati reali di click/purchase: il reranker usa pesi statici (SCORING_WEIGHTS). Un dataset di feedback implicito (click-through) abiliterebbe un ranking adattivo genuino

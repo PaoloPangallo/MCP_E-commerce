@@ -1,0 +1,100 @@
+<section id="s23">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Evaluation · Performance Metrics</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Quality</div>
+        <h2 class="section">IR <em>Metrics</em></h2>
+        <p class="lead" style="max-width:560px;">Le metriche classiche vengono declassate da "KPI assoluto" a "telemetria interna". Il nuovo Gold Standard è l'unione tra LLM Judge e Human Feedback.</p>
+      </div>
+
+      <!-- Metrics table - Cohere Style -->
+      <div class="anim d2 card" style="padding:0;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;text-align:left;">
+          <thead>
+            <tr style="background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);">
+              <th style="padding:16px 24px;font-family:var(--font-mono);font-size:11px;color:var(--co-muted);">METRIC</th>
+              <th style="padding:16px 24px;font-family:var(--font-mono);font-size:11px;color:var(--co-muted);">STATUS</th>
+              <th style="padding:16px 24px;font-family:var(--font-mono);font-size:11px;color:var(--co-muted);">ROLE</th>
+            </tr>
+          </thead>
+          <tbody style="font-size:14px;">
+            <tr style="border-bottom:1px solid var(--co-gray-light);">
+              <td style="padding:20px 24px;"><strong>nDCG@K</strong></td>
+              <td style="padding:20px 24px;"><span class="pill">Telemetry</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Internal A/B testing only.</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--co-gray-light);">
+              <td style="padding:20px 24px;"><strong>Precision@K</strong></td>
+              <td style="padding:20px 24px;"><span class="pill">Telemetry</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Development monitoring.</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--co-gray-light);">
+              <td style="padding:20px 24px;"><strong>LLM Judge Score</strong></td>
+              <td style="padding:20px 24px;"><span class="pill blue">Production ✓</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Real-time qualitative check.</td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px;"><strong>Human Feedback</strong></td>
+              <td style="padding:20px 24px;"><span class="pill blue">Gold Standard</span></td>
+              <td style="padding:20px 24px;color:var(--co-muted);">Expert manual evaluation.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px;">Evaluation Paradigm Shift</div>
+
+      <!-- Narrative flow -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="padding:20px;background:var(--co-snow);border-color:rgba(226,117,136,0.2);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Past: Synthetic Ground Truth</div>
+          <p style="font-size:12px;color:var(--co-muted);line-height:1.5;">Dataset incompleto. Metriche nDCG diventano autoreferenziali e non affidabili.</p>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card glass-blue" style="padding:20px;border-color:var(--co-blue);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Present: Strategic Pivot</div>
+          <p style="font-size:12px;color:var(--co-near-black);line-height:1.5;">Metriche IR declassate a telemetria interna per monitoraggio versioning.</p>
+        </div>
+        <div class="arrow" style="margin-left:32px;">↓</div>
+        <div class="card" style="padding:20px;background:var(--co-snow);">
+          <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:8px;">Future: Human-in-the-loop</div>
+          <p style="font-size:12px;color:var(--co-muted);line-height:1.5;">Valutazione qualitativa costante garantisce la precisione finale del sistema.</p>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+        <div class="stat-box" style="padding:16px;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:red;opacity:0.6;">DROP</span>
+          <span style="font-size:13px;font-weight:700;color:var(--co-black);">nDCG</span>
+        </div>
+        <div class="stat-box" style="padding:16px;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--co-blue);">TELE</span>
+          <span style="font-size:13px;font-weight:700;color:var(--co-black);">Precision</span>
+        </div>
+        <div class="stat-box" style="padding:16px;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--co-blue);">GOLD</span>
+          <span style="font-size:13px;font-weight:700;color:var(--co-black);">Human</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">21 / 23</span><span class="tl"></span>
+    <span>Evaluation Logic</span>
+  </div>
+</section>

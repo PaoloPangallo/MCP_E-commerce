@@ -1,0 +1,16 @@
+Titolo Slide: LTR Simulation
+
+Il Problema: L'addestramento di modelli di ranking (Learning-to-Rank) richiede migliaia di query profilate da utenti reali, dati difficili e costosi da ottenere in fase di sviluppo.
+
+La Soluzione: Creazione di una "Ecosystem Simulation" multi-agente che utilizza 15 diverse Personas (LLM) per generare dataset sintetici di ranking.
+
+Contenuto da argomentare (Testo visibile a schermo):
+- Tecnica: Ecosystem Simulation
+- 15 Personas con bias specifici (Nerd, Designer, etc.)
+- Sfida: Necessità di prompt più raffinati e diversificati
+- Limite Hardware: Consumo massivo e rapido di token
+
+Note / Dettagli Tecnici:
+1. User Personas: Ogni agente simula un segmento di mercato reale (es. "Vintage Hunter").
+2. Generazione Dataset: Il simulatore produce matrici di rilevanza per addestrare i pesi dell'algoritmo.
+3. Ostacoli riscontrati: La simulazione ha evidenziato la necessità di una potenza di calcolo superiore e di una gestione dei token più oculata, portando alla ricerca di soluzioni più snelle.

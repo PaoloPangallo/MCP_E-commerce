@@ -11,7 +11,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 
 from app.agent.ebay_agent import EbayReactAgent

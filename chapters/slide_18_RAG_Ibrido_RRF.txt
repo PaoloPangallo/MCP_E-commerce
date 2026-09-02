@@ -1,0 +1,11 @@
+Titolo Slide: RAG Ibrido & RRF
+
+Il Problema: La sola ricerca vettoriale (Dense) è sensibile alla terminologia: "iPhone 15 Pro Max 256GB" e "Apple smartphone storage 256" sono semanticamente simili ma lessicalmente distanti. La sola ricerca BM25 (Sparse) fallisce su query brevi o concettuali. Usarne una sola significa sacrificare metà del recall.
+
+La Soluzione: Hybrid RAG con Reciprocal Rank Fusion nativa su Qdrant. Ogni documento viene indicizzato con due vettori simultaneamente: dense (384-dim, SentenceTransformer all-MiniLM, cosine similarity, LRU cache 10.000 voci) e sparse (fastembed BM25 Okapi con IDF modifier). Al momento della query, Qdrant esegue due Prefetch in parallelo (k×2 candidati ciascuno) e li fonde con Fusion.RRF: RRF(d) = Σ 1/(rank_i(d) + 60). L'RRF è ottimale perché non richiede normalizzazione dei punteggi tra spazi metrici diversi e premia i documenti ben classificati in entrambe le liste.
+
+Contenuto della slide:
+• Dense Retrieval — SentenceTransformer (all-MiniLM-L6-v2, 384 dim), embed() con @lru_cache(maxsize=10000) per query ripetute, embed_batch() per titoli in bulk nel reranker; cosine distance su Qdrant named vector "dense"
+• Sparse Retrieval — fastembed SparseTextEmbedding (modello Qdrant/bm25), indici e valori sparsi (SparseVector) su named vector "sparse" con IDF modifier per penalizzare termini troppo frequenti
+• Prefetch + RRF Nativo — client.query_points() con prefetch=[Prefetch(dense, k×2), Prefetch(sparse, k×2)] e query=FusionQuery(Fusion.RRF): la fusione avviene dentro Qdrant, zero latenza extra sul Python layer
+• Filtro per Tipo — Ogni documento ha un payload field "type" (KEYWORD index): il retriever accetta doc_type="product" o "seller_feedback" per separare nettamente i due knowledge base durante il reranking

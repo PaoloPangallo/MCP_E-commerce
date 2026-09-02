@@ -52,7 +52,7 @@ type ChatStore = {
   appendAssistantMessage: (content: string) => void
   appendSearchBlock: (search: SearchBlock) => void
   setCachedSearch: (key: string, value: SearchBlock) => void
-  saveAgentResponse: (query: string, payload: FinalPayload, extractedTitle?: string) => void
+  saveAgentResponse: (query: string, payload: FinalPayload, extractedTitle?: string, cacheable?: boolean) => void
 }
 
 const createNewSession = (title: string = "Nuova chat"): ChatSession => ({
@@ -194,7 +194,7 @@ export const useChatStore = create<ChatStore>()(
           cache: { ...state.cache, [key]: value }
         })),
 
-    saveAgentResponse: (query: string, payload: FinalPayload, extractedTitle?: string) => set((state) => {
+    saveAgentResponse: (query: string, payload: FinalPayload, extractedTitle?: string, cacheable: boolean = true) => set((state) => {
         const sid = state.activeSessionId || (state.sessions[0]?.id)
         if (!sid) return state
 
@@ -216,7 +216,9 @@ export const useChatStore = create<ChatStore>()(
           !!payload.plannedTasks?.length ||
           (!!payload.toolStates && Object.keys(payload.toolStates).length > 0)
 
-        const nextCache = { ...state.cache, [cacheKey]: newSearch }
+        // I turni con immagine non sono cacheabili: la chiave è puramente testuale
+        // e non può rappresentare i byte della foto.
+        const nextCache = cacheable ? { ...state.cache, [cacheKey]: newSearch } : state.cache
 
         return {
           cache: nextCache,
@@ -225,11 +227,11 @@ export const useChatStore = create<ChatStore>()(
             if (s.id !== sid) return s
 
             const nextChat = [...s.chat]
-            
-            // Safety check against processing the same payload multiple times
-            if (nextChat.some(entry => entry.type === "search" && entry.search?.query === query && entry.search?.analysis === payload.analysis)) {
-              return s
-            }
+
+            // NB: la deduplica avviene a monte in useChatSession, confrontando
+            // l'identità dell'oggetto finalPayload. Confrontarla qui su
+            // (query, analysis) scartava i turni legittimi con immagine, che
+            // condividono sempre query "Analisi immagine" e analysis null.
 
             const hasSearchBefore = nextChat.some(entry => entry.type === "search")
 

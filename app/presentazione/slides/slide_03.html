@@ -1,0 +1,146 @@
+<section id="s03">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Data Layer · eBay Integration</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:56px;align-items:center;">
+    <!-- Left: title + table -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Official Infrastructure</div>
+        <h2 class="section">The <em>eBay</em> API</h2>
+        <p class="lead" style="max-width:640px;">Pivot strategico dallo scraping fragile Playwright alle API ufficiali eBay. Accesso a metadati strutturati e rate limits garantiti.</p>
+      </div>
+
+      <div class="anim d2">
+        <table class="dt">
+          <thead>
+            <tr>
+              <th>API MODULE</th>
+              <th>PROTOCOL</th>
+              <th>CORE CAPABILITIES</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong style="color:var(--co-black);">Browse API</strong></td>
+              <td><span class="pill blue">REST</span></td>
+              <td>Search, Item, Similar — filtri nativi su price, condition, seller</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--co-black);">Trading API</strong></td>
+              <td><span class="pill">SOAP/XML</span></td>
+              <td>Watchlist, messaggistica, identità utente e store details</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--co-black);">Sell Metadata</strong></td>
+              <td><span class="pill">REST</span></td>
+              <td>Return policies, listing structure — cache Redis integrata</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--co-black);">OAuth2 Cache</strong></td>
+              <td><span class="pill blue">AUTH</span></td>
+              <td>Double-check locking + auto-retry su collisioni di token</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Evolution note - Cohere Subtle Boxes -->
+      <div class="anim d3" style="display:flex;gap:24px;align-items:stretch;">
+        <div class="card" style="flex:1;padding:24px;border-color:var(--co-gray-cool);">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Before: Scraping</div>
+          <p style="font-size:15px;color:var(--co-near-black);line-height:1.5;">
+            Selettori CSS instabili, shadow ban e nessun accesso ai metadati strutturati del venditore.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;color:var(--co-gray-cool);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        <div class="card glass-blue" style="flex:1;padding:24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);
+            text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Now: Official API</div>
+          <p style="font-size:15px;color:var(--co-near-black);line-height:1.5;">
+            Rate limits documentati, Aspect Distributions e dati granulari. Playwright come fallback.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: code -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:24px;" class="anim d3">
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--co-gray-cool);">
+        <div style="padding:12px 20px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;">ebay.py — Browse API</div>
+        <pre class="code" style="border-radius:0;border:none;margin:0;"><span class="kw">async def</span> <span class="fn">search_items</span>(parsed_query, limit=<span class="nu">20</span>):
+    query   = <span class="fn">_build_query</span>(parsed_query)
+    <span class="cm"># OAuth2 cached — double-check locking</span>
+    token   = <span class="kw">await</span> <span class="fn">_get_oauth_token</span>()
+    filters = <span class="fn">_build_filter_string</span>(constraints)
+
+    data = <span class="kw">await</span> <span class="fn">_perform_search_request</span>(
+        client, token, query,
+        filter_string=filters,
+        limit=page_size
+    )
+    items = [<span class="fn">_normalize_item</span>(i)
+             <span class="kw">for</span> i <span class="kw">in</span> data[<span class="st">"itemSummaries"</span>]]
+    <span class="kw">return</span> {
+        <span class="st">"items"</span>: items,
+        <span class="st">"aspects"</span>: aspects
+    }</pre>
+      </div>
+
+      <!-- Auth flow mini diagram -->
+      <div class="card" id="s03-flow" style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;">
+        <div class="node" id="s03-n1">Client</div>
+        <div class="arrow" id="s03-a1" style="opacity:0;">→</div>
+        <div class="node" id="s03-n2" style="border-color:var(--co-blue);color:var(--co-blue);opacity:0;">OAuth2</div>
+        <div class="arrow" id="s03-a2" style="opacity:0;">→</div>
+        <div class="node" id="s03-n3" style="opacity:0;">Cache</div>
+        <div class="arrow" id="s03-a3" style="opacity:0;">→</div>
+        <div class="node" id="s03-n4" style="opacity:0;">eBay API</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s03');
+    var els = ['s03-n1','s03-a1','s03-n2','s03-a2','s03-n3','s03-a3','s03-n4'];
+    function animate() {
+      if (!window.gsap) return;
+      els.forEach(function(id, i) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        gsap.to(el, { opacity: 1, duration: 0.25, delay: 0.2 + i * 0.15, ease: 'power2.out' });
+      });
+      // Pulse the OAuth2 node after appearing
+      var oauth = document.getElementById('s03-n2');
+      if (oauth) {
+        gsap.to(oauth, { boxShadow: '0 0 0 6px rgba(24,99,220,0)', duration: 0.6, delay: 0.7,
+          repeat: 2, yoyo: false, ease: 'power2.out' });
+      }
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) {
+        els.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el && id !== 's03-n1') el.style.opacity = '0';
+        });
+        animate();
+      }
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) animate();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">03 / 23</span><span class="tl"></span>
+    <span>Official Infrastructure</span>
+  </div>
+</section>

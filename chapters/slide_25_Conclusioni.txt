@@ -1,0 +1,14 @@
+Titolo Slide: Conclusioni
+
+Il Problema: -
+
+La Soluzione: -
+
+Contenuto della slide:
+• MCP_ECOM — Un AI Shopping Assistant production-grade su eBay: RAG Ibrido, Trust Score, Global Memory, Profilazione Implicita
+• Paolo Pangallo — Matricola 263594
+• Giovanni Lodari — Matricola 263597
+• Grazie per l'attenzione.
+
+
+

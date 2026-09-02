@@ -1,0 +1,94 @@
+<section id="s10">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Memory · Session Context</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.2;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Persistence Architecture</div>
+        <h2 class="section">Stateful <em>Anaphora</em></h2>
+        <p class="lead" style="max-width:580px;">Un assistente senza memoria è limitato. Il Contextual Tracking via Redis risolve pronomi e riferimenti cross-sessione.</p>
+      </div>
+
+      <!-- Before/After dialog - Cohere Clean Style -->
+      <div class="anim d2 card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 24px;background:var(--co-snow);border-bottom:1px solid var(--co-gray-light);
+          font-family:var(--font-mono);font-size:12px;color:var(--co-muted);text-transform:uppercase;">Multi-turn Conversation</div>
+
+        <div style="padding:24px;display:flex;flex-direction:column;gap:24px;">
+          <!-- Turn 1 -->
+          <div>
+            <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">USER</div>
+            <div style="font-size:16px;color:var(--co-black);font-weight:500;">"Cercami un iPhone 15 Pro sotto i 1000€"</div>
+          </div>
+          <div style="padding:12px 16px;background:var(--co-snow);border-radius:12px;border:1px solid var(--co-gray-cool);">
+            <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);margin-bottom:4px;">SYSTEM → Redis Push (TTL 24h)</div>
+            <div style="font-size:14px;color:var(--co-muted);">Query stored in session state.</div>
+          </div>
+
+          <!-- Turn 2 -->
+          <div>
+            <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);margin-bottom:8px;">USER</div>
+            <div style="font-size:16px;color:var(--co-black);font-weight:500;">"<span style="color:var(--co-blue);">Cercalo</span> rosso e con 256GB"</div>
+          </div>
+          <div style="padding:20px;background:var(--co-deep-dark);border-radius:12px;color:#e5e7eb;">
+            <div style="font-size:12px;font-family:var(--font-mono);color:rgba(255,255,255,0.4);margin-bottom:12px;">LLM → RESOLVED CONTEXT</div>
+            <div style="font-family:var(--font-mono);font-size:14px;line-height:1.6;">
+              product: <span style="color:#4ade80;">"iPhone 15 Pro"</span><br>
+              constraints: { "color": "red", "storage": "256GB", "price_max": 1000 }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: architecture -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:4px;">Stateful Pipeline</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="text-align:center;padding:16px;">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Redis State Store</div>
+          <div style="font-size:12px;color:var(--co-muted);font-family:var(--font-mono);margin-top:4px;">session_id | user_id</div>
+        </div>
+        <div class="arrow" style="margin:0 auto;">↓</div>
+        <div class="card glass-blue" style="text-align:center;padding:16px;border-color:var(--co-blue);">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Context Injection</div>
+          <div style="font-size:12px;color:var(--co-muted);margin-top:4px;">Recent history → LLM Prompt</div>
+        </div>
+        <div class="arrow" style="margin:0 auto;">↓</div>
+        <div class="card" style="text-align:center;padding:16px;">
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Pronoun Resolution</div>
+          <div style="font-size:12px;color:var(--co-muted);margin-top:4px;">Anaphora mapping</div>
+        </div>
+      </div>
+
+      <!-- Scope differentiation -->
+      <div class="card" style="padding:24px;background:var(--co-snow);">
+        <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);margin-bottom:16px;">Dual Scope Tracking</div>
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;padding:12px;background:var(--co-white);border-radius:12px;border:1px solid var(--co-gray-cool);">
+            <div style="font-size:13px;font-weight:600;color:var(--co-black);margin-bottom:4px;">Session</div>
+            <div style="font-size:12px;color:var(--co-muted);">Anonymous tracking</div>
+          </div>
+          <div style="flex:1;padding:12px;background:var(--co-white);border-radius:12px;border:1px solid var(--co-gray-cool);">
+            <div style="font-size:13px;font-weight:600;color:var(--co-blue);margin-bottom:4px;">User</div>
+            <div style="font-size:12px;color:var(--co-muted);">Persistent history</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">10 / 23</span><span class="tl"></span>
+    <span>Stateful Anaphora</span>
+  </div>
+</section>

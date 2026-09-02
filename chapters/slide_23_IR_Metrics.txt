@@ -1,0 +1,16 @@
+Titolo Slide: IR Metrics
+
+Il Problema: L'obiettivo iniziale era validare il ranking tramite metriche IR standard (nDCG, Precision@K), ma questo richiedeva un dataset massiccio (realizzato tramite Ecosystem Simulation) che si è rivelato insostenibile per costi e risorse.
+
+La Soluzione: Transizione dal monitoraggio statistico automatizzato alla validazione qualitativa tramite "LLM as a Judge" e Human Feedback (Gold Standard).
+
+Contenuto da argomentare (Testo visibile a schermo):
+- Fallimento Ecosystem Simulation = Mancanza di Ground Truth
+- nDCG e Precision: Declassati da "verdetto" a "telemetria"
+- Human Feedback: Il nuovo Gold Standard qualitativo
+- Ottimizzazione basata sull'esperienza utente reale
+
+Note / Metriche Utilizzate:
+1. Esperimento Iniziale: Abbiamo tentato di usare l'Ecosystem Simulation per generare le etichette di rilevanza necessarie al calcolo di nDCG e Precision@K.
+2. Cambio di Rotta: A causa dei limiti hardware e dei token, il dataset generato era incompleto, rendendo le metriche IR autoreferenziali e poco affidabili.
+3. Stato Attuale: Il successo del sistema viene oggi misurato tramite Human Feedback (valutazione manuale degli esperti) e il Deep-Check dell'LLM as a Judge, garantendo una precisione che i numeri puri non potevano offrire.

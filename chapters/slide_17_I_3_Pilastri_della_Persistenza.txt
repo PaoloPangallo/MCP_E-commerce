@@ -1,0 +1,10 @@
+Titolo Slide: I 3 Pilastri della Persistenza
+
+Il Problema: Un sistema AI non vive solo di inferenza. Ha bisogno di ricordare, recuperare velocemente e cercare per similarità — tre esigenze radicalmente diverse che nessun singolo database può soddisfare in modo ottimale.
+
+La Soluzione: Stack poliglotta a tre livelli, ognuno scelto per la natura del dato che gestisce. Ogni componente fa una cosa sola, ma la fa perfettamente. Insieme formano la memoria del sistema: strutturata, veloce e semantica.
+
+Contenuto della slide:
+• PostgreSQL — Il registro permanente. Salva le inserzioni recuperate da eBay, gli utenti e la loro cronologia. Garantisce integrità dei dati (ACID) e permette query relazionali. È la fonte di verità a lungo termine.
+• Redis — La memoria di lavoro. Tieni in cache i risultati delle query parsate, le sessioni utente, i trust score dei venditori. Risponde in microsecondi. È il motivo per cui il sistema non chiama l'LLM due volte per la stessa query.
+• Qdrant — Il cervello semantico. Indicizza prodotti e feedback come vettori. Permette di trovare "cuffie gaming simili a queste" anche se nessun titolo contiene esattamente quelle parole. È il cuore del RAG ibrido.

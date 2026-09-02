@@ -62,7 +62,10 @@ class ToolExecutor:
         
         # In modalità Playwright l'ambiente è stateful, le azioni non devono essere mai cachate
         # altrimenti se l'LLM ripete un'azione (es. browser_type) ottiene il finto "ok" senza interagire col browser
-        can_cache = self.mcp_mode != "playwright_browser"
+        can_cache = (
+            self.mcp_mode != "playwright_browser"
+            and tool_call.tool not in self._NEVER_CACHE_TOOLS
+        )
         
         if can_cache:
             cached = self._get_cached_result(cache_key)
@@ -156,6 +159,11 @@ class ToolExecutor:
         redis_client.set_json(cache_key, result, ttl_seconds=int(cls._CACHE_TTL))
 
     _CACHE_EXCLUDE_KEYS: frozenset = frozenset({"session_id", "conversation_history", "context_info"})
+
+    # Tool la cui risposta dipende da input esclusi dalla chiave di cache
+    # (conversation_history, context_info): cacharli significa restituire la
+    # risposta di un turno precedente a fronte della stessa query testuale.
+    _NEVER_CACHE_TOOLS: frozenset = frozenset({"conversation"})
 
     @classmethod
     def _make_cache_key(cls, tool_name: str, action_input: Dict[str, Any], mcp_mode: str = "standard") -> str:

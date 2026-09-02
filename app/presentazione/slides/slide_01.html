@@ -1,0 +1,98 @@
+<section id="s01" class="hero-dark" style="background:var(--co-purple); overflow:hidden;">
+  <!-- Ambient glows - Forest green theme -->
+  <div id="s01-glow1" style="position:absolute;top:-200px;left:-200px;width:1000px;height:1000px;
+    background:radial-gradient(circle,rgba(13,122,95,0.12) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+  <div id="s01-glow2" style="position:absolute;bottom:-300px;right:-200px;width:900px;height:900px;
+    background:radial-gradient(circle,rgba(13,122,95,0.06) 0%,transparent 70%);
+    pointer-events:none;will-change:transform;"></div>
+
+  <!-- Glassmorphism overlay strip -->
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:900px;height:560px;border-radius:32px;
+    background:rgba(255,255,255,0.04);
+    backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+    border:1px solid rgba(255,255,255,0.08);
+    pointer-events:none;z-index:0;"></div>
+
+  <!-- Chrome - Transparent on dark -->
+  <div class="chrome" style="background:transparent;border-bottom-color:rgba(255,255,255,0.08);">
+    <div class="brand" style="color:#fff;">
+      <span class="logo" style="background:#fff;color:var(--co-purple);">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z" />
+        </svg>
+      </span>
+      <b style="letter-spacing:-0.02em;">MCP_ECOM</b>
+    </div>
+    <div class="r" style="color:rgba(255,255,255,0.4);"> Progetto di IR-NLP · 2026</div>
+  </div>
+
+  <!-- Hero content -->
+  <div class="main" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:48px;">
+
+    <!-- Mono Label -->
+    <div class="anim d1">
+      <span class="eyebrow" style="color:rgba(255,255,255,0.5);margin:0;">AI INFRASTRUCTURE FOR E-COMMERCE</span>
+    </div>
+
+    <!-- Main title -->
+    <div class="anim d2" style="text-align:center;">
+      <h1 style="font-family:var(--font-display);font-size:160px;font-weight:400;color:#ffffff;line-height:0.9;
+        letter-spacing:-4px;margin-bottom:24px;">
+        MCP_<em style="color:rgba(255,255,255,0.5);">ECOM</em>
+      </h1>
+      <p style="font-size:28px;color:rgba(255,255,255,0.4);font-weight:400;letter-spacing:0.02em;">
+        Advanced RAG · Trust Verification · Semantic Memory
+      </p>
+    </div>
+
+    <!-- Divider -->
+    <div class="anim d3" style="width:80px;height:1px;background:rgba(255,255,255,0.2);"></div>
+
+    <!-- Author -->
+    <div class="anim d4" style="text-align:center;">
+      <p style="font-family:var(--font-display);font-size:32px;color:#ffffff;font-weight:400;">Paolo Pangallo</p>
+      <p style="font-family:var(--font-mono);font-size:14px;
+        color:rgba(255,255,255,0.3);margin-top:12px;letter-spacing:0.2em;text-transform:uppercase;">
+        MATRICOLA 263594 · A.A. 2025/2026
+      </p> </br>
+
+      <p style="font-family:var(--font-display);font-size:32px;color:#ffffff;font-weight:400;">Giovanni Lodari</p>
+      <p style="font-family:var(--font-mono);font-size:14px;
+        color:rgba(255,255,255,0.3);margin-top:12px;letter-spacing:0.2em;text-transform:uppercase;">
+        MATRICOLA 263597 · A.A. 2025/2026
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer" style="background:transparent;border-top-color:rgba(255,255,255,0.08);">
+    <span class="pg" style="color:rgba(255,255,255,0.3);">01 / 23</span>
+    <span class="tl"></span>
+    <span style="color:rgba(255,255,255,0.3);">Project Overview</span>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s01');
+    var g1 = document.getElementById('s01-glow1');
+    var g2 = document.getElementById('s01-glow2');
+    var deck = document.getElementById('deck');
+    function onMove(e) {
+      if (!section.classList.contains('active')) return;
+      var rect = deck.getBoundingClientRect();
+      var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]) || 1;
+      var cx = (e.clientX - rect.left) / sc;
+      var cy = (e.clientY - rect.top) / sc;
+      var mx = (cx / 1920 - 0.5) * 2;
+      var my = (cy / 1080 - 0.5) * 2;
+      if (window.gsap) {
+        gsap.to(g1, { x: mx * 40, y: my * 30, duration: 1.4, ease: 'power2.out' });
+        gsap.to(g2, { x: -mx * 25, y: -my * 20, duration: 1.8, ease: 'power2.out' });
+      }
+    }
+    document.addEventListener('mousemove', onMove, { passive: true });
+  })();
+  </script>
+</section>

@@ -1,0 +1,17 @@
+Titolo Slide: Protocollo MCP
+
+Il Problema: Ricerca di un'architettura che bilanci flessibilità, velocità di esecuzione e scalabilità dei tool senza cadere nel monolitico.
+
+La Soluzione: Transizione dal coordinamento basato su file (Pattern Antigravity/LangGraph) allo standard FastMCP per il disaccoppiamento totale.
+
+Contenuto della slide :
+- Fallimento approccio Planner/Worker (basato su report .md)
+- Limiti delle architetture a Grafo (LangChain/LangGraph)
+- Svolta con Standard MCP: Tool come risorse universali
+- Scalabilità illimitata e sincronizzazione prompt real-time
+
+Note / Evoluzione Approcci:
+1. Inizialmente: Gestione Planner/Worker a mo' di "Antigravity" (scambio di report in file .md). Troppo lento e complesso da coordinare.
+2. Successivamente: Integrazione LangChain/LangGraph per potenziare il flusso. Migliore, ma ancora troppo rigido.
+3. Risultato Finale: Il protocollo MCP ha superato i limiti del grafo, offrendo un disaccoppiamento totale e una semplicità di integrazione superiore.
+

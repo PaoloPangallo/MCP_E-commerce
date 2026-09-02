@@ -1,0 +1,87 @@
+<section id="s14">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Vision · describe_image</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Multimodal Processing</div>
+        <h2 class="section">The <em>Vision</em> Tool</h2>
+        <p class="lead">Descrivere un prodotto a parole è spesso limitante. L'utente carica una foto — il sistema estrae i descrittori per la ricerca eBay.</p>
+      </div>
+
+      <!-- Image placeholder - Cohere Style -->
+      <div class="anim d2 card" style="width:100%;aspect-ratio:16/10;background:var(--co-snow);
+        border:2px dashed var(--co-gray-cool);display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:16px;color:var(--co-muted);">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="m21 15-5-5L5 21"/>
+        </svg>
+        <div style="font-family:var(--font-mono);font-size:12px;letter-spacing:0.15em;text-align:center;">
+          [IMAGE INPUT STREAM]<br>
+          <span style="font-size:10px;opacity:0.6;">base64 encoded · data:image/png</span>
+        </div>
+      </div>
+
+      <!-- Model info -->
+      <div class="anim d3 card glass-blue" style="display:flex;gap:20px;align-items:center;padding:24px;">
+        <div class="stat-num" style="font-size:32px;">235B</div>
+        <div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Qwen3-VL Infrastructure</div>
+          <div style="font-size:14px;color:var(--co-muted);">Ollama Cloud · Unified AsyncClient · Image-to-Tokens</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: output + pipeline -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <!-- JSON output - Cohere Dark -->
+      <div class="card" style="background:var(--co-deep-dark);border:none;padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:rgba(255,255,255,0.4);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Multimodal Reasoning Output</div>
+        <div style="font-family:var(--font-mono);font-size:14px;line-height:1.8;color:#e5e7eb;">
+          {<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"description"</span>: <span style="color:#4ade80;">"Minimalist white leather sneaker"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"tags"</span>: [<span style="color:#4ade80;">"luxury"</span>, <span style="color:#4ade80;">"clean"</span>, <span style="color:#4ade80;">"minimal"</span>],<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"brand_guess"</span>: <span style="color:#4ade80;">"Common Projects"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#c084fc;">"confidence"</span>: <span style="color:#fbbf24;">0.87</span><br>
+          }
+        </div>
+      </div>
+
+      <!-- Pipeline Integration - Vertical Steps -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="padding:16px 20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="font-size:20px;">1</div>
+          <div style="font-size:14px;font-weight:600;color:var(--co-black);">Image Upload & Normalization</div>
+        </div>
+        <div class="card" style="padding:16px 20px;background:var(--co-snow);display:flex;align-items:center;gap:16px;">
+          <div style="font-size:20px;">2</div>
+          <div style="font-size:14px;font-weight:600;color:var(--co-black);">Qwen3-VL Vision Inference</div>
+        </div>
+        <div class="card glass-blue" style="padding:16px 20px;display:flex;align-items:center;gap:16px;border-color:var(--co-blue);">
+          <div style="font-size:20px;">3</div>
+          <div style="font-size:14px;font-weight:600;color:var(--co-black);">Search Pipeline Injection</div>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div style="font-size:13px;color:var(--co-muted);line-height:1.6;border-top:1px solid var(--co-gray-light);padding-top:20px;">
+        Supporta formati multi-standard (PNG, JPEG, WEBP) con pulizia automatica dell'header Base64 prima dell'elaborazione.
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">14 / 23</span><span class="tl"></span>
+    <span>Multimodal Intelligence</span>
+  </div>
+</section>

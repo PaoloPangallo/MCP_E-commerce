@@ -1,0 +1,11 @@
+Titolo Slide: Vision Tool
+
+Il Problema: Descrivere un prodotto a parole è spesso impossibile per l'utente: "ho solo questa foto di scarpe, non so il modello". Nessun sistema basato su testo può gestire query visive, e richiedere all'utente di trovare parole precise è una UX fallimentare.
+
+La Soluzione: Il Vision Tool integra Qwen3-VL (235B parameters, Ollama Cloud) per analisi multimodale. L'immagine arriva in base64, viene decodificata e inviata al modello vision tramite lo stesso Ollama AsyncClient usato per il testo ma con il parametro images=[bytes]. Il modello restituisce un JSON strutturato con description, tags, brand, condition_clues e confidence. Questi dati vengono usati come query per la pipeline di ricerca eBay normale, traducendo l'intento visivo in ricerca semantica.
+
+Contenuto della slide:
+• Qwen3-VL 235B (Ollama Cloud) — Stesso AsyncClient del LLM testuale, attivazione multimodale tramite images=[bytes]; il modello analizza l'immagine e produce un JSON strutturato con descrizione estensiva, brand, tag e clues sulla condizione
+• Input flessibile — Accetta immagine base64 con o senza header (data:image/png;base64,...); il campo viene pulito automaticamente prima del decode
+• Output strutturato — JSON fisso: description (IT), tags [], brand, condition_clues, confidence [0-1]; fallback automatico a stringa plain se il JSON non è parsabile
+• Pipeline Integration — Il risultato vision (description + tags) diventa la query testuale per run_search_pipeline: l'utente carica una foto e riceve listing eBay pertinenti come se avesse scritto la query perfetta

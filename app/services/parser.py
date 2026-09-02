@@ -444,7 +444,6 @@ Query: {json.dumps(query, ensure_ascii=False)}
     return parsed, used_provider
 
 
-# merge_results non serve più in quanto usiamo solo LLM
 
 
 def compute_confidence(final_result: Dict[str, Any], llm_result: Optional[Dict[str, Any]]) -> float:

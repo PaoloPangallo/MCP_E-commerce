@@ -1,0 +1,186 @@
+% =============================================================
+% Capitolo: User Profiling — Memoria a Lungo Termine dell'Agente
+% Progetto: MCP_ECOM — Agente e-commerce basato su MCP
+% =============================================================
+
+\chapter{User Profiling e Memoria a Lungo Termine}
+\label{chap:user-profiling}
+
+% ─────────────────────────────────────────────────────────────
+\section{Visione d'Insieme}
+\label{sec:profiling-intro}
+% ─────────────────────────────────────────────────────────────
+
+Il sistema di \textbf{User Profiling} rappresenta la memoria a lungo termine (LTM) dell'agente. Invece di trattare ogni sessione come un evento isolato, l'agente apprende passivamente dalle interazioni dell'utente (ricerche, click, analisi) per costruire un profilo persistente. 
+
+Questo profilo viene utilizzato per:
+\begin{itemize}
+    \item Raffinare il \textbf{Reranking} dei prodotti (\S\ref{sec:reranking}), dando priorità ai brand e alle condizioni preferite.
+    \item Personalizzare il \textbf{Budgeting}, suggerendo prodotti in linea con la fascia di prezzo storica dell'utente per quella specifica categoria.
+    \item Adattare lo \textbf{stile comunicativo} in base alla profondità di interazione rilevata.
+\end{itemize}
+
+Il servizio agisce in modo trasparente e non distruttivo: le preferenze esplicite impostate dall'utente (via MCP tool) coesistono con quelle apprese automaticamente, avendo sempre la priorità.
+
+% ─────────────────────────────────────────────────────────────
+\section{Architettura e Segnali di Apprendimento}
+\label{sec:profiling-signals}
+% ─────────────────────────────────────────────────────────────
+
+Il modulo \texttt{user\_profiling.py} estrae segnali semantici dall'output del parser (\S\ref{sec:query-parsing}) e dai risultati della ricerca live. I segnali principali sono:
+
+\begin{enumerate}
+    \item \textbf{Price Signal}: Estrazione dei vincoli di prezzo per identificare la disponibilità di spesa.
+    \item \textbf{Condition Signal}: Rilevamento della preferenza tra Nuovo, Usato o Ricondizionato.
+    \item \textbf{Category Affinity}: Tracciamento delle categorie merceologiche più visitate.
+    \item \textbf{Interaction Depth}: Monitoraggio del livello di "engagement" dell'utente.
+\end{enumerate}
+
+\subsection{Exponential Moving Average (EMA) per i Budget}
+\label{subsec:profiling-ema}
+
+Per evitare che una singola ricerca outlier (es. un utente che solitamente cerca smartphone economici ma curiosa su un iPhone 15 Pro) stravolga il profilo, il sistema utilizza una \textbf{Media Mobile Esponenziale (EMA)} per l'aggiornamento dei budget contestuali:
+
+\begin{equation}
+    Budget_{new} = Budget_{old} \times 0.80 + Signal \times 0.20
+\end{equation}
+
+Questo garantisce che il profilo sia resiliente ai "rumori" di breve termine ma sensibile ai cambiamenti di abitudine consolidati.
+
+% ─────────────────────────────────────────────────────────────
+\section{Modellizzazione delle Preferenze}
+\label{sec:profiling-models}
+% ─────────────────────────────────────────────────────────────
+
+Le preferenze dell'utente sono salvate nel database in formati serializzati (JSON o Counter-Strings) per permettere una rappresentazione ricca e flessibile.
+
+\subsection{Preferenze di Brand e Condizione}
+\label{subsec:profiling-brands}
+
+I brand non sono memorizzati come una semplice lista, ma come un dizionario con conteggio di "hit". Solo i brand con un'affinità rilevante vengono iniettati nel contesto del prompt per evitare allucinazioni o inquinamento della UI.
+
+\begin{verbatim}
+# Esempio di serializzazione nel DB
+favorite_brands: "Apple:12,Samsung:4,Sony:1"
+condition_preference: "new:8,refurbished:2"
+\end{verbatim}
+
+Il sistema di \textbf{maggioranza qualificata} richiede almeno 3 segnali passati e una soglia del 50\% di occorrenze prima di considerare una condizione (es. "Nuovo") come "Dominante" per il filtraggio automatico.
+
+\subsection{Budget Contestuali (Contextual Budgets)}
+\label{subsec:profiling-context-budget}
+
+Una delle funzionalità più avanzate è il budget contestuale per categoria o brand. L'utente potrebbe avere un budget di 20€ per le "Cover" ma di 800€ per gli "Smartphone". Il sistema distingue tra:
+\begin{itemize}
+    \item \texttt{auto\_cat:}: Budget appreso automaticamente per la categoria.
+    \item \texttt{auto\_brand:}: Budget appreso per uno specifico brand.
+    \item \texttt{manual:}: Limiti impostati esplicitamente dall'utente che sovrascrvono gli "auto".
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────
+\section{Interaction Depth e Engagement}
+\label{sec:profiling-depth}
+% ─────────────────────────────────────────────────────────────
+
+L'agente classifica l'utente in tre tier di profondità di interazione (Tabella~\ref{tab:interaction-depth}). Questo tier determina quanto dettagliata debba essere la ricerca o se l'agente debba proporre proattivamente analisi di trust dei seller.
+
+\begin{table}[htbp]
+\centering
+\caption{Tier di Interaction Depth e relativi trigger}
+\label{tab:interaction-depth}
+\begin{tabular}{lll}
+\hline
+\textbf{Tier} & \textbf{Descrizione} & \textbf{Trigger Principali} \\
+\hline
+\texttt{browser} & Navigazione superficiale & Solo ricerche generali. \\
+\texttt{researcher} & Analisi comparativa & Visualizzazione dettagli, comparazione, analisi seller. \\
+\texttt{power\_buyer} & Intento d'acquisto elevato & Contatto venditore, molteplici analisi profonde. \\
+\hline
+\end{tabular}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────
+\section{Iniezione nel Prompt (Context Building)}
+\label{sec:profiling-context}
+% ─────────────────────────────────────────────────────────────
+
+Prima di ogni interazione con l'LLM, il metodo \texttt{build\_profile\_context} trasforma i dati grezzi del database in un oggetto strutturato (Snapshot) che viene inserito nel System Prompt.
+
+\begin{verbatim}
+{
+  "favorite_brands": "Apple, Sony",
+  "price_preference": "500",
+  "condition_preference": "new",
+  "category_affinities": ["Smartphone", "Audio"],
+  "interaction_depth": "researcher"
+}
+\end{verbatim}
+
+Questo permette all'agente di formulare risposte del tipo: \textit{"Dato che solitamente preferisci prodotti Apple e cerchi condizioni pari al nuovo, ho selezionato questo iPhone ricondizionato di Grado A++ che rientra perfettamente nel tuo budget abituale."}
+
+
+% ─────────────────────────────────────────────────────────────
+\section{Collegamento dell'Account e Identità Persistente}
+\label{sec:profiling-account}
+% ─────────────────────────────────────────────────────────────
+
+Il sistema non si limita a un database isolato, ma crea un ponte tra l'identità dell'utente nell'applicazione e la sua sessione reale su eBay. Questo avviene attraverso il meccanismo del \textbf{session\_id}, che funge da chiave primaria per la risoluzione dell'utente nel database tramite la funzione \texttt{resolve\_user\_by\_id}.
+
+\subsection{Sincronizzazione tra Database e Sessione Browser}
+\label{subsec:profiling-sync}
+
+A differenza dei sistemi e-commerce tradizionali, il progetto MCP\_ECOM gestisce un'identità "fluida":
+\begin{itemize}
+    \item \textbf{Livello Database}: Vengono memorizzate le preferenze analitiche (brand, budget storici, interaction depth).
+    \item \textbf{Livello Browser (Playwright)}: Grazie alla connessione via protocollo CDP o all'uso di profili persistenti (\S\ref{subsec:pw-contact-conn}), l'agente opera con i reali cookie di sessione dell'utente.
+\end{itemize}
+
+Questo collegamento permette all'agente di conoscere, ad esempio, se un utente ha già salvato un oggetto nella sua watchlist reale o di inviare messaggi a nome dell'utente senza mai visualizzare le sue credenziali, garantendo la massima privacy e sicurezza.
+
+% ─────────────────────────────────────────────────────────────
+\section{Personalizzazione Esplicita: Il Tool update\_user\_preferences}
+\label{sec:profiling-manual}
+% ─────────────────────────────────────────────────────────────
+
+Oltre all'apprendimento passivo descritto in precedenza, il sistema offre all'utente la possibilità di "istruire" direttamente l'agente tramite il tool \texttt{update\_user\_preferences}. Questo strumento consente una personalizzazione granulare che ha la priorità assoluta sugli algoritmi di profiling automatico.
+
+\subsection{Override dei Brand e delle Condizioni}
+\label{subsec:profiling-brand-custom}
+
+L'utente può dichiarare esplicitamente le proprie preferenze (es. \textit{"Compro solo scarpe Nike"}). In questo caso, l'agente invoca il tool impostando il campo \texttt{favorite\_brands}. 
+A livello di database, questa azione:
+\begin{enumerate}
+    \item Sovrascrive il contatore di affinità generato dalle ricerche precedenti.
+    \item Inserisce il brand specificato come segnale dominante nel prompt di sistema.
+    \item Forza il modulo di Reranking (\S\ref{sec:reranking}) ad assegnare il punteggio massimo di rilevanza ai prodotti del brand scelto.
+\end{enumerate}
+
+Lo stesso principio si applica alla \texttt{condition\_preference}: se l'utente imposta manualmente "Usato", il sistema inietta nel DB un contatore fittizio ad alto valore (es. \texttt{used:99}) per silenziare l'apprendimento automatico e bloccare la preferenza su quel valore.
+
+\subsection{Personalizzazione del Tono e delle Istruzioni}
+\label{subsec:profiling-tone}
+
+Il profilo utente include campi dedicati alla \emph{metacomunicazione}, permettendo di personalizzare l'esperienza d'uso oltre il semplice acquisto:
+\begin{description}
+    \item[conversation\_tone]: L'utente può scegliere tra toni \texttt{neutral}, \texttt{friendly}, \texttt{professional} o addirittura \texttt{zen} per una comunicazione più sintetica.
+    \item[custom\_instructions]: Un campo di testo libero dove l'utente può inserire regole fisse (es. \textit{"Non suggerirmi mai prodotti che costano più di 500€"} o \textit{"Ignora i venditori con meno di 10 feedback"}).
+\end{description}
+
+\begin{figure}[htbp]
+    \centering
+    \fbox{\parbox{0.85\linewidth}{
+        \textbf{Tool Invocato:} \texttt{update\_user\_preferences} \\
+        \textbf{Argomenti:} \texttt{\{favorite\_brands: "Nike, Adidas", price\_preference: "Premium", conversation\_tone: "professional"\}} \\
+        \textbf{Risultato:} Il profilo viene aggiornato e viene inviata una notifica di \texttt{resource\_updated} al client MCP per rinfrescare lo stato della UI.
+    }}
+    \caption{Esempio di flusso per la personalizzazione esplicita del profilo.}
+    \label{fig:profiling-update-tool}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────
+\section{Osservabilità: La Risorsa profile://}
+\label{sec:profiling-resource}
+% ─────────────────────────────────────────────────────────────
+
+Per garantire la trasparenza, il sistema espone il profilo utente come una \textbf{Risorsa MCP} accessibile tramite l'URI template \texttt{profile://\{session\_id\}}. Ogni volta che le preferenze cambiano (sia per apprendimento automatico che per input manuale), l'agente riceve una notifica e può "rileggere" il profilo aggiornato. Questo chiude il loop di feedback tra azione, apprendimento e consapevolezza dell'AI, rendendo l'agente capace di giustificare le proprie scelte citando esplicitamente le preferenze salvate dell'utente.
+

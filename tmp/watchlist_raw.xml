@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Timestamp>2026-03-25T15:18:13.782Z</Timestamp><Ack>Success</Ack><Version>1193</Version><Build>E1193_CORE_API_19146280_R1</Build><WatchList><PaginationResult><TotalNumberOfPages>0</TotalNumberOfPages><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult></WatchList></GetMyeBayBuyingResponse>

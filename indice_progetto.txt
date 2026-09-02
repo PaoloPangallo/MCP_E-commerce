@@ -1,0 +1,166 @@
+INDICE DEL PROGETTO MCP_ECOM
+
+1 Il Model Context Protocol (MCP) ......... 2
+1.1 Introduzione ......... 2
+1.2 Architettura del Protocollo ......... 2
+1.2.1 Ruoli: Host, Client e Server ......... 2
+1.2.2 Primitive del Protocollo ......... 3
+1.2.3 Meccanismi di Trasporto ......... 3
+1.3 Implementazione nel Progetto MCP_ECOM ......... 3
+1.3.1 Architettura Dual-World ......... 3
+1.3.2 Modalità di Connessione del Client ......... 4
+1.3.3 Tool Esposti ......... 4
+1.3.4 Resource Esposte ......... 4
+1.3.5 Prompt Esposti ......... 6
+1.3.6 Contesto e Dipendenze dei Tool ......... 6
+1.4 Vantaggi Tecnici dell'Azione di MCP ......... 6
+1.4.1 Modularità e Separazione delle Responsabilità ......... 6
+1.4.2 Sicurezza e Controllo degli Accessi ......... 7
+1.4.3 Caching e Performance ......... 7
+1.4.4 Interoperabilità e Portabilità ......... 7
+1.5 Riepilogo ......... 7
+
+2 La Pipeline di Elaborazione della Query ......... 9
+2.1 Approfondimento di Ricerca: Learning to Rank Personalizzato (LTR) ......... 13
+
+3 La Seller Pipeline: Analisi della Reputazione del Venditore ......... 16
+3.1 Motivazione e Posizione nel Sistema ......... 16
+3.2 Architettura della Pipeline ......... 16
+3.2.1 Parallelismo Asincrono ......... 17
+3.3 Acquisizione Dati: eBay Trading API ......... 17
+3.3.1 GetFeedback - Fetch Multi-Pagina Asincrono ......... 17
+3.3.2 GetUser e GetStore - Metadati Anagrafici ......... 18
+3.4 Analisi NLP del Sentiment ......... 18
+3.4.1 Approccio Principale: Classificazione Multilingue con BERT for Sentiment ......... 18
+3.4.2 Blended Sentiment: Connessione tra Testo e Rating ......... 19
+3.4.3 Fallback Euristico ......... 19
+3.4.4 Labeling LLM per Ingestion RAG ......... 20
+3.4.5 Cache a Due Livelli ......... 20
+3.5 Calcolo del Trust Score ......... 20
+3.5.1 Feedback Ratio ......... 21
+3.5.2 Recency Score con Decadimento Esponenziale ......... 21
+3.5.3 Confidence con Saturazione Esponenziale ......... 21
+3.5.4 Pesi del Trust Score e Razionale ......... 22
+3.6 AI Summary Generato da LLM ......... 22
+3.7 Caching Redis e Politica di Invalidazione ......... 22
+3.8 Normalizzazione dell'Output ......... 23
+3.9 Integrazione con la Search Pipeline e il Reranker LTR ......... 23
+3.10 Riepilogo delle Strategie Implementate ......... 23
+
+4 User Profiling e Memoria a Lungo Termine ......... 26
+4.1 Visione d'Insieme ......... 26
+4.2 Architettura e Segnali di Apprendimento ......... 26
+4.2.1 Exponential Moving Average (EMA) per i Budget ......... 27
+4.3 Modellizzazione delle Preferenze ......... 27
+4.3.1 Preferenze di Brand e Condizione ......... 27
+4.3.2 Budget Contestuali (Contextual Budgets) ......... 27
+4.4 Interaction Depth e Engagement ......... 27
+4.5 Iniezione nel Prompt (Context Building) ......... 28
+4.6 Collegamento dell'Account e Identità Persistente ......... 28
+4.6.1 Sincronizzazione tra Database e Sessione Browser ......... 28
+4.7 Personalizzazione Esplicita: Il Tool update_user_preferences ......... 29
+4.7.1 Override dei Brand e delle Condizioni ......... 29
+4.7.2 Personalizzazione del Tono e delle Istruzioni ......... 29
+4.8 Osservabilità: La Risorsa profile:// ......... 30
+
+5 Strategie di Prompting ......... 31
+5.1 Introduzione ......... 31
+5.2 Architettura del Prompting ......... 31
+5.2.1 I Quattro System Prompt Principali ......... 31
+5.2.2 Funzioni di Composizione ......... 32
+5.2.3 Token Budgeting e Troncamento ......... 32
+5.3 Role Prompting - Le Quattro Personalità di ebayGPT ......... 32
+5.3.1 Il Planner Strategico ......... 33
+5.3.2 La Modalità Browser Playwright ......... 33
+5.3.3 Il Consulente Esperto - Final Answer ......... 34
+5.3.4 Il Compagno di Chat ......... 35
+5.4 Chain-of-Thought e Output Strutturato ......... 35
+5.4.1 Il Campo thought come Ragionamento Esplicito ......... 35
+5.4.2 Strategia di Estrazione JSON ......... 36
+5.4.3 LTR Judge - Rilevanza con Vincoli ......... 36
+5.5 Tone Control Dinamico ......... 37
+5.5.1 Il Meccanismo TONE_PLACEHOLDER ......... 37
+5.5.2 Iniezione nel Planner ......... 37
+5.5.3 Override tramite Custom Instructions ......... 38
+5.6 Context Injection e Memoria Utente ......... 38
+5.6.1 Profilo Utente via Risorsa MCP ......... 38
+5.6.2 Preferenze a Lungo Termine nel Final Answer ......... 38
+5.6.3 Risoluzione dei Pronomi via Context Injection ......... 39
+5.7 Semantic Query Parsing ......... 39
+5.7.1 Schema di Output e Tipi di Vincolo ......... 39
+5.7.2 Validazione e Post-Elaborazione ......... 40
+5.8 Query Expansion e Named Entity Recognition ......... 40
+5.8.1 Query Expansion per il Retrieval ......... 40
+5.8.2 Named Entity Recognition su Titoli Prodotto ......... 41
+5.9 Sentiment Analysis Ibrida ......... 41
+5.9.1 Tier 1 - Embedding con Anchor Vectors ......... 42
+5.9.2 Tier 2 - Fallback Euristico ......... 42
+5.9.3 Tier 3 - Classificatore LLM ......... 42
+5.9.4 Sommario AI del Venditore ......... 43
+5.10 Vision Prompting Multimodale ......... 43
+5.10.1 Il Prompt Vision ......... 43
+5.10.2 Integrazione con l'Agente ......... 44
+5.11 Context Compaction e Budget Management ......... 44
+5.11.1 Compattazione del Catalogo Strumenti ......... 44
+5.11.2 Compattazione dello Scratchpad ......... 45
+5.11.3 Compattazione dei Dati Finali ......... 45
+5.12 Riepilogo delle Strategie ......... 45
+
+6 Architettura RAG e Sistema di Memoria Globale ......... 47
+6.1 Introduzione al Modello RAG nell'E-commerce ......... 47
+6.2 Architettura Ibrida: Qdrant e FastEmbed ......... 47
+6.2.1 Dense Embedding vs Sparse Embedding ......... 47
+6.2.2 Reciprocal Rank Fusion (RRF) ......... 48
+6.3 Ingestion: Costruzione del Payload Documentale ......... 48
+6.3.1 Generazione deterministica dei Point ID ......... 48
+6.4 Retrieval: Integrazione nella Search Pipeline ......... 49
+6.4.1 Query Expansion (Espansione Autonoma) ......... 49
+6.4.2 Logica di Fusione e Filtraggio Constraint (_merge_hybrid_results) ......... 49
+6.4.3 Verifica in tempo reale API (Dead Listing check) ......... 49
+6.4.4 Calcolo dell'Hybrid Bonus ......... 49
+6.5 Sfide Architetturali, Limitazioni Server e Future Iterazioni ......... 50
+
+7 Playwright: Modalità Browser Alternativa dell'Agente ......... 51
+7.1 Motivazione e Ruolo nel Sistema ......... 51
+7.2 Architettura del Sottosistema Playwright ......... 52
+7.2.1 Il Problema: Windows + Uvicorn + Playwright ......... 52
+7.2.2 BrowserManager: Sessione Persistente Singleton ......... 52
+7.3 Tool 1: Ricerca Prodotti via Scraping (ebay_scrape) ......... 53
+7.3.1 URL e User Agent ......... 53
+7.3.2 Selettori Multi-Livello Resiliente ......... 53
+7.3.3 Modalità Headed e Headless ......... 54
+7.4 Tool 2: Browser Interattivo Persistente ......... 54
+7.5 Tool 3: Contatto Autonomo al Venditore ......... 55
+7.5.1 Step 0: Connessione a Chrome con Sessione Utente Reale ......... 55
+7.5.2 Step 1: Risoluzione dell'URL di Contatto ......... 55
+7.5.3 Step 2: Navigazione e Attesa networkidle ......... 56
+7.5.4 Step 3: Gestione Login Wall ......... 56
+7.5.5 Step 3a: Pagina Articolo - Click sul Link di Contatto ......... 56
+7.5.6 Step 3b: IntermediatedFAQ - Bypass del Routing SPA ......... 56
+7.5.7 Step 5: Compilazione del Messaggio ......... 57
+7.5.8 Step 6: Click sul Bottone "Invia" ......... 57
+7.5.9 Gestione degli Errori e Trasparenza all'Utente ......... 58
+7.6 Debugging e Osservabilità ......... 58
+7.7 Riepilogo delle Strategie Implementate ......... 59
+
+8 Framework di Valutazione: NLU Accuracy e Agent Routing ......... 60
+8.1 Motivazione e Obiettivi ......... 60
+8.2 Dataset Ground-Truth ......... 60
+8.2.1 Problema dello Schema Disallineato ......... 60
+8.2.2 Schema Corretto ......... 61
+8.2.3 Copertura del Dataset ......... 61
+8.3 Test Runner NLU: Valutazione Multi-Livello ......... 63
+8.3.1 Problema della Funzione di Confronto Originale ......... 63
+8.3.2 Architettura del Confronto Multi-Livello ......... 63
+8.3.3 Report di Output ......... 64
+8.4 Test di Routing del Planner ......... 65
+8.4.1 Obiettivo e Approccio ......... 65
+8.4.2 Test di _infer_intent ......... 65
+8.4.3 Test di _ordered_tools_for_intent ......... 65
+8.4.4 Test di Completezza degli Intent ......... 66
+8.4.5 Risultati della Suite ......... 66
+8.5 Metriche RAG: MRR e nDCG ......... 67
+8.5.1 Mean Reciprocal Rank (MRR) ......... 67
+8.5.2 Normalized Discounted Cumulative Gain (nDCG@K) ......... 67
+8.6 Struttura della Cartella tests/eval ......... 68
+8.7 Riepilogo ......... 68

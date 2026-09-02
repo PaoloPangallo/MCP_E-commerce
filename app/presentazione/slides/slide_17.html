@@ -1,0 +1,119 @@
+<section id="s17">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Persistence · Polyglot Storage</div>
+  </div>
+
+  <div class="main" style="display:flex;flex-direction:column;justify-content:center;gap:48px;">
+    <div class="anim d1">
+      <div class="eyebrow" style="color:var(--co-blue);">Infrastructure Layer</div>
+      <h2 class="section">The 3 <em>Storage</em> Pillars</h2>
+      <p class="lead">Tre esigenze radicalmente diverse — nessun singolo database può soddisfarle. Stack poliglotta a tre livelli scelto per la natura del dato.</p>
+    </div>
+
+    <div class="g3 anim d2" style="gap:24px;">
+      <!-- PostgreSQL -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--co-snow);display:flex;align-items:center;justify-content:center;color:var(--co-muted);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">PostgreSQL</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;">The Truth Layer</div>
+            </div>
+          </div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.6;margin-bottom:24px;">Il registro permanente. Garantisce integrità ACID per utenti e transazioni. Fonte di verità a lungo termine.</p>
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:20px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;"><span style="color:var(--co-muted);">User Profiles</span><span style="color:var(--co-black);font-weight:600;">ACID</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--co-muted);">Order History</span><span style="color:var(--co-black);font-weight:600;">Permanent</span></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill">Relational</span>
+            <span class="pill">SQL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Redis -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--co-snow);display:flex;align-items:center;justify-content:center;color:var(--co-muted);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h8l-1 8 10-12h-8z"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">Redis</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;">The Hot Layer</div>
+            </div>
+          </div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.6;margin-bottom:24px;">Memoria di lavoro. Cache per query e sessioni. Risposta in microsecondi per un'esperienza lag-free.</p>
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:20px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;"><span style="color:var(--co-muted);">Session State</span><span style="color:var(--co-black);font-weight:600;">24h TTL</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--co-muted);">Parse Cache</span><span style="color:var(--co-black);font-weight:600;">1h TTL</span></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill">In-Memory</span>
+            <span class="pill">Fast KV</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Qdrant -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="height:4px;background:var(--co-gray-cool);"></div>
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--co-snow);display:flex;align-items:center;justify-content:center;color:var(--co-muted);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 3v4M15 3v4M3 9h4M3 15h4M21 9h-4M21 15h-4M9 21v-4M15 21v-4"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">Qdrant</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--co-muted);text-transform:uppercase;">The Semantic Layer</div>
+            </div>
+          </div>
+          <p style="font-size:14px;color:var(--co-muted);line-height:1.6;margin-bottom:24px;">Cervello semantico. Indicizza prodotti e feedback come vettori. Cuore del RAG ibrido (Dense + Sparse).</p>
+          <div style="border-top:1px solid var(--co-gray-light);padding-top:20px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;"><span style="color:var(--co-muted);">Embeddings</span><span style="color:var(--co-black);font-weight:600;">384-dim</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--co-muted);">Retrieval</span><span style="color:var(--co-black);font-weight:600;">Hybrid</span></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill">Vector DB</span>
+            <span class="pill">RAG Core</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s17');
+    var deck = document.getElementById('deck');
+    section.querySelectorAll('.card').forEach(function(card) {
+      card.style.willChange = 'transform';
+      card.addEventListener('mousemove', function(e) {
+        var rect = card.getBoundingClientRect();
+        var sc = parseFloat((deck.style.transform.match(/scale\(([^)]+)\)/) || ['','1'])[1]);
+        var x = (e.clientX - rect.left - rect.width / 2) / sc * 0.04;
+        var y = (e.clientY - rect.top  - rect.height/ 2) / sc * 0.04;
+        gsap.to(card, { x: x, y: y, duration: 0.3, ease: 'power2.out' });
+      });
+      card.addEventListener('mouseleave', function() {
+        gsap.to(card, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1,0.5)' });
+      });
+    });
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">16 / 23</span><span class="tl"></span>
+    <span>Storage Architecture</span>
+  </div>
+</section>

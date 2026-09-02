@@ -1,0 +1,15 @@
+Titolo Slide: Profilazione EMA
+
+Il Problema: Con dati certificati e un data layer solido, il sistema può ora cercare qualsiasi prodotto. Ma ogni ricerca parte da zero: non sa se l'utente preferisce prodotti nuovi o usati, se ha un budget tipico per una categoria, o quali brand cerca più spesso. Chiederglielo esplicitamente è intrusivo e rompe il flusso d'acquisto.
+
+La Soluzione: Implicit Learning tramite Media Mobile Esponenziale (EMA). Il profilo utente si costruisce silenziosamente ad ogni interazione: budget per categoria e brand, condizione preferita, brand affini — tutto aggiornato con un EMA (α=0.20) che pesa i segnali recenti senza mai dimenticare lo storico. Nessun form, nessuna domanda: il sistema impara osservando.
+
+Contenuto della slide:
+
+• EMA Budget — new = old × 0.80 + signal × 0.20 — Il budget si adatta ad ogni ricerca, per categoria (auto_cat:) e per brand (auto_brand:)
+• Condition Preference — Contatore con soglia di attivazione (≥3 segnali, ≥50% share) per evitare falsi positivi
+• Brand Affinity — Contatore per brand con ranking per frequenza, top-10 mantenuti, case-insensitive
+• Coesistenza MCP — Le preferenze implicite (prefisso auto_) non sovrascrivono MAI quelle settate manualmente dall'utente via MCP tools
+
+
+

@@ -30,6 +30,10 @@ from app.llm.client import call_ollama_cloud, call_llm_stream
 
 logger = logging.getLogger(__name__)
 
+# Quanto della descrizione vision usare come query quando il modello non
+# restituisce né brand né tag utilizzabili.
+MAX_VISION_QUERY_CHARS = 120
+
 _MCP_DEFAULT_URLS: dict[str, str] = {
     "standard": os.getenv("MCP_SERVER_URL") or "http://127.0.0.1:8050/mcp/standard/mcp",
     "playwright_browser": os.getenv("MCP_PLAYWRIGHT_URL") or "http://127.0.0.1:8050/mcp/playwright/mcp",
@@ -129,52 +133,92 @@ class EbayReactAgent:
                 step=0,
                 message="Sto analizzando la tua immagine con Qwen-VL...",
             ).model_dump()
-            
+
             vision_data = await describe_image_with_vision(request.image)
-            if vision_data:
-                desc_text = vision_data.get("description", "")
-                tags = vision_data.get("tags") or []
-                brand = vision_data.get("brand")
-                condition = vision_data.get("condition_clues")
-                try:
-                    confidence = float(vision_data.get("confidence", 0.95))
-                except (TypeError, ValueError):
-                    confidence = 0.95
 
-                search_additive = []
-                if brand:
-                    search_additive.append(brand)
-                if tags:
-                    search_additive.extend(tags[:4]) # Max 4 tag per compattezza
+            if not vision_data:
+                # Fallire in silenzio qui significa proseguire con query vuota:
+                # il planner ripiegherebbe sull'intent "conversation" e l'utente
+                # riceverebbe la risposta del turno PRECEDENTE. Meglio fermarsi.
+                logger.error(
+                    "AGENT: Vision analysis failed — interrompo il turno (query=%r)",
+                    request.query,
+                )
+                self.memory_service.clear_vision_description(self.user)
+                yield {
+                    "type": "error",
+                    "message": (
+                        "Non sono riuscito ad analizzare l'immagine. "
+                        "Riprova, magari con una foto più leggera o più nitida."
+                    ),
+                }
+                return
 
-                compact_str = " ".join(search_additive)
+            desc_text = (vision_data.get("description") or "").strip()
+            tags = vision_data.get("tags") or []
+            brand = vision_data.get("brand")
+            condition = vision_data.get("condition_clues")
+            try:
+                confidence = float(vision_data.get("confidence", 0.95))
+            except (TypeError, ValueError):
+                confidence = 0.95
 
-                original_query = request.query.strip()
-                if not original_query:
-                    request.query = f"Trova: {compact_str}".strip()
-                else:
-                    request.query = f"{original_query} ({compact_str})".strip()
-                
-                vision_desc_temp = desc_text
-                logger.info("AGENT: Query enriched with vision data (COMPACT): %s", request.query)
-                
-                # EMETTIAMO EVENTO VISIONE PER LA CARD DEDICATA
-                yield VisionAnalysisEvent(
-                    description=desc_text,
-                    tags=tags,
-                    brand=brand,
-                    condition_clues=condition,
-                    confidence=confidence
-                ).model_dump()
+            search_additive = []
+            if brand:
+                search_additive.append(brand)
+            if tags:
+                search_additive.extend(tags[:4])  # Max 4 tag per compattezza
+
+            compact_str = " ".join(search_additive).strip()
+            if not compact_str:
+                # Nessun brand e nessun tag (es. fallback su JSON non parsabile):
+                # senza questo la query si ridurrebbe al solo prefisso "Trova:".
+                compact_str = desc_text[:MAX_VISION_QUERY_CHARS].strip()
+
+            original_query = request.query.strip()
+
+            if not compact_str and not original_query:
+                # Il modello non ha prodotto nulla di utilizzabile e l'utente non ha
+                # scritto niente: proseguire significherebbe mandare al planner una
+                # query vuota, che ripiega su "conversation" e risponde sullo storico.
+                logger.error("AGENT: Vision produced no usable query — interrompo il turno")
+                self.memory_service.clear_vision_description(self.user)
+                yield {
+                    "type": "error",
+                    "message": (
+                        "Ho analizzato l'immagine ma non sono riuscito a ricavarne "
+                        "abbastanza dettagli per una ricerca. Prova con un'altra foto."
+                    ),
+                }
+                return
+
+            if not original_query:
+                request.query = f"Trova: {compact_str}".strip()
+            elif compact_str:
+                request.query = f"{original_query} ({compact_str})".strip()
             else:
-                logger.warning("AGENT: Vision analysis failed")
+                request.query = original_query
+
+            vision_desc_temp = desc_text
+            logger.info("AGENT: Query enriched with vision data (COMPACT): %s", request.query)
+
+            # EMETTIAMO EVENTO VISIONE PER LA CARD DEDICATA
+            yield VisionAnalysisEvent(
+                description=desc_text,
+                tags=tags,
+                brand=brand,
+                condition_clues=condition,
+                confidence=confidence
+            ).model_dump()
 
         # 2. Initialization
         memory = self.memory_service.hydrate_request_state(
             user_query=request.query,
             user=self.user,
         )
-        if vision_desc_temp:
+        if getattr(request, "image", None):
+            # Turno con immagine: la descrizione idratata appartiene alla foto
+            # precedente e non deve sopravvivere a quella nuova.
             memory.vision_description = vision_desc_temp
         memory.mcp_mode = self.mcp_mode
 

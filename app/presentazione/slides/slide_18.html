@@ -1,0 +1,129 @@
+<section id="s18">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Retrieval · Hybrid Search</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:flex-start;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Search Engine</div>
+        <h2 class="section">Hybrid <em>RAG</em> & RRF</h2>
+        <p class="lead" style="max-width:580px;">Dense fallisce sulla terminologia specifica, Sparse sulle query concettuali. Reciprocal Rank Fusion nativo su Qdrant unisce il meglio di entrambi.</p>
+      </div>
+
+      <!-- RRF formula - Cohere Signature Card -->
+      <div class="anim d2 card" style="background:var(--co-snow);border-color:var(--co-gray-cool);padding:40px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Reciprocal Rank Fusion</div>
+        <div style="font-family:var(--font-display);font-size:40px;color:var(--co-black);letter-spacing:-1px;margin-bottom:16px;">
+          RRF(d) = <span style="color:var(--co-blue);">Σ</span> <span style="color:var(--co-muted);">1 / (rank<sub>i</sub>(d) + 60)</span>
+        </div>
+        <p style="font-size:15px;color:var(--co-muted);line-height:1.6;">
+          Non richiede normalizzazione. Premia i documenti ben classificati in <em>entrambe</em> le liste. K=60 è il parametro standard industriale per la massima precisione.
+        </p>
+      </div>
+
+      <!-- Dense vs Sparse comparison -->
+      <div class="anim d3" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div class="card" style="padding:24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-blue);text-transform:uppercase;margin-bottom:12px;">Dense Retrieval</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:8px;">all-MiniLM-L6-v2</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.5;">384 dim · cosine distance. @lru_cache per performance estreme.</p>
+        </div>
+        <div class="card" style="padding:24px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--co-muted);text-transform:uppercase;margin-bottom:12px;">Sparse Retrieval</div>
+          <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);margin-bottom:8px;">BM25 Okapi</div>
+          <p style="font-size:13px;color:var(--co-muted);line-height:1.5;">Term matching puro. IDF modifier per penalizzare i termini generici.</p>
+        </div>
+      </div>
+      <!-- KaTeX RRF formula -->
+      <div class="anim d4 card" style="padding:28px;background:var(--co-deep-dark);border:none;">
+        <div style="font-size:11px;font-family:var(--font-mono);color:rgba(255,255,255,0.4);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:16px;">Formula — Reciprocal Rank Fusion</div>
+        <div id="s18-katex-formula" style="font-size:22px;text-align:center;padding:8px 0;"></div>
+        <div style="font-size:12px;font-family:var(--font-mono);color:rgba(255,255,255,0.4);margin-top:14px;text-align:center;">K = 60 · parametro industriale · normalizzazione non richiesta</div>
+      </div>
+    </div>
+
+    <!-- Right: architecture diagram -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:12px;align-items:stretch;" class="anim d3">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+        text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px;">Qdrant Native RRF Flow</div>
+
+      <!-- Query -->
+      <div class="card glass-blue" style="text-align:center;padding:16px;">
+        <div style="font-family:var(--font-display);font-size:18px;color:var(--co-black);">Expanded Query</div>
+        <div style="font-size:12px;color:var(--co-blue);margin-top:4px;font-family:var(--font-mono);">Semantic + Keyword context</div>
+      </div>
+      
+      <div class="arrow" style="margin:0 auto;">↓</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card" style="text-align:center;padding:16px;background:var(--co-snow);">
+          <div style="font-size:14px;font-weight:700;color:var(--co-black);">Dense Prefetch</div>
+          <div style="font-size:11px;color:var(--co-muted);margin-top:4px;">Vector Search</div>
+        </div>
+        <div class="card" style="text-align:center;padding:16px;background:var(--co-snow);">
+          <div style="font-size:14px;font-weight:700;color:var(--co-black);">Sparse Prefetch</div>
+          <div style="font-size:11px;color:var(--co-muted);margin-top:4px;">BM25 Search</div>
+        </div>
+      </div>
+
+      <div class="arrow" style="margin:0 auto;">↓</div>
+
+      <div class="card" style="text-align:center;padding:24px;border-color:var(--co-blue);background:var(--co-white);">
+        <div style="font-family:var(--font-display);font-size:20px;color:var(--co-black);">Native RRF Fusion</div>
+        <div style="font-size:12px;color:var(--co-blue);margin-top:4px;font-family:var(--font-mono);">ZERO Python Overhead</div>
+      </div>
+
+      <div class="arrow" style="margin:0 auto;">↓</div>
+
+      <div class="card" style="text-align:center;padding:16px;background:var(--co-snow);">
+        <div style="font-size:14px;font-weight:700;color:var(--co-black);">Top-K Ranked Results</div>
+      </div>
+
+      <!-- Code snippet - Cohere Dark -->
+      <div style="background:var(--co-deep-dark);border-radius:14px;padding:24px;
+        font-family:var(--font-mono);font-size:12px;line-height:1.75;color:#e5e7eb;margin-top:12px;">
+        <span style="color:#c084fc;">client.query_points</span>(<br>
+        &nbsp;&nbsp;prefetch=[dense_p, sparse_p],<br>
+        &nbsp;&nbsp;query=<span style="color:#c084fc;">FusionQuery</span>(<span style="color:#4ade80;">Fusion.RRF</span>)<br>
+        )
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s18');
+    var rendered = false;
+    function renderFormula() {
+      if (rendered) return;
+      var el = document.getElementById('s18-katex-formula');
+      if (!el || !window.katex) return;
+      katex.render(
+        '\\text{RRF}(d) = \\displaystyle\\sum_{i=1}^{n} \\frac{1}{\\text{rank}_i(d) + 60}',
+        el,
+        { throwOnError: false, displayMode: true, output: 'html' }
+      );
+      el.style.color = '#e5e7eb';
+      rendered = true;
+    }
+    var mo = new MutationObserver(function() {
+      if (section.classList.contains('active')) renderFormula();
+    });
+    mo.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) renderFormula();
+  })();
+  </script>
+
+  <div class="footer">
+    <span class="pg">17 / 23</span><span class="tl"></span>
+    <span>Hybrid RAG Architecture</span>
+  </div>
+</section>

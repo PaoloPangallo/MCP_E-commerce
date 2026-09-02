@@ -1,0 +1,16 @@
+Titolo Slide: BERT Sentiment
+
+Il Problema: I feedback testuali dei venditori sono migliaia e spesso contengono sfumature (ironia, contesto) che un semplice conteggio di stelle non può catturare.
+
+La Soluzione: Integrazione di un classificatore basato su BERT (Transformers) per lo scoring automatico dei commenti, combinato con il rating oggettivo di eBay.
+
+Contenuto da argomentare (Testo visibile a schermo):
+- Pipeline NLP basata su modelli Transformer
+- Classificazione a 5 livelli (1-5 stelle testuali)
+- Blend pesato: 60% Rating / 40% Sentiment BERT
+- Analisi massiva di centinaia di feedback al secondo
+
+Note / Implementazione:
+1. Analisi Profonda: BERT riesce a distinguere tra "Ottimo prodotto ma spedizione lenta" e "Pessimo tutto", assegnando pesi differenti.
+2. Bilanciamento: Il sistema non si fida solo delle stelle (spesso gonfiate), ma "legge" la reale soddisfazione degli utenti per generare un Trust Score veritiero.
+3. Cache & Performance: I risultati vengono memorizzati su Redis per garantire risposte istantanee durante la navigazione.

@@ -1,0 +1,10 @@
+Titolo Slide: Stateful Anaphora
+
+Il Problema: Un assistente senza memoria conversazionale interpreta "cercalo rosso" come una query vuota: non sa a cosa si riferisce "lo". Ogni messaggio è trattato come se fosse il primo, rendendo impossible la conversazione naturale multi-turno.
+
+La Soluzione: Contextual Tracking via Redis State. Prima di ogni chiamata al parser LLM, la pipeline recupera le ultime N query dell'utente (session_id o user_id) da Redis con get_user_queries(). Questo storico viene iniettato nel prompt del parser come blocco CONVERSATION CONTEXT. Il modello usa questo contesto per risolvere pronomi (li, le, quelli, cercalo, it, them) e ripopolare i campi product e brands dalla sessione precedente. Redis funge da memoria a breve termine stateful con TTL 24h.
+
+Contenuto della slide:
+• Redis State — Ogni query eseguita viene salvata con push_user_query(user_id, query, limit=5); la pipeline la recupera prima del parsing con get_user_queries(), TTL 24h
+• Prompt Injection — Le ultime 3 query vengono concatenate come CONVERSATION CONTEXT nel prompt LLM: il parser risolve "cercalo" → prodotto della query precedente senza logica custom
+• Doppio Scope — Il contesto viene recuperato sia per session_id (anonimo) che per user_id (autenticato); primo disponibile vince

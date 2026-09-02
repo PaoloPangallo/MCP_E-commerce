@@ -13,8 +13,8 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _truncate_scratchpad(
-    scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
-    context_budget_chars: int,
+        scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
+        context_budget_chars: int,
 ) -> str:
     """
     Serializza lo scratchpad come JSON troncando se necessario.
@@ -53,10 +53,10 @@ def _truncate_scratchpad(
         return full_str
 
     while (
-        len(formatted_items) > 1
-        and len(
-            json.dumps([json.loads(i) for i in formatted_items])
-        ) > context_budget_chars
+            len(formatted_items) > 1
+            and len(
+        json.dumps([json.loads(i) for i in formatted_items])
+    ) > context_budget_chars
     ):
         formatted_items.pop(0)
 
@@ -104,7 +104,6 @@ SCHEMA DI USCITA:
 }
 """.strip()
 
-
 CONVERSATION_ANSWER_SYSTEM_PROMPT = """
 Sei ebayGPT, un assistente e-commerce amichevole e competente.
 Rispondi in modo naturale, colloquiale e conciso – come farebbe un esperto di shopping in carne e ossa con un amico.
@@ -117,7 +116,6 @@ REGOLE:
 - MAI "Come posso aiutarti oggi?" come unica risposta – aggiungi sempre valore.
 - Se hai storico di conversazione, usalo per dare risposte contestualizzate.
 """.strip()
-
 
 PLAYWRIGHT_PLANNER_SYSTEM_PROMPT = """
 Sei ebayGPT in modalità [BROWSER REALE PLAYWRIGHT]. Hai accesso a un browser Chromium REALE, VISIBILE e PERSISTENTE (non si chiude ad ogni comando).
@@ -148,7 +146,6 @@ SCHEMA DI USCITA (RISPONDI SOLO IN JSON!):
   "final_answer": null
 }
 """.strip()
-
 
 FINAL_ANSWER_SYSTEM_PROMPT = """
 Sei ebayGPT, il consulente esperto di shopping ufficiale. Il tuo obiettivo è guidare l'utente verso l'acquisto migliore, agendo come un personal shopper tecnico e appassionato.
@@ -261,7 +258,8 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
         "ebay_query_used": search.get("ebay_query_used"),
         "analysis": search.get("analysis"),
         "metrics": search.get("metrics") or search.get("ir_metrics"),
-        "top_results": [search_data[i] for i in range(len(search_data)) if i < 6] if isinstance(search_data, list) else [],
+        "top_results": [search_data[i] for i in range(len(search_data)) if i < 6] if isinstance(search_data,
+                                                                                                list) else [],
     } if search else None
 
     compact_seller = {
@@ -301,14 +299,14 @@ def _compact_final_data_for_prompt(final_data: Dict[str, Any]) -> Dict[str, Any]
 
 
 def build_planner_prompt(
-    user_query: str,
-    scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
-    step_index: int,
-    max_steps: int,
-    tool_catalog: Dict[str, Dict[str, Any]],
-    custom_instructions: Optional[str] = None,
-    tone: Optional[str] = None,
-    mcp_mode: str = "standard",
+        user_query: str,
+        scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
+        step_index: int,
+        max_steps: int,
+        tool_catalog: Dict[str, Dict[str, Any]],
+        custom_instructions: Optional[str] = None,
+        tone: Optional[str] = None,
+        mcp_mode: str = "standard",
 ) -> str:
     compact_tool_catalog = _compact_tool_catalog_for_prompt(tool_catalog)
     tools_json = json.dumps(compact_tool_catalog, ensure_ascii=False, indent=2)
@@ -353,11 +351,11 @@ def build_planner_prompt(
 
 
 def build_final_answer_prompt(
-    user_query: str,
-    scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
-    final_data: Dict[str, Any],
-    custom_instructions: Optional[str] = None,
-    tone: Optional[str] = None,
+        user_query: str,
+        scratchpad: Union[Dict[str, Any], List[Dict[str, Any]]],
+        final_data: Dict[str, Any],
+        custom_instructions: Optional[str] = None,
+        tone: Optional[str] = None,
 ) -> str:
     compact_final_data = _compact_final_data_for_prompt(final_data)
     context_info = _compact_json(compact_final_data)
@@ -382,7 +380,7 @@ def build_final_answer_prompt(
         system_prompt = system_prompt.replace("{TONE_PLACEHOLDER}", f"- {tone_desc}")
     else:
         system_prompt = system_prompt.replace("{TONE_PLACEHOLDER}", "")
-        
+
     pref_str = ""
     # Estrai le preferenze utente dalla long_term_memory nello scratchpad
     ltm = compact_final_data.get("long_term_memory") or {}
@@ -413,7 +411,8 @@ def build_final_answer_prompt(
         # ── Condition preference ──────────────────────────────────────────
         db_condition = prefs.get("db_condition_preference")
         if db_condition:
-            cond_label = {"new": "nuovo", "used": "usato", "refurbished": "ricondizionato"}.get(db_condition, db_condition)
+            cond_label = {"new": "nuovo", "used": "usato", "refurbished": "ricondizionato"}.get(db_condition,
+                                                                                                db_condition)
             pref_parts.append(f"Condizione preferita: {cond_label}")
 
         # ── Category affinities ───────────────────────────────────────────
@@ -444,13 +443,14 @@ def build_final_answer_prompt(
     # Make sure we don't blow up context with massive scratchpad
     base_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(user_query) + _estimate_tokens(context_info)
     budget_chars = max(1000, (MAX_LLM_PROMPT_TOKENS - base_tokens) * ROUGH_CHARS_PER_TOKEN)
-    
+
     scratch_str = _truncate_scratchpad(scratchpad, budget_chars)
 
     # Inject explicit results count so the LLM can't ignore them
     results_count = 0
     if isinstance(compact_final_data.get("search"), dict):
-        results_count = compact_final_data["search"].get("results_count") or len(compact_final_data["search"].get("top_results") or [])
+        results_count = compact_final_data["search"].get("results_count") or len(
+            compact_final_data["search"].get("top_results") or [])
 
     results_hint = ""
     if results_count > 0:

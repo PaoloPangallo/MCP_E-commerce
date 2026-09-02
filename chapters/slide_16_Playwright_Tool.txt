@@ -1,0 +1,14 @@
+Titolo Slide: L'Ecosistema dei Tool MCP
+
+Il Problema: Un agente AI senza strumenti è solo un chatbot. Per essere utile in un contesto e-commerce reale, deve poter cercare prodotti, analizzare venditori, confrontare prezzi, vedere immagini e persino navigare un sito web — tutto in modo autonomo e componibile.
+
+La Soluzione: MCP (Model Context Protocol) trasforma ogni capacità del sistema in un Tool dichiarativo che l'agente ReAct può invocare autonomamente nel loop Thought → Action → Observation. Il sistema espone 14 tool registrati via FastMCP, ciascuno con nome, descrizione e schema dei parametri. L'agente sceglie quale tool usare in base al contesto, li concatena, ne interpreta l'output e decide il passo successivo — senza logica hard-coded.
+
+Contenuto della slide:
+• search_products — Ricerca prodotti su eBay con filtri semantici (prezzo, condizione, brand, categoria): motore principale della pipeline RAG + API
+• analyze_seller — Analisi reputazione venditore: Trust Score composito, sentiment NLP su feedback reali, profilo completo (store, data registrazione, paese)
+• compare_products — Confronto multi-prodotto con scoring matrix (prezzo, trust, rilevanza, condizione): restituisce un winner con motivazione leggibile
+• get_market_trends — Benchmark prezzi Google Shopping + trend temporale Google Trends: verdetto "compra ora o aspetta"
+• describe_image — Vision multimodale (Qwen3-VL): l'utente carica una foto, il tool restituisce brand, tag e condizione per avviare la ricerca
+• ebay_scrape — Fallback Playwright: naviga eBay.it come un browser reale quando le API non bastano
+• + 8 altri tool — wishlist, messaggistica, metadati categoria, deals, contatto venditore, conversazione, profilo utente, spedizioni

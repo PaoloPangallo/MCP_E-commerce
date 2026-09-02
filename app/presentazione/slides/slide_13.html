@@ -1,0 +1,170 @@
+<section id="s13">
+  <div class="chrome">
+    <div class="brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.1 5.9L20 10l-5.9 2.1L12 18l-2.1-5.9L4 10l5.9-2.1L12 2z"/></svg></span>
+      <b>MCP_ECOM</b>
+    </div>
+    <div class="r">Insights · get_market_trends</div>
+  </div>
+
+  <div class="main" style="display:flex;gap:64px;align-items:center;">
+    <!-- Left -->
+    <div style="flex:1.1;display:flex;flex-direction:column;gap:32px;">
+      <div class="anim d1">
+        <div class="eyebrow" style="color:var(--co-blue);">Market Intelligence</div>
+        <h2 class="section">Global <em>Benchmarks</em></h2>
+        <p class="lead">Oltre eBay: integrazione di benchmark Google Shopping + Trends per una visione di mercato a 360°.</p>
+      </div>
+
+      <!-- Price distribution chart - Cohere Style -->
+      <div class="anim d2 card" style="padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:24px;">Price Distribution — iPhone 15 Pro Max</div>
+        <canvas id="price-chart" height="130"></canvas>
+        
+        <!-- Stats row -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:24px;
+          border-top:1px solid var(--co-gray-light);padding-top:20px;">
+          <div style="text-align:center;">
+            <div id="s13-min" style="font-size:20px;font-weight:700;color:var(--co-black);">€389</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">MIN</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-avg" style="font-size:20px;font-weight:700;color:var(--co-blue);">€412</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">AVG</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-med" style="font-size:20px;font-weight:700;color:var(--co-black);">€408</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">MED</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-dev" style="font-size:20px;font-weight:700;color:var(--co-muted);">±€24</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">DEV</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="s13-max" style="font-size:20px;font-weight:700;color:var(--co-black);">€539</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--co-muted);">MAX</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:32px;" class="anim d3">
+      <!-- Verdetto badge - Cohere Actionable style -->
+      <div class="card glass-blue" style="border-color:var(--co-blue);padding:32px;">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-blue);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Market Verdict</div>
+        <p style="font-size:16px;color:var(--co-near-black);line-height:1.6;">
+          <strong>Opportunità eccellente (87/100).</strong> Il prezzo medio è vicino al minimo storico. La domanda è in forte crescita: momento ideale per l'acquisto.
+        </p>
+      </div>
+
+      <!-- Trend classification -->
+      <div class="card" style="padding:24px;background:var(--co-snow);">
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--co-muted);
+          text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px;">Trend Classification</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--co-blue);"></div>
+            <span style="color:var(--co-near-black);">Breakout > +30%</span>
+            <span class="pill blue" style="margin-left:auto;">CRITICAL</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--co-blue);opacity:0.6;"></div>
+            <span style="color:var(--co-near-black);">Rising +10% ÷ +30%</span>
+            <span class="pill" style="margin-left:auto;">UPWARD</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;font-size:14px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--co-gray-cool);"></div>
+            <span style="color:var(--co-near-black);">Stable ±10%</span>
+            <span class="pill" style="margin-left:auto;">STABLE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parallel execution note -->
+      <div class="card" style="padding:24px;border-color:var(--co-gray-cool);">
+        <div style="font-size:13px;font-weight:700;color:var(--co-black);margin-bottom:12px;">Parallel Engine</div>
+        <pre class="code" style="font-size:12px;background:transparent;border:none;padding:0;margin:0;">asyncio.gather(
+    fetch_google_shopping(),
+    fetch_google_trends(),
+    fetch_historical_data()
+)</pre>
+        <p style="font-size:13px;color:var(--co-muted);margin-top:12px;">Tre chiamate API atomiche eseguite in parallelo per minimizzare la latenza dello strumento.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="pg">13 / 23</span><span class="tl"></span>
+    <span>Market Intelligence</span>
+  </div>
+
+  <script>
+  (function() {
+    var section = document.getElementById('s13');
+    var counters = [
+      { id: 's13-min', end: 389, prefix: '€', suffix: '' },
+      { id: 's13-avg', end: 412, prefix: '€', suffix: '' },
+      { id: 's13-med', end: 408, prefix: '€', suffix: '' },
+      { id: 's13-dev', end: 24,  prefix: '±€', suffix: '' },
+      { id: 's13-max', end: 539, prefix: '€', suffix: '' },
+    ];
+    function runCounters() {
+      if (!window.gsap) return;
+      counters.forEach(function(c, i) {
+        var el = document.getElementById(c.id);
+        if (!el) return;
+        var obj = { val: 0 };
+        gsap.to(obj, { val: c.end, duration: 1.2, ease: 'power2.out', delay: i * 0.1,
+          onUpdate: function() { el.textContent = c.prefix + Math.round(obj.val) + c.suffix; }
+        });
+      });
+    }
+    var mo2 = new MutationObserver(function() {
+      if (section.classList.contains('active')) runCounters();
+    });
+    mo2.observe(section, { attributes: true, attributeFilter: ['class'] });
+    if (section.classList.contains('active')) runCounters();
+  })();
+  </script>
+
+  <script>
+  (function() {
+    var chart = null;
+    var section = document.getElementById('s13');
+    if (!section) return;
+    var observer = new MutationObserver(function() {
+      if (!section.classList.contains('active')) return;
+      if (chart) { chart.destroy(); chart = null; }
+      var canvas = document.getElementById('price-chart');
+      if (!canvas || !window.Chart) return;
+      var labels = ['< €370','€370–390','€390–410','€410–430','€430–460','€460–500','> €500'];
+      var values = [2, 8, 28, 35, 18, 6, 3];
+      chart = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: values.map((v, i) => i === 3 ? '#0d7a5f' : 'rgba(13,122,95,0.15)'),
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          animation: { duration: 900, easing: 'easeOutQuart' },
+          plugins: { legend: { display: false }, tooltip: { enabled: false }},
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: 'Outfit', size: 10 }, color: '#6a7181' } },
+            y: { display: false }
+          }
+        }
+      });
+    });
+    observer.observe(section, { attributes: true, attributeFilter: ['class'] });
+  })();
+  </script>
+</section>

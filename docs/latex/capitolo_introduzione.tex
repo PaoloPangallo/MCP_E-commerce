@@ -1,0 +1,38 @@
+% ============================================================
+% introduzione_relazione.tex
+% ============================================================
+\section*{Introduzione}
+
+Lo shopping online su marketplace come eBay presenta un problema 
+fondamentale: la quantità di prodotti disponibili rende la ricerca 
+tradizionale per parole chiave insufficiente. L'utente si trova a 
+dover valutare manualmente l'affidabilità dei venditori, confrontare 
+prezzi su inserzioni eterogenee e districarsi tra prodotti principali, 
+accessori e ricambi spesso mescolati tra loro.\\
+
+\noindent
+Il progetto \textit{MCP E-commerce AI Shopping Assistant} nasce per 
+automatizzare questo processo. Il sistema espone una chat 
+conversazionale in cui l'utente formula richieste in linguaggio 
+naturale — opzionalmente accompagnate da immagini — e riceve 
+raccomandazioni motivate in tempo reale: l'agente si occupa 
+autonomamente di interpretare la richiesta, pianificare le operazioni 
+necessarie, interrogare il marketplace e sintetizzare i risultati.\\
+
+\noindent
+L'architettura è costruita attorno al \textit{Model Context Protocol} 
+(MCP), standard aperto di Anthropic che disaccoppia la logica 
+dell'agente dai servizi esterni. Il backend è sviluppato in Python con 
+FastAPI; il frontend in React/TypeScript. La persistenza è affidata a 
+PostgreSQL, Redis e Qdrant (database vettoriale). Le funzionalità di 
+linguaggio e visione artificiale si appoggiano a Ollama Cloud, mentre 
+i dati di prodotto provengono dalle API ufficiali di eBay. 
+L'automazione browser è gestita tramite Playwright.\\
+
+\noindent
+I capitoli che seguono descrivono nel dettaglio i componenti 
+principali: il protocollo MCP e l'agente ReAct (Capitolo 1), la pipeline 
+di elaborazione della query (Capitolo 2), il sistema di ricerca e ranking 
+(Capitolo 3), l'analisi dei venditori (Capitolo 4), gli strumenti specializzati 
+(Capitolo 5), la personalizzazione e la memoria (Capitolo 6) e l'infrastruttura 
+(Capitolo 7).

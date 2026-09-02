@@ -1,0 +1,16 @@
+Titolo Slide: LLM Judge
+
+Il Problema: Il fallimento della simulazione massiva (Ecosystem Simulation) a causa dell'eccessiva complessità e del consumo insostenibile di risorse hardware e token.
+
+La Soluzione: Passaggio al paradigma "LLM as a Judge" (Deep-Check Arbitrator) per un filtraggio qualitativo on-the-fly senza necessità di dataset sintetici preventivi.
+
+Contenuto da argomentare (Testo visibile a schermo):
+- Abbandono LTR massivo per insostenibilità
+- Deep-Check: Filtraggio "on-the-fly" post-RAG
+- Arbitrato su Marca, Categoria e Vincoli negativi
+- Re-ranking logico basato su "Value-for-Money"
+
+Note / Funzionamento:
+1. Semplificazione Architetturale: Invece di simulare migliaia di utenti per addestrare un modello, usiamo l'LLM come "arbitro finale" solo sui top-results della ricerca.
+2. Efficienza: Risolviamo il problema del "mismatch" di marca o categoria in tempo reale, risparmiando hardware e token rispetto alla simulazione totale.
+3. Precisione: Il giudice applica una logica umana ("Value-for-Money") che i modelli statistici puri non riescono a cogliere.

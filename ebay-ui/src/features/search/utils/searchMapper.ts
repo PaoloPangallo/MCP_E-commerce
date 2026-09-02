@@ -33,6 +33,9 @@ export function mapPayloadToSearchBlock(query: string, payload: FinalPayload): S
     metadata: payload.metadata || null,
     market_trends: payload.marketTrends || null,
     deals: payload.deals || null,
+    // Senza questo la VisionAnalysisCard esiste solo durante lo stream: il blocco
+    // persistito perde l'analisi e a fine risposta la card sparisce dalla chat.
+    vision_analysis: payload.visionAnalysis || null,
     final_answer: payload.finalAnswer || "Ho completato l’analisi della richiesta.",
     mode,
     errors: payload.errors
