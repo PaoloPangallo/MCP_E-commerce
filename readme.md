@@ -1,82 +1,190 @@
-# MCP E-Commerce · AI Shopping Assistant 🛍️
+# MCP E-Commerce — AI Shopping Assistant
 
-Un assistente intelligente sofisticato (AI Agent) che aiuta gli utenti a trovare le migliori offerte su eBay attraverso l'interpretazione del linguaggio naturale (NLP), il Retrieval Augmented Generation (RAG) e un sistema di classificazione avanzato.
+**An end-to-end AI shopping system combining MCP, agentic workflows, retrieval and a full web application**
 
----
+MCP E-Commerce is a working AI-assisted shopping platform built around eBay. It combines a FastAPI backend, a Model Context Protocol server, an agentic orchestration layer, retrieval and ranking services, persistent storage and a React interface.
 
-## 🚀 Caratteristiche Principali
+Unlike a standalone chatbot demo, the project is designed as a complete software system: the AI agent can access explicit tools, search products, inspect sellers, manage user context and interact with application services through a structured architecture.
 
-- **AI Agent (ReAct Framework)**: Un agente autonomo che decide quali strumenti utilizzare (Ricerca, Dettagli, Feedback) per rispondere al meglio alle richieste dell'utente.
-- **Parsing NLP Avanzato**: Utilizza **spaCy** e modelli **LLM (Gemini)** per estrarre vincoli strutturati (marca, modello, budget, condizione) da query colloquiali.
-- **RAG con Qdrant**: Sistema di recupero semantico basato su **Qdrant** (Vector Database) per analizzare feedback dei venditori e descrizioni prodotti storiche.
-- **Scoring & Reranking**: Sistema di pesatura multi-fattore che considera:
-  - Rilevanza semantica (Embedding Similarity).
-  - Sentiment dei feedback venditore.
-  - Seller Trust Score calcolato in tempo reale.
-  - Corrispondenza delle preferenze utente (brand preferiti, soglie prezzo).
-- **Streaming Response**: Feedback immediato all'utente tramite streaming dei pensieri dell'agente e dei risultati.
+## What the system does
 
----
+A user can express a shopping request in natural language and the system can turn it into a sequence of concrete operations.
 
-## 🏗️ Architettura Tecnica
+Depending on the request, the agent can:
 
-- **Backend**: FastAPI (Python 3.11+)
-- **Agent Orchestrator**: Implementazione custom del pattern ReAct con memoria a breve termine.
-- **Database Primario**: PostgreSQL (Persistenza inserzioni e profili utente).
-- **Vector Database**: Qdrant (Hybrid search: Dense + Sparse BM25).
-- **Cache**: Redis (Memorizzazione feedback, sessioni e latenze).
-- **NLP**: spaCy (`it_core_news_sm`) + Google Gemini API.
+- search for products;
+- retrieve item details;
+- analyse sellers;
+- inspect deals and trends;
+- work with user profiles and preferences;
+- manage wishlists;
+- use browser-backed tools where API access is insufficient;
+- maintain conversational context;
+- stream intermediate and final responses to the frontend.
 
----
+## Architecture
 
-## 🛠️ Setup & Installazione
+```text
+React / TypeScript UI
+        ↓
+FastAPI application
+        ↓
+Agent orchestration
+  ┌─────┼──────────────┐
+  ↓     ↓              ↓
+ MCP   Search / RAG   User context
+tools   pipelines      & memory
+  ↓        ↓              ↓
+eBay   Qdrant        Redis / PostgreSQL
+```
 
-### Requisiti
-- Docker Desktop
-- Python 3.11+
+The MCP server is mounted directly inside the FastAPI application at `/mcp`, allowing the application to expose shopping capabilities through explicit tools rather than hiding external actions inside prompts.
 
-### Avvio Rapido
-1. **Clona il repository**:
-   ```bash
-   git clone https://github.com/paolo/MCP_ECOM.git
-   cd MCP_ECOM
-   ```
+## MCP tool layer
 
-2. **Configura le variabili d'ambiente**:
-   Crea un file `.env` partendo da `.env.example` e inserisci le tue chiavi API (eBay, Gemini, etc.).
+The project contains dedicated MCP tools for capabilities including:
 
-3. **Avvia l'ambiente con lo script PowerShell**:
-   ```powershell
-   ./start_dev.ps1
-   ```
-   *Questo script avvierà automaticamente i container Docker (Postgres, Redis, Qdrant) e il server FastAPI.*
+- product search;
+- item inspection;
+- seller analysis;
+- deals;
+- market trends;
+- profile information;
+- wishlist operations;
+- seller contact workflows;
+- browser / Playwright-assisted actions;
+- conversation context.
 
----
+This tool-oriented design keeps external actions explicit and makes the agent easier to inspect and extend.
 
-## 📡 API Endpoints (Principali)
+## Agentic layer
 
-| Metodo | Endpoint | Descrizione |
-| :--- | :--- | :--- |
-| `POST` | `/api/agent/stream` | Endpoint principale per interagire con l'assistente (Streaming). |
-| `POST` | `/api/search` | Pipeline di ricerca classica con parsing e persistenza. |
-| `GET` | `/api/seller/{name}` | Analisi dettagliata e trust score di un venditore. |
-| `GET` | `/health` | Check dello stato dei servizi. |
+The agent package separates responsibilities into dedicated components for:
 
----
+- planning;
+- task decomposition;
+- execution;
+- tool registration;
+- memory;
+- prompts and schemas.
 
-## 🧠 Approccio al Codice & Qualità
+This makes the orchestration layer independent from individual integrations and allows new tools or workflows to be introduced without rewriting the entire application.
 
-Il progetto segue standard elevati di qualità del software:
-- **Centralizzazione Config**: TTL della cache e pesi del reranker gestiti in moduli dedicati (`app/config/`).
-- **Resilienza**: Fallback automatici e gestione robusta delle eccezioni (es. fallback su database locale se Qdrant è offline).
-- **Performance**: Ottimizzazioni sui lookup spaCy e caching intelligente delle query eBay.
+## Retrieval, ranking and trust
 
----
+The shopping pipeline uses several signals instead of relying only on keyword matching.
 
-## 🔜 Sviluppi Futuri
-- [ ] Integrazione completa con frontend React (Shopping Dashboard).
-- [ ] Supporto multi-marketplace (Amazon, Subito.it).
-- [ ] Notifiche push per variazioni prezzo su prodotti salvati.
+The service layer includes components for:
 
----
-*Creato con ❤️ per semplificare lo shopping online.*
+- semantic retrieval;
+- RAG;
+- query parsing;
+- seller analysis;
+- trust scoring;
+- sentiment / NLP processing;
+- comparison and reranking;
+- user profiling;
+- price tracking.
+
+**Qdrant** is used for vector retrieval, while **Redis** provides caching and short-lived state and **PostgreSQL** stores persistent application data.
+
+## Frontend
+
+The application includes a modern React interface built with:
+
+- React 19
+- TypeScript
+- Vite
+- Material UI
+- Ant Design
+- Zustand
+- Recharts
+- Server-Sent Events / streaming support
+
+The UI is therefore part of the project itself rather than a future integration.
+
+## Backend and infrastructure
+
+- Python
+- FastAPI
+- Model Context Protocol (MCP)
+- PostgreSQL
+- Redis
+- Qdrant
+- SQLAlchemy / Alembic
+- eBay integration
+- Playwright
+- Docker Compose
+- Sentence Transformers
+- NLP / LLM services
+
+Docker Compose provisions the main infrastructure services locally:
+
+```text
+PostgreSQL
+Redis
+Qdrant
+```
+
+The application also performs startup checks, model preloading, shared HTTP-client initialization and background price tracking.
+
+## Repository structure
+
+```text
+MCP_E-commerce/
+├── app/
+│   ├── agent/
+│   ├── api/
+│   ├── auth/
+│   ├── config/
+│   ├── db/
+│   ├── llm/
+│   ├── mcp/
+│   ├── models/
+│   ├── services/
+│   └── tools/
+├── ebay-ui/
+├── tests/
+├── alembic/
+└── docker-compose.yaml
+```
+
+## Testing
+
+The repository contains dedicated test suites for:
+
+- agent behaviour;
+- API behaviour;
+- MCP functionality.
+
+## Running locally
+
+The application requires the credentials for the external services used by the project, including the configured eBay and LLM integrations.
+
+Start the infrastructure with:
+
+```bash
+docker compose up -d
+```
+
+The repository also includes `start_dev.ps1` for the local Windows development workflow.
+
+The React frontend can be started separately:
+
+```bash
+cd ebay-ui
+npm install
+npm run dev
+```
+
+## Why this project matters
+
+This is one of the projects that best represents how I like to work: **AI as part of a real software architecture**.
+
+It brings together agentic AI, MCP, retrieval, backend engineering, databases, caching, external APIs, browser automation and frontend development in one functioning end-to-end application.
+
+## Author
+
+**Paolo Pangallo**  
+M.Sc. Computer Engineering — Artificial Intelligence  
+University of Calabria
