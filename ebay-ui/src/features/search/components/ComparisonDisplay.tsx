@@ -8,7 +8,6 @@ import {
   TableHead,
   TableRow,
   Typography,
-  Chip,
   Button,
   IconButton,
   Avatar,

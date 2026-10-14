@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
 import { Box, Typography, Button } from "@mui/material"
-import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GppGoodIcon from "@mui/icons-material/GppGood"
 import ListIcon from "@mui/icons-material/List"
 import CompareArrowsIcon from "@mui/icons-material/CompareArrows"
